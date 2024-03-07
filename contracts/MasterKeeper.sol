@@ -24,9 +24,11 @@ contract MasterKeeper is Ownable, AutomationCompatibleInterface{
         currentList = list;
     }
 
-    ///@notice add a new @param pool to the list
-    function addPool(UniswapV3Pool pool) external onlyOwner {
-        list.push(pool);
+    ///@notice add new @param pools to the list
+    function addPools(UniswapV3Pool[] memory pools) external onlyOwner {
+        for(uint i=0; i<pools.length; i++){
+            list.push(pools[i]);
+        }
     }
 
     ///@notice remove all pools from the list
