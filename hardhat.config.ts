@@ -30,6 +30,15 @@ const config: HardhatUserConfig = {
       chainId: 10
 
     },
+    base: {
+      url: process.env.BASE_URL ? process.env.BASE_URL : zaddr,
+      accounts: [
+        process.env.MAINNET_PRIVATE_KEY
+          ? process.env.MAINNET_PRIVATE_KEY
+          : zaddr
+      ],
+      chainId: 8453
+    }
   },
   etherscan: {
     apiKey: {
@@ -38,6 +47,24 @@ const config: HardhatUserConfig = {
       polygon: process.env.ETHERSCAN_POLYGON_KEY!,
       optimisticEthereum: process.env.OP_KEY!
     },
+    customChains: [
+      {
+        network: "base",
+        chainId: 8453,
+        urls: {
+          apiURL: "https://rpc.ankr.com/base",
+          browserURL: "https://basescan.org/api"
+        }
+      },
+      {
+        network: "routescan",
+        chainId: 43114,
+        urls: {
+          apiURL: "https://api.routescan.io/v2/network/mainnet/evm/43114/etherscan",
+          browserURL: "https://routescan.io"
+        }
+      }
+    ]
   },
   solidity: "0.8.24",
 };

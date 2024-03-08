@@ -5,8 +5,8 @@ import { currentBlock, resetCurrent, resetCurrentOP } from "../util/block";
 
 const opLOR = "0x54dF9e11c7933a9cA3BD1E540B63dA15edAe40bf"
 const mainnetLOR = "0x54dF9e11c7933a9cA3BD1E540B63dA15edAe40bf"
-
-const LOR = opLOR
+const baseLOR = "0xfF8b754c64e9a8473Bd6E1118d0eaC67F0A8Ae27"
+const LOR = baseLOR
 
 async function main() {
 
