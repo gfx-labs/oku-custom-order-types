@@ -1,5 +1,7 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
+import "@nomicfoundation/hardhat-ignition-ethers";
+
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -10,11 +12,32 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       forking: {
-        url: process.env.MAINNET_URL ? process.env.MAINNET_URL : zaddr
+        url: process.env.MAINNET_URL ? process.env.MAINNET_URL : zaddr,
+        blockNumber: 14546835,
       },
       mining: {
-        auto: true
+        auto: true,
       },
+    },
+    mainnet: {
+      url: process.env.MAINNET_URL ? process.env.MAINNET_URL : zaddr,
+      accounts: [
+        process.env.MAINNET_PRIVATE_KEY
+          ? process.env.MAINNET_PRIVATE_KEY
+          : zaddr,
+        process.env.PERSONAL_PRIVATE_KEY
+          ? process.env.PERSONAL_PRIVATE_KEY
+          : zaddr
+      ],
+      minGasPrice: 32000000000,
+    },
+    arbitrum: {
+      url: process.env.ARB_URL ? process.env.ARB_URL : zaddr,
+      accounts: [
+        process.env.MAINNET_PRIVATE_KEY
+          ? process.env.MAINNET_PRIVATE_KEY
+          : zaddr
+      ]
     },
     op: {
       url: process.env.OP_URL ? process.env.OP_URL : zaddr,
@@ -28,7 +51,27 @@ const config: HardhatUserConfig = {
       ],
       minGasPrice: 32000000000,
       chainId: 10
-
+    },
+    polygon: {
+      url: process.env.POLYGON_URL ? process.env.POLYGON_URL : zaddr,
+      accounts: [
+        process.env.MAINNET_PRIVATE_KEY
+          ? process.env.MAINNET_PRIVATE_KEY
+          : zaddr,
+        process.env.PERSONAL_PRIVATE_KEY
+          ? process.env.PERSONAL_PRIVATE_KEY
+          : zaddr
+      ],
+    },
+    goerli: {
+      url: process.env.GOERLI_URL ? process.env.GOERLI_URL : zaddr,
+      accounts: [
+        process.env.MAINNET_PRIVATE_KEY
+          ? process.env.MAINNET_PRIVATE_KEY
+          : zaddr
+      ],
+      minGasPrice: 32000000000,
+      chainId: 5
     },
     base: {
       url: process.env.BASE_URL ? process.env.BASE_URL : zaddr,
@@ -38,21 +81,44 @@ const config: HardhatUserConfig = {
           : zaddr
       ],
       chainId: 8453
+    },
+    bsc: {
+      url: process.env.BSC_URL ? process.env.BSC_URL : zaddr,
+      accounts: [
+        process.env.MAINNET_PRIVATE_KEY
+          ? process.env.MAINNET_PRIVATE_KEY
+          : zaddr
+      ],
+      chainId: 56
+    },
+    avax: {
+      url: process.env.AVAX_URL ? process.env.AVAX_URL : zaddr,
+      accounts: [
+        process.env.MAINNET_PRIVATE_KEY
+          ? process.env.MAINNET_PRIVATE_KEY
+          : zaddr
+      ],
+      chainId: 43114
     }
+
   },
   etherscan: {
     apiKey: {
       mainnet: process.env.API_KEY!,
-      ropsten: process.env.API_KEY!,
+      goerli: process.env.API_KEY!,
       polygon: process.env.ETHERSCAN_POLYGON_KEY!,
-      optimisticEthereum: process.env.OP_KEY!
+      optimisticEthereum: process.env.OP_KEY!,
+      arbitrumOne: process.env.ARB_API_KEY!,
+      base: process.env.BASE_API_KEY!,
+      bsc: process.env.BSC_API_KEY!,
+      routescan: "routescan"
     },
     customChains: [
       {
         network: "base",
         chainId: 8453,
         urls: {
-          apiURL: "https://rpc.ankr.com/base",
+          apiURL: "https://api.basescan.org/api",
           browserURL: "https://basescan.org/api"
         }
       },
@@ -67,6 +133,9 @@ const config: HardhatUserConfig = {
     ]
   },
   solidity: "0.8.24",
+  sourcify: {
+    enabled: true
+  }
 };
 
 export default config;
