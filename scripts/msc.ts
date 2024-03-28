@@ -29,25 +29,39 @@ async function main() {
     console.log("Sending for real...")
   }
 
-  const ownerAddr = "0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89"
-  const owner = await ethers.provider.getSigner(ownerAddr)
-  const master = MasterKeeper__factory.connect("0xAaD90A1e789357e98b540b034a7613Cfc06044e7", user)
+  const mk = MasterKeeper__factory.connect("0x985A9a95558861ff5ef6CbEFEDfA9d8BfDbdabd1", user)
+  const pools = [
+    '0x9d8eA62e1264ab667d234b5610774A08e608E3b8',
+    '0x14D44c7Ef81F6c18f5D22e0962f0279D83E80b05'
+  ]
+  //await mk.addPools(pools)
+  const list = await mk.getList()
+  console.log(await mk.LimitOrderRegistry())
+  console.log(list)
 
-  await impersonateAccount(ownerAddr)
-  const receipt = await (await master.connect(owner).addPools(limitOrderData.polygon.oracles[0].tokens[0].address, {gasPrice: 120000000000, nonce: 109})).wait()
-  console.log((await receipt?.getTransaction())!.hash)
+  await mk.transferOwnership("0xe75358526Ef4441Db03cCaEB9a87F180fAe80eb9")
+
+
   /**
-  //await impersonateAccount(ownerAddr)
-
-  const tx = {
-    to: ownerAddr,
-    value: 0,
-    nonce: 107,
-    gasPrice: 120000000000
-  }
-
-  await (await owner.sendTransaction(tx)).wait()
-   */
+    const ownerAddr = "0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89"
+    const owner = await ethers.provider.getSigner(ownerAddr)
+    const master = MasterKeeper__factory.connect("0xAaD90A1e789357e98b540b034a7613Cfc06044e7", user)
+  
+    await impersonateAccount(ownerAddr)
+    const receipt = await (await master.connect(owner).addPools(limitOrderData.polygon.oracles[0].tokens[0].address, {gasPrice: 120000000000, nonce: 109})).wait()
+    console.log((await receipt?.getTransaction())!.hash)
+    
+    //await impersonateAccount(ownerAddr)
+  
+    const tx = {
+      to: ownerAddr,
+      value: 0,
+      nonce: 107,
+      gasPrice: 120000000000
+    }
+  
+    await (await owner.sendTransaction(tx)).wait()
+     */
 
   //const result = await master.connect(owner).addPools(limitOrderData.polygon.oracles[0].tokens[0].address)
   //await result.wait()

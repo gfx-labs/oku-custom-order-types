@@ -125,6 +125,19 @@ export const resetCurrentBsc = async () => {
     });
 }
 
+export const resetCurrentZksync = async () => {
+    await network.provider.request({
+        method: "hardhat_reset",
+        params: [
+            {
+                forking: {
+                    jsonRpcUrl: process.env.ZKSYNC_URL!
+                },
+            },
+        ],
+    });
+}
+
 export const resetCurrentGo = async () => {
     await network.provider.request({
         method: "hardhat_reset",
