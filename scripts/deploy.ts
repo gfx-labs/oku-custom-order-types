@@ -70,6 +70,9 @@ async function main() {
   }else if (networkName == "blast") {
     LOR = limitOrderData.blast.oracles[0].address
     pools = limitOrderData.blast.oracles[0].tokens[0].address
+  }else if(networkName == "linea") {
+    LOR = "0x63c8527f670d4eb3401c80c5905ceca8727f1e74",
+    pools = []
   }
 
   //set network if testing
@@ -124,12 +127,10 @@ async function main() {
     masterKeeper = MasterKeeper__factory.connect("0x15518AA548248d97479Ca3AE2358266f12B2A61A", user)
     await masterKeeper.addPools(limitOrderData.ethereum.oracles[0].tokens[0].address)
   } else{
-    console.log("Setting pools: ", pools!)
-    await masterKeeper.addPools(pools!)
-    
+    if(pools!.length > 0){
+      await masterKeeper.addPools(pools!)
+    }
   }
-
-  
   console.log("DONE")
 }
 
@@ -147,6 +148,7 @@ hh verify --network arbitrum 0x560ac74DD8871c9d0d9d70Bdc4f79B82799777b0 "0x54df9
 hh verify --network bsc 0x54fE0D5dA2C787a93f2Dcb4d25E202C4e44e4458 "0x19b9bD76028caB6F414ed1Fc57400b75B5cA0627"
 hh verify --network mainnet 0x15518AA548248d97479Ca3AE2358266f12B2A61A "0x54dF9e11c7933a9cA3BD1E540B63dA15edAe40bf"
 hh verify --network polygon 0xAaD90A1e789357e98b540b034a7613Cfc06044e7 "0x54dF9e11c7933a9cA3BD1E540B63dA15edAe40bf"
+hh verify --network linea 0x2dB08783F13c4225A1963b2437f0D459a5BCB4D8 "0x63c8527f670d4eb3401c80c5905ceca8727f1e74"
 */
 
 /**

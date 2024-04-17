@@ -184,6 +184,14 @@ const config: HardhatUserConfig = {
       ],
       chainId: 288
     },
+    linea: {
+      url: process.env.LINEA_URL ? process.env.LINEA_URL : zaddr,
+      accounts: [
+        process.env.MAINNET_PRIVATE_KEY
+          ? process.env.MAINNET_PRIVATE_KEY
+          : zaddr
+      ]
+    }
   },
   //todo boba
 
@@ -205,8 +213,8 @@ const config: HardhatUserConfig = {
       blast: process.env.BLAST_API_KEY!,
       boba: "boba",
       rootstock: "rootstock",
-      mantapacific: "mantapacific"
-
+      mantapacific: "mantapacific",
+      linea_mainnet: process.env.LINEA_API_KEY!
     },
     customChains: [
       {
@@ -271,6 +279,14 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL: "https://api.filscan.io/api",
           browserURL: "https://filscan.io/"
+        }
+      },
+      {
+        network: "linea_mainnet",
+        chainId: 59144,
+        urls: {
+          apiURL: "https://api.lineascan.build/api",
+          browserURL: "https://lineascan.build/"
         }
       },
     ]
