@@ -3,8 +3,14 @@ pragma solidity ^0.8.19;
 
 import "./uniswapV3/UniswapV3Pool.sol";
 import "./openzeppelin/ERC20.sol";
-interface ILimitOrderRegistry {
+import "./chainlink/AutomationCompatibleInterface.sol";
 
+interface ILimitOrderRegistry is AutomationCompatibleInterface {
+    /**
+     * @notice The minimum amount of assets required to create a `newOrder`.
+     * @dev Changeable by owner.
+     */
+    function minimumAssets(ERC20 asset) external view returns (uint256 min);
 
     /**
      * @notice Stores linked list center values, and frequently used pool values.
@@ -21,7 +27,9 @@ interface ILimitOrderRegistry {
         ERC20 token1;
         uint24 fee;
     }
-    function poolToData(UniswapV3Pool pool) external view returns (PoolData memory data);
+    function poolToData(
+        UniswapV3Pool pool
+    ) external view returns (PoolData memory data);
 
     /**
      * @notice Creates a new limit order for a specific pool.
