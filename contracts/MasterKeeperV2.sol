@@ -4,7 +4,7 @@ pragma solidity ^0.8.19;
 import "./interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "./interfaces/openzeppelin/Ownable.sol";
 import "./interfaces/openzeppelin/ERC20.sol";
-import "./interfaces/openzeppelin/SafeERC20.sol";
+import "./interfaces/openzeppelin/SafeTransferLib.sol";
 import "./interfaces/uniswapV3/UniswapV3Pool.sol";
 import "./libraries/ArrayMutation.sol";
 
@@ -15,7 +15,7 @@ import "./interfaces/ILimitOrderRegistry.sol";
 ///@notice This contract serves as a single keeper to handle upkeep for all pools in the LimitOrderRegistry
 ///@notice New pools will need to be added here for this upkeep to track them
 contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
-    using SafeERC20 for ERC20;
+    using SafeTransferLib for ERC20;
 
     ILimitOrderRegistry public LimitOrderRegistry;
 
@@ -52,7 +52,7 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
         int24 targetTick;
         uint128 amount;
         bool direction;
-        uint256 startingNode;
+        uint256 startingNode;///This is used as minAmountReceived for market swaps
         uint256 deadline;
         int24 strikeTick;
     }
@@ -108,11 +108,39 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
         //if new order, create the order, and store the things
     }
 
-    function createStopMarketOrder() external{
-        //todo 
+    ///@notice this type of order will simply execute a market swap at the stop price
+    function createStopMarketOrder(
+        UniswapV3Pool pool,
+        uint128 amount,
+        bool direction,
+        uint256 minAmountReceived,
+        uint256 deadline,
+        int24 strikeTick
+    ) external {
+        //todo
         //market swap at strike tick
+        ERC20 assetIn = deduceAsset(pool, direction);
+        //store pending order
+        orderCount = orderCount + 1;
+        orders[orderCount] = PendingOrder({
+            filled: false,
+            orderType: OrderType.STOP_MARKET,
+            owner: msg.sender,
+            orderId: orderCount,
+            stopData: StopLimitOrder({
+                pool: pool,
+                targetTick: strikeTick,
+                amount: amount,
+                direction: direction,
+                startingNode: minAmountReceived,
+                deadline: deadline,
+                strikeTick: strikeTick
+            })
+        });
     }
 
+    ///@notice we omit the minimum liquidity checks, Limit Order Registry will perform those when the strike price is reached
+    ///@notice as such, if minimum liquidity is not met, execution will fail and funds will be returned at that time todo
     function createStopLimitOrder(
         UniswapV3Pool pool,
         int24 targetTick,
@@ -122,16 +150,10 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
         uint256 deadline,
         int24 strikeTick
     ) external returns (uint128) {
-        //take funds and account exact amounts received
+        ERC20 assetIn = deduceAsset(pool, direction);
 
-        //determine assetIn
-        ILimitOrderRegistry.PoolData memory data = LimitOrderRegistry
-            .poolToData(pool);
-        ERC20 assetIn = direction ? data.token0 : data.token1;
-
-        //store pending order - mapping?
+        //store pending order
         orderCount = orderCount + 1;
-
         orders[orderCount] = PendingOrder({
             filled: false,
             orderType: OrderType.STOP_CLOSE,
@@ -149,9 +171,7 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
         });
 
         //take funds
-        SafeERC20.safeTransferFrom(IERC20(address(assetIn)), msg.sender, address(this), amount);
-
-        //enfore minimum asset?
+        assetIn.safeTransferFrom(msg.sender, address(this), amount);
     }
 
     ///@notice forward @param performData to the LimitOrderRegistry
@@ -187,7 +207,7 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        //check if we need to fill any orders first
+        //check if we need to fill any standard limit orders
         (upkeepNeeded, performData) = checkLimit();
         if (upkeepNeeded) {
             return (
@@ -197,6 +217,10 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
                 )
             );
         }
+
+        //check if we need to fill any stop-limit orders
+
+        //check if we need to fill any stop-market orders
     }
 
     ///////////////////////////////////////Check Upkeep Logic/////////////////////////////////////
@@ -239,5 +263,17 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
                 return (needed, limitData);
             }
         }
+    }
+
+    ///////////////////////////////////////Helpers/////////////////////////////////////
+
+    function deduceAsset(
+        UniswapV3Pool pool,
+        bool direction
+    ) internal view returns (ERC20 assetIn) {
+        //determine assetIn
+        ILimitOrderRegistry.PoolData memory data = LimitOrderRegistry
+            .poolToData(pool);
+        ERC20 assetIn = direction ? data.token0 : data.token1;
     }
 }
