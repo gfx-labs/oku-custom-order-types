@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.19;
 
+import "./IMasterKeeperV2.sol";
+
 import "./interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "./interfaces/openzeppelin/Ownable.sol";
 import "./interfaces/openzeppelin/ERC20.sol";
@@ -14,7 +16,7 @@ import "./interfaces/ILimitOrderRegistry.sol";
 ///@notice Only stop and stop-limit orders can be pending, and pending orders are tracked by this contract until the strike price is reached
 ///@notice This contract serves as a single keeper to handle upkeep for all pools in the LimitOrderRegistry
 ///@notice New pools will need to be added here for this upkeep to track them
-contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
+contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
     using SafeTransferLib for ERC20;
 
     ILimitOrderRegistry public LimitOrderRegistry;
@@ -26,36 +28,6 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
     uint256 public orderCount;
 
     mapping(uint256 => PendingOrder) public orders;
-
-    enum OrderType {
-        LIMIT,
-        STOP_LIMIT,
-        STOP_CLOSE,
-        STOP_MARKET
-    }
-
-    struct PendingOrder {
-        bool filled;
-        OrderType orderType;
-        address owner;
-        uint256 orderId;
-        StopLimitOrder stopData;
-    }
-
-    struct pData {
-        OrderType orderType;
-        bytes data;
-    }
-
-    struct StopLimitOrder {
-        UniswapV3Pool pool;
-        int24 targetTick;
-        uint128 amount;
-        bool direction;
-        uint256 startingNode;///This is used as minAmountReceived for market swaps
-        uint256 deadline;
-        int24 strikeTick;
-    }
 
     constructor(ILimitOrderRegistry _LimitOrderRegistry) {
         LimitOrderRegistry = _LimitOrderRegistry;
@@ -88,25 +60,51 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
         list = ArrayMutation.removeFromArray(idx, list);
     }
 
-    function createMarketStopOrder(
-        UniswapV3Pool pool,
-        int24 strikeTick,
-        address tokenIn,
-        uint256 amount,
-        uint256 minAmountReceived
-    ) external {
-        //todo
-        //take funds from user, accounting for amounts
-        //store the pending stop order
+    ///////////////////////////////////////Close Limit Order/////////////////////////////////////
+    ///@notice claim complete stop-close or stop-limit orders
+    function claimOrder(
+        uint256 orderId,
+        address user
+    ) external payable returns (ERC20 tokenOut, uint256 owed) {
+        //get pending order
+        PendingOrder memory order = orders[orderId];
+        //verify owner
+        require(user != address(this), "Contract is Recipient");
+        require(
+            order.owner == msg.sender || order.owner == user,
+            "Only Order Owner"
+        );
+
+        //claim on LOR
+        (tokenOut, owed) = LimitOrderRegistry.claimOrder(order.batchId, user);
+
+        //mark as complete
+        orders[orderId].status = Status.CLAIMED;
     }
 
-    ///@notice limit order to be closed if the @param strikeTick is reached
-    ///@param tokenId == 0 indicates if we will be creating a new order, rather than apply to existing order
-    function createStopOrder(uint256 tokenId, int24 strikeTick) external {
-        //todo
-        //determine if we own the position if applying to existing position
-        //if new order, create the order, and store the things
+    function cancelOrder(
+        uint256 orderId,
+        uint256 deadline
+    ) external returns (uint128 amount0, uint128 amount1, uint128 batchId) {
+        //get pending order
+        PendingOrder memory order = orders[orderId];
+        //verify owner
+        require(order.owner == msg.sender, "Only Order Owner");
+
+        (amount0, amount1, batchId) = LimitOrderRegistry.cancelOrder(
+            order.stopData.pool,
+            order.stopData.targetTick,
+            order.stopData.direction,
+            deadline
+        );
+
+        //send funds
+
+        //mark as complete
+        orders[orderId].status = Status.CANCELLED;
     }
+
+    ///////////////////////////////////////Create Order Types/////////////////////////////////////
 
     ///@notice this type of order will simply execute a market swap at the stop price
     function createStopMarketOrder(
@@ -123,18 +121,18 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
         //store pending order
         orderCount = orderCount + 1;
         orders[orderCount] = PendingOrder({
-            filled: false,
+            status: Status.PENDING,
             orderType: OrderType.STOP_MARKET,
             owner: msg.sender,
-            orderId: orderCount,
+            strikeTick: strikeTick,
+            batchId: 0,
             stopData: StopLimitOrder({
                 pool: pool,
-                targetTick: strikeTick,
+                targetTick: 0, //no target tick for market swap
                 amount: amount,
                 direction: direction,
                 startingNode: minAmountReceived,
-                deadline: deadline,
-                strikeTick: strikeTick
+                deadline: deadline
             })
         });
     }
@@ -155,18 +153,18 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
         //store pending order
         orderCount = orderCount + 1;
         orders[orderCount] = PendingOrder({
-            filled: false,
+            status: Status.PENDING,
             orderType: OrderType.STOP_CLOSE,
             owner: msg.sender,
-            orderId: orderCount,
+            strikeTick: strikeTick,
+            batchId: 0, //this will be set once the stop price is reached todo
             stopData: StopLimitOrder({
                 pool: pool,
                 targetTick: targetTick,
                 amount: amount,
                 direction: direction,
                 startingNode: startingNode,
-                deadline: deadline,
-                strikeTick: strikeTick
+                deadline: deadline
             })
         });
 
@@ -174,29 +172,76 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
         assetIn.safeTransferFrom(msg.sender, address(this), amount);
     }
 
+    ///////////////////////////////////////Perform Upkeep Logic/////////////////////////////////////
+
     ///@notice forward @param performData to the LimitOrderRegistry
     function performUpkeep(bytes memory _data) external override {
-        pData memory performData = abi.decode(_data, (pData));
+        PerformData memory performData = abi.decode(_data, (PerformData));
 
         if (performData.orderType == OrderType.LIMIT) {
             //execute on existing Limit Order Registry
             LimitOrderRegistry.performUpkeep(performData.data);
         }
 
-        if (performData.orderType == OrderType.STOP_LIMIT) {
-            //create order on Limit Order Registry
-            //decode perform data
-            //create a new order
-            //track order id and associate with eoa
-        }
+        if (performData.orderType == OrderType.STOP_LIMIT) {}
 
         if (performData.orderType == OrderType.STOP_MARKET) {
-            //LimitOrderRegistry.performUpkeep(performData.data);
+            //todo
+        }
+
+        if (performData.orderType == OrderType.STOP_CLOSE) {
+            //todo
         }
     }
 
-    ///////////////////////////////////////Perform Upkeep Logic/////////////////////////////////////
+    ///@notice strike price reached, create limit order
+    function performStopLimit(
+        bytes memory performData
+    ) internal returns (bool filled) {
+        //todo
 
+        //decode
+        StopLimitOrder memory orderData = abi.decode(
+            performData,
+            (StopLimitOrder)
+        );
+
+        //newOrder
+        try
+            LimitOrderRegistry.newOrder(
+                orderData.pool,
+                orderData.targetTick,
+                orderData.amount,
+                orderData.direction,
+                orderData.startingNode,
+                orderData.deadline
+            )
+        {
+            //order.status = Status.FILLED;
+            filled = true;
+        } catch {
+            //todo mark complete
+            filled = false;
+            //order.status = Status.CANCELLED;
+        }
+
+        //handle for failure, mark as filled
+    }
+
+    ///@notice strike price reached, perform market swap
+    function performStopMarket(bytes memory performData) internal {
+        //todo
+        //decode
+        //try swap with recipient being the user addr, mark complete
+        //if swap fails, send tokenIn and mark canceled
+    }
+
+    ///@notice strike price reached, close limit order
+    function performStopClose(bytes memory performData) internal {
+        //todo
+    }
+
+    ///////////////////////////////////////Check Upkeep Logic/////////////////////////////////////
     /// @notice loop through all active pools and checkUpkeep on limit order registry for each one
     /// @notice checkData is not used, todo can remove?
     function checkUpkeep(
@@ -213,7 +258,11 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
             return (
                 upkeepNeeded,
                 abi.encode(
-                    pData({orderType: OrderType.LIMIT, data: performData})
+                    PerformData({
+                        orderType: OrderType.LIMIT,
+                        orderId: 0,
+                        data: performData
+                    })
                 )
             );
         }
@@ -223,31 +272,7 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
         //check if we need to fill any stop-market orders
     }
 
-    ///////////////////////////////////////Check Upkeep Logic/////////////////////////////////////
-
-    ///@notice determine if we need to fill any stop-limit orders
-    function checkForStop()
-        internal
-        view
-        returns (bool upkeepNeeded, bytes memory performData)
-    {
-        //loop through list
-        //compare current pool tick with strike price
-        //createOrder on LOR if we are in range
-    }
-
-    ///@notice determine if we need to fill any stop-limit orders
-    function checkForStopLimit()
-        internal
-        view
-        returns (bool upkeepNeeded, bytes memory performData)
-    {
-        //loop through list
-        //compare current pool tick with strike price
-        //createOrder on LOR if we are in range
-    }
-
-    ///@notice determine if we need to fill any orders
+    ///@notice determine if we need to fill any standard limit orders
     function checkLimit()
         internal
         view
@@ -263,6 +288,39 @@ contract MasterKeeperV2 is Ownable, AutomationCompatibleInterface {
                 return (needed, limitData);
             }
         }
+    }
+
+    ///@notice determine if we need to fill any stop-limit orders
+    function checkForStopLimit()
+        internal
+        view
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        //loop through list
+        //compare current pool tick with strike price
+        //createOrder on LOR if we are in range
+    }
+
+    ///@notice determine if we need to fill any stop-market orders
+    function checkForStopMarket()
+        internal
+        view
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        //loop through list
+        //compare current pool tick with strike price
+        //createOrder on LOR if we are in range
+    }
+
+    ///@notice determine if we need to fill any stop-close orders
+    function checkForStopClose()
+        internal
+        view
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        //loop through list
+        //compare current pool tick with strike price
+        //createOrder on LOR if we are in range
     }
 
     ///////////////////////////////////////Helpers/////////////////////////////////////

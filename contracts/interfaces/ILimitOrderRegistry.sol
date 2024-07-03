@@ -32,6 +32,36 @@ interface ILimitOrderRegistry is AutomationCompatibleInterface {
     ) external view returns (PoolData memory data);
 
     /**
+     * @notice Users can claim fulfilled orders by passing in the `batchId` corresponding to the order they want to claim.
+     * @param batchId the batchId corresponding to a fulfilled order to claim
+     * @param user the address of the user in the order to claim for
+     * @return address erc20 address
+     * @return uint256 amount claimed
+     * @dev Caller must either approve this contract to spend their Wrapped Native token, and have at least `getFeePerUser` tokens in their wallet.
+     *      Or caller must send `getFeePerUser` value with this call.
+     */
+    function claimOrder(
+        uint128 batchId,
+        address user
+    ) external payable returns (ERC20, uint256);
+
+    /**
+     * @notice Allows users to cancel orders as long as they are completely OTM.
+     * @param pool the Uniswap V3 pool that contains the limit order to cancel
+     * @param targetTick the targetTick of the order you want to cancel
+     * @param direction bool indication the direction of the order
+     * @return amount0 amount0 withdrawn
+     * @return amount1 amount1 withdrawn
+     * @return batchId batch id withdrawn
+     */
+    function cancelOrder(
+        UniswapV3Pool pool,
+        int24 targetTick,
+        bool direction,
+        uint256 deadline
+    ) external returns (uint128 amount0, uint128 amount1, uint128 batchId);
+
+    /**
      * @notice Creates a new limit order for a specific pool.
      * @dev Limit orders can be created to buy either token0, or token1 of the pool.
      * @param pool the Uniswap V3 pool to create a limit order on.
