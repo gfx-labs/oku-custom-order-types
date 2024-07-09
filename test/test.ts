@@ -1,12 +1,9 @@
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers"
 import { IERC20, IERC20__factory, ILimitOrderRegistry, ILimitOrderRegistry__factory, MasterKeeper, MasterKeeper__factory, UniswapV3Pool, UniswapV3Pool__factory } from "../typechain-types"
-import { currentBlock, reset, resetCurrentBase, resetCurrentOP } from "../util/block"
+import { reset } from "../util/block"
 import { DeployContract } from "../util/deploy"
-import { Signer } from "crypto"
+import { Signer } from "ethers"
 import { ethers } from "hardhat"
 import { expect } from "chai"
-import { stealMoney } from "../util/money"
-import { BN } from "../util/number"
 
 const LimitOrderRegistry = "0x54dF9e11c7933a9cA3BD1E540B63dA15edAe40bf"//mainnet
 const usdcWeth500 = "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
@@ -21,8 +18,8 @@ const pools = [
 const wbtcUsdc3000 = "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35"
 
 let master: MasterKeeper
-let Bob: SignerWithAddress
-let Andy: SignerWithAddress
+let Bob: Signer
+let Andy: Signer
 
 describe("Master Upkeep Testing", () => {
 
@@ -90,8 +87,8 @@ describe("Master Upkeep Testing", () => {
 describe("Execute an Upkeep", () => {
 
     //amounts are ~5k
-    const wbtcAmount = BN("7500000")
-    const wethAmount = BN("13e17")
+    const wbtcAmount = BigInt("7500000")
+    const wethAmount = BigInt("1300000000000000000")
 
     let registry: ILimitOrderRegistry
     let pool: UniswapV3Pool
@@ -116,12 +113,12 @@ describe("Execute an Upkeep", () => {
             Bob,
             LimitOrderRegistry
         )
-        await master.deployed()
+        await master.deploymentTransaction()
 
     })
 
     it("Register the pool", async () => {
-        await master.connect(Bob).addPools([pool.address])
+        await master.connect(Bob).addPools([await pool.getAddress()])
         const list = await master.getList()
         expect(list.length).to.eq(1, "Pool added")
     })
@@ -141,10 +138,10 @@ describe("Execute an Upkeep", () => {
         //compare to https://etherscan.io/tx/0x0f6000a51ace0fa2dfc54bb9364e9945d43a105760f3e868056783c04cc25a12
         const wethAfter = await WETH.balanceOf(LimitOrderRegistry)
         const pepeAfter = await PEPE.balanceOf(LimitOrderRegistry)
-        const wethDelta = wethAfter.sub(wethBefore)
-        const pepeDelta = pepeAfter.sub(pepeBefore)
-        const expectedWethDelta = BN("125583978373660380")
-        const expectedPepeDelta = BN("945550520850024117930790")
+        const wethDelta = wethAfter - (wethBefore)
+        const pepeDelta = pepeAfter - (pepeBefore)
+        const expectedWethDelta = BigInt("125583978373660380")
+        const expectedPepeDelta = BigInt("945550520850024117930790")
         expect(wethDelta).to.be.closeTo(expectedWethDelta, 10, "WETH Match")
         expect(pepeDelta).to.be.closeTo(expectedPepeDelta, 10, "PEPE Match")
     })

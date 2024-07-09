@@ -9,8 +9,12 @@ import "./interfaces/openzeppelin/ERC20.sol";
 import "./interfaces/openzeppelin/SafeTransferLib.sol";
 import "./interfaces/uniswapV3/UniswapV3Pool.sol";
 import "./libraries/ArrayMutation.sol";
-
 import "./interfaces/ILimitOrderRegistry.sol";
+
+import "./oracle/IOracleRelay.sol";
+
+///testing
+import "hardhat/console.sol";
 
 ///@notice V2 - Includes logic for stop and stop-limit orders
 ///@notice Only stop and stop-limit orders can be pending, and pending orders are tracked by this contract until the strike price is reached
@@ -27,7 +31,11 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
     ///@notice idx for pending orders
     uint256 public orderCount;
 
+    ///@notice associate orders by order Id
     mapping(uint256 => PendingOrder) public orders;
+
+    ///@notice associate each pool with its oracle contract
+    mapping(UniswapV3Pool => IOracleRelay) public oracles;
 
     constructor(ILimitOrderRegistry _LimitOrderRegistry) {
         LimitOrderRegistry = _LimitOrderRegistry;
@@ -58,6 +66,16 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
     ///@notice use function getList() and choose index based on the array returned
     function removePool(uint256 idx) external onlyOwner {
         list = ArrayMutation.removeFromArray(idx, list);
+    }
+
+    function registerOracles(
+        IOracleRelay[] memory _oracles,
+        UniswapV3Pool[] memory _pools
+    ) external onlyOwner {
+        require(_oracles.length == _pools.length, "array length mismatch");
+        for (uint i = 0; i < _pools.length; i++) {
+            oracles[_pools[i]] = _oracles[i];
+        }
     }
 
     ///////////////////////////////////////Close Limit Order/////////////////////////////////////
@@ -107,7 +125,7 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
     ///////////////////////////////////////Create Order Types/////////////////////////////////////
 
     ///@notice this type of order will simply execute a market swap at the stop price
-    function createStopMarketOrder(
+    function createMarketStopOrder(
         UniswapV3Pool pool,
         uint128 amount,
         bool direction,
@@ -115,9 +133,9 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         uint256 deadline,
         int24 strikeTick
     ) external {
-        //todo
+        //todo ensure current tick > strikeTick
         //market swap at strike tick
-        ERC20 assetIn = deduceAsset(pool, direction);
+
         //store pending order
         orderCount = orderCount + 1;
         orders[orderCount] = PendingOrder({
@@ -126,6 +144,7 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
             owner: msg.sender,
             strikeTick: strikeTick,
             batchId: 0,
+            tickTwapOracle: oracles[pool],
             stopData: StopLimitOrder({
                 pool: pool,
                 targetTick: 0, //no target tick for market swap
@@ -135,6 +154,14 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
                 deadline: deadline
             })
         });
+
+        //take funds
+        ERC20 assetIn = deduceAsset(pool, direction);
+        console.log("tck: ", uint256(uint24(strikeTick)));
+
+        assetIn.safeTransferFrom(msg.sender, address(this), amount);
+
+        emit OrderCreated(OrderType.STOP_MARKET, orderCount);
     }
 
     ///@notice we omit the minimum liquidity checks, Limit Order Registry will perform those when the strike price is reached
@@ -148,6 +175,8 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         uint256 deadline,
         int24 strikeTick
     ) external returns (uint128) {
+        IOracleRelay oracle = oracles[pool]; //todo verify current tick is valid
+
         ERC20 assetIn = deduceAsset(pool, direction);
 
         //store pending order
@@ -158,6 +187,7 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
             owner: msg.sender,
             strikeTick: strikeTick,
             batchId: 0, //this will be set once the stop price is reached todo
+            tickTwapOracle: oracle,
             stopData: StopLimitOrder({
                 pool: pool,
                 targetTick: targetTick,
@@ -332,6 +362,6 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         //determine assetIn
         ILimitOrderRegistry.PoolData memory data = LimitOrderRegistry
             .poolToData(pool);
-        ERC20 assetIn = direction ? data.token0 : data.token1;
+        return direction ? data.token0 : data.token1;
     }
 }

@@ -3,9 +3,12 @@ pragma solidity ^0.8.19;
 import "./interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "./interfaces/uniswapV3/UniswapV3Pool.sol";
 import "./interfaces/openzeppelin/ERC20.sol";
+import "./oracle/IOracleRelay.sol";
 
 interface IMasterKeeperV2 is AutomationCompatibleInterface {
     
+
+    event OrderCreated(OrderType orderType, uint256 orderId);
 
     enum OrderType {
         LIMIT,
@@ -27,6 +30,7 @@ interface IMasterKeeperV2 is AutomationCompatibleInterface {
         address owner;
         int24 strikeTick;
         uint128 batchId;
+        IOracleRelay tickTwapOracle;
         StopLimitOrder stopData;
     }
 
