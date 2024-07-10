@@ -1,5 +1,5 @@
 import { Signer } from "ethers"
-import { IERC20, IERC20__factory, IOracleRelay, MasterKeeper, MasterKeeperV2, MasterKeeperV2__factory, UniV3TickTwapOracle__factory, UniswapV3Pool, UniswapV3Pool__factory } from "../typechain-types"
+import { IERC20, IERC20__factory, IOracleRelay, MasterKeeper, MasterKeeperV2, MasterKeeperV2__factory, PlaceholderOracle, PlaceholderOracle__factory, UniV3TickTwapOracle__factory, UniswapV3Pool, UniswapV3Pool__factory } from "../typechain-types"
 import { currentBlock, resetCurrentArb } from "../util/block"
 import { ethers } from "hardhat"
 import { expect } from "chai"
@@ -10,7 +10,8 @@ const LimitOrderRegistry = "0x54df9e11c7933a9ca3bd1e540b63da15edae40bf"//arbisca
 const pool = "0xc31e54c7a869b9fcbecc14363cf510d1c41fa443"//WETH/USDC.e pool @ 500
 
 let mkv2: MasterKeeperV2
-let tickOracle: IOracleRelay
+let wethOracle: PlaceholderOracle
+let usdcOracle: PlaceholderOracle
 
 let UniPool: UniswapV3Pool
 let WETH: IERC20 //weth token0 0x82af49447d8a07e3bd95bd0d56f35241523fbab1
@@ -51,14 +52,10 @@ describe("Master Upkeep V2 Testing on Arbitrum", () => {
         mkv2 = await new MasterKeeperV2__factory(Frank).deploy(LimitOrderRegistry)
         await mkv2.deploymentTransaction()
 
-        //deploy tick oracle
-        tickOracle = await new UniV3TickTwapOracle__factory(Frank).deploy(
-            14400,
-            pool
-        )
+        //deploy test oracles
+        wethOracle = await new PlaceholderOracle__factory(Frank).deploy()
+        usdcOracle = await new PlaceholderOracle__factory(Frank).deploy()
 
-        await tickOracle.deploymentTransaction()
-        console.log("Current tick: ", Number(await tickOracle.currentValue()))
     })
 
     it("Register", async () => {
@@ -68,8 +65,17 @@ describe("Master Upkeep V2 Testing on Arbitrum", () => {
         expect(list.length).to.eq(1, "List length is correct")
 
         //register oracle
-        await mkv2.connect(Frank).registerOracles([await tickOracle.getAddress()], [pool])
-        expect(await mkv2.oracles(pool)).to.eq(await tickOracle.getAddress(), "Pool oracle registered")
+
+        const oracleInput = [
+            {
+                oracle0: await wethOracle.getAddress(),
+                oracle1: await usdcOracle.getAddress()
+            }
+        ]
+
+        await mkv2.connect(Frank).registerOracles(oracleInput, [pool])
+        expect((await mkv2.getOracles(pool))[0]).to.eq(await wethOracle.getAddress(), "Weth registered")
+        expect((await mkv2.getOracles(pool))[1]).to.eq(await usdcOracle.getAddress(), "Weth registered")
 
 
     })
@@ -84,17 +90,22 @@ describe("Master Upkeep V2 Testing on Arbitrum", () => {
 })
 
 describe("Execute Stop-Market Upkeep", () => {
-    ///stop-market orders simply do a market swap once the strike tick is reached via the TWAP oracle
+    ///stop-market orders simply do a market swap once the strike price is reached
+
+    const initialEthPrice = "3000"
+    const strikeDelta = 100n
 
     //setup
     before(async () => {
         //steal money for Bob
         await stealMoney(wethWhale, await Bob.getAddress(), await WETH.getAddress(), wethAmount)
+        
+        //set test oracle price
+        await wethOracle.setPrice(ethers.parseUnits(initialEthPrice, 8))//CL oracles are priced @ 1e8
     })
 
     it("Create stop-market order", async () => {
-        const currentTick = await tickOracle.currentValue()
-        console.log("CURRENT TICK: ", currentTick)
+        const currentPrice = await wethOracle.currentValue()
         await WETH.connect(Bob).approve(await mkv2.getAddress(), wethAmount)
         await mkv2.connect(Bob).createMarketStopOrder(
             pool,
@@ -102,23 +113,31 @@ describe("Execute Stop-Market Upkeep", () => {
             true,
             wethAmount / 2n,
             (await currentBlock())?.timestamp! + 120,
-            currentTick + 5n
+            currentPrice - strikeDelta
         )
 
+        //verify event
         const filter = mkv2.filters.OrderCreated
         const events = await mkv2.queryFilter(filter, -1)
         const event = events[0].args
         expect(Number(event[0])).to.eq(3, "STOP_MARKET")
         expect(Number(event[1])).to.eq(1, "First order Id")
 
+        //verify pending order exists
+        const list = await mkv2.getPendingOrders()
+        expect(list.length).to.eq(1, "1 pending order")
+        console.log(list[0])
 
-    })
-
-    it("Do a large swap to move the market and execute the order", async () => {
-        
     })
 
     it("Check, perform, and verify upkeep", async () => {
+
+        //reduce price to strike price
+        await wethOracle.setPrice(BigInt(initialEthPrice) - strikeDelta)
+
+        //check upkeep
+        const result = await mkv2.checkUpkeep("0x")
+        expect(result[0]).to.eq(true, "Upkeep is now needed")
 
     })
 })

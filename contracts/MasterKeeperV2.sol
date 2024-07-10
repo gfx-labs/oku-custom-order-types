@@ -28,26 +28,46 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
     ///@notice list of registered pools to watch for standard limit orders via Limit Order Registry
     UniswapV3Pool[] public list;
 
-    ///@notice idx for pending orders
+    ///@notice idx for all orders
     uint256 public orderCount;
 
-    ///@notice associate orders by order Id
-    mapping(uint256 => PendingOrder) public orders;
+    ///@notice Store all orders by order Id
+    mapping(uint256 => Order) public orders;
 
-    ///@notice associate each pool with its oracle contract
-    mapping(UniswapV3Pool => IOracleRelay) public oracles;
+    ///@notice Actively pending orders
+    Order[] public PendingOrders;
+
+    ///@notice associate each pool with its oracle contracts
+    ///@notice each pool is mapped to an array of exactly length 2,
+    ///where idx 0 is the oracle for token0, and idx 1 is the oracle for token1
+    mapping(UniswapV3Pool => IOracleRelay[]) public oracles;
 
     constructor(ILimitOrderRegistry _LimitOrderRegistry) {
         LimitOrderRegistry = _LimitOrderRegistry;
     }
 
-    ///@notice get the current list of tracked pools
+    function getOracles(
+        UniswapV3Pool pool
+    ) external view override returns (IOracleRelay[] memory) {
+        return oracles[pool];
+    }
+
+    ///@notice get the current list of tracked pools for the Limit Order Registry
     function getList()
         external
         view
         returns (UniswapV3Pool[] memory currentList)
     {
         currentList = list;
+    }
+
+    ///@notice get the current list of pending orders (STOP orders only)
+    function getPendingOrders()
+        external
+        view
+        returns (Order[] memory currentPendingOrders)
+    {
+        currentPendingOrders = PendingOrders;
     }
 
     ///@notice add new @param pools to the list
@@ -69,12 +89,12 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
     }
 
     function registerOracles(
-        IOracleRelay[] memory _oracles,
+        OracleInput[] memory _oracles,
         UniswapV3Pool[] memory _pools
     ) external onlyOwner {
         require(_oracles.length == _pools.length, "array length mismatch");
         for (uint i = 0; i < _pools.length; i++) {
-            oracles[_pools[i]] = _oracles[i];
+            oracles[_pools[i]] = [_oracles[i].oracle0, _oracles[i].oracle1];
         }
     }
 
@@ -85,7 +105,7 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         address user
     ) external payable returns (ERC20 tokenOut, uint256 owed) {
         //get pending order
-        PendingOrder memory order = orders[orderId];
+        Order memory order = orders[orderId];
         //verify owner
         require(user != address(this), "Contract is Recipient");
         require(
@@ -105,7 +125,7 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         uint256 deadline
     ) external returns (uint128 amount0, uint128 amount1, uint128 batchId) {
         //get pending order
-        PendingOrder memory order = orders[orderId];
+        Order memory order = orders[orderId];
         //verify owner
         require(order.owner == msg.sender, "Only Order Owner");
 
@@ -131,20 +151,21 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         bool direction,
         uint256 minAmountReceived,
         uint256 deadline,
-        int24 strikeTick
+        uint256 strikePrice
     ) external {
-        //todo ensure current tick > strikeTick
+        //todo ensure current tick > strikePrice
         //market swap at strike tick
 
         //store pending order
         orderCount = orderCount + 1;
-        orders[orderCount] = PendingOrder({
+        orders[orderCount] = Order({
+            orderId: orderCount,
             status: Status.PENDING,
             orderType: OrderType.STOP_MARKET,
             owner: msg.sender,
-            strikeTick: strikeTick,
+            strikePrice: strikePrice,
             batchId: 0,
-            tickTwapOracle: oracles[pool],
+            assetInOracle: direction ? oracles[pool][0] : oracles[pool][1], //todo verify current price is valid
             stopData: StopLimitOrder({
                 pool: pool,
                 targetTick: 0, //no target tick for market swap
@@ -155,10 +176,11 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
             })
         });
 
+        //push pending order
+        PendingOrders.push(orders[orderCount]);
+
         //take funds
         ERC20 assetIn = deduceAsset(pool, direction);
-        console.log("tck: ", uint256(uint24(strikeTick)));
-
         assetIn.safeTransferFrom(msg.sender, address(this), amount);
 
         emit OrderCreated(OrderType.STOP_MARKET, orderCount);
@@ -173,21 +195,18 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         bool direction,
         uint256 startingNode,
         uint256 deadline,
-        int24 strikeTick
+        uint256 strikePrice
     ) external returns (uint128) {
-        IOracleRelay oracle = oracles[pool]; //todo verify current tick is valid
-
-        ERC20 assetIn = deduceAsset(pool, direction);
-
         //store pending order
         orderCount = orderCount + 1;
-        orders[orderCount] = PendingOrder({
+        orders[orderCount] = Order({
+            orderId: orderCount,
             status: Status.PENDING,
             orderType: OrderType.STOP_CLOSE,
             owner: msg.sender,
-            strikeTick: strikeTick,
-            batchId: 0, //this will be set once the stop price is reached todo
-            tickTwapOracle: oracle,
+            strikePrice: strikePrice,
+            batchId: 0, //this will be set once the strike price is reached todo
+            assetInOracle: direction ? oracles[pool][0] : oracles[pool][1], //todo verify current price is valid
             stopData: StopLimitOrder({
                 pool: pool,
                 targetTick: targetTick,
@@ -198,8 +217,14 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
             })
         });
 
+        //push pending order
+        PendingOrders.push(orders[orderCount]);
+
         //take funds
+        ERC20 assetIn = deduceAsset(pool, direction);
         assetIn.safeTransferFrom(msg.sender, address(this), amount);
+
+        emit OrderCreated(OrderType.STOP_CLOSE, orderCount);
     }
 
     ///////////////////////////////////////Perform Upkeep Logic/////////////////////////////////////
@@ -254,7 +279,6 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
             filled = false;
             //order.status = Status.CANCELLED;
         }
-
         //handle for failure, mark as filled
     }
 

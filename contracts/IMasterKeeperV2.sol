@@ -24,17 +24,19 @@ interface IMasterKeeperV2 is AutomationCompatibleInterface {
         CANCELLED
     }
 
-    struct PendingOrder {
+    //todo pack structs
+    struct Order {
+        uint256 orderId;
         Status status;
         OrderType orderType;
         address owner;
-        int24 strikeTick;
+        uint256 strikePrice;
         uint128 batchId;
-        IOracleRelay tickTwapOracle;
+        IOracleRelay assetInOracle;//only need oracle for asset in, as the usd price of this is the strike price
         StopLimitOrder stopData;
     }
 
-    //todo strikeTick in pending order, StopLimitOrder is only the params to make a limit order
+    //todo strikePrice in pending order, StopLimitOrder is only the params to make a limit order
 
     struct StopLimitOrder {
         UniswapV3Pool pool;
@@ -52,5 +54,12 @@ interface IMasterKeeperV2 is AutomationCompatibleInterface {
         bytes data;
     }
 
+    struct OracleInput {
+        IOracleRelay oracle0;
+        IOracleRelay oracle1;
+    }
+
+
+    function getOracles(UniswapV3Pool pool) external view returns (IOracleRelay[] memory);
 
 }
