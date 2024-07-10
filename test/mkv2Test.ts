@@ -8,6 +8,8 @@ import { getEvent } from "../util/msc"
 
 const LimitOrderRegistry = "0x54df9e11c7933a9ca3bd1e540b63da15edae40bf"//arbiscan
 const pool = "0xc31e54c7a869b9fcbecc14363cf510d1c41fa443"//WETH/USDC.e pool @ 500
+const router02 = "0xE592427A0AEce92De3Edee1F18E0157C05861564"
+
 
 let mkv2: MasterKeeperV2
 let wethOracle: PlaceholderOracle
@@ -49,7 +51,7 @@ describe("Master Upkeep V2 Testing on Arbitrum", () => {
 
     it("Deploy", async () => {
         //Deploy keeper
-        mkv2 = await new MasterKeeperV2__factory(Frank).deploy(LimitOrderRegistry)
+        mkv2 = await new MasterKeeperV2__factory(Frank).deploy(LimitOrderRegistry, router02)
         await mkv2.deploymentTransaction()
 
         //deploy test oracles
@@ -126,6 +128,10 @@ describe("Execute Stop-Market Upkeep", () => {
         //verify pending order exists
         const list = await mkv2.getPendingOrders()
         expect(list.length).to.eq(1, "1 pending order")
+
+        //verify our input token was received
+        const balance = await WETH.balanceOf(await mkv2.getAddress())
+        expect(balance).to.eq(wethAmount, "WETH received")
     })
 
     it("Check upkeep", async () => {

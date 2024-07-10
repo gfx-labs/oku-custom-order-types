@@ -6,8 +6,11 @@ import "./IMasterKeeperV2.sol";
 import "./interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "./interfaces/openzeppelin/Ownable.sol";
 import "./interfaces/openzeppelin/ERC20.sol";
+import "./interfaces/openzeppelin/IERC20.sol";
 import "./interfaces/openzeppelin/SafeTransferLib.sol";
+import "./interfaces/openzeppelin/SafeERC20.sol";
 import "./interfaces/uniswapV3/UniswapV3Pool.sol";
+import "./interfaces/uniswapV3/ISwapRouter02.sol";
 import "./libraries/ArrayMutation.sol";
 import "./interfaces/ILimitOrderRegistry.sol";
 
@@ -22,9 +25,10 @@ import "hardhat/console.sol";
 ///@notice New pools will need to be added here for this upkeep to track them
 contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
     using SafeTransferLib for ERC20;
+    using SafeERC20 for IERC20;
 
-    ILimitOrderRegistry public LimitOrderRegistry;
-
+    ILimitOrderRegistry public immutable LimitOrderRegistry;
+    ISwapRouter02 public immutable ROUTER;
     ///@notice list of registered pools to watch for standard limit orders via Limit Order Registry
     UniswapV3Pool[] public list;
 
@@ -42,8 +46,12 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
     ///where idx 0 is the oracle for token0, and idx 1 is the oracle for token1
     mapping(UniswapV3Pool => IOracleRelay[]) public oracles;
 
-    constructor(ILimitOrderRegistry _LimitOrderRegistry) {
+    constructor(
+        ILimitOrderRegistry _LimitOrderRegistry,
+        ISwapRouter02 _router
+    ) {
         LimitOrderRegistry = _LimitOrderRegistry;
+        ROUTER = _router;
     }
 
     function getOracles(
@@ -214,7 +222,7 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         uint256 startingNode,
         uint256 deadline,
         uint256 strikePrice
-    ) external returns (uint128) {
+    ) external {
         ERC20 assetIn = deduceAsset(pool, direction);
         //verify oracle specified is correct
         IOracleRelay assetInOracle = direction
@@ -314,10 +322,66 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
 
     ///@notice strike price reached, perform market swap
     function performStopMarket(bytes memory performData) internal {
+        /**
+        we need: 
+        token in
+        token out
+        fee - can get these via pool and direction
+        recipient - order owner
+        amountIn - order.StopLimitOrder.amount
+        amountOutMinimum - order.StopLimitOrder.startingNode
+        */
+
         //todo
         //decode
-        //try swap with recipient being the user addr, mark complete
-        //if swap fails, send tokenIn and mark canceled
+        PerformData memory data = abi.decode(performData, (PerformData));
+        Order memory order = orders[data.orderId];
+
+        UniswapV3Pool pool = order.stopData.pool;
+        IERC20 tokenIn;
+        IERC20 tokenOut;
+
+        if (order.stopData.direction) {
+            tokenIn = IERC20(pool.token0());
+            tokenOut = IERC20(pool.token1());
+        } else {
+            tokenIn = IERC20(pool.token1());
+            tokenOut = IERC20(pool.token0());
+        }
+
+        //record initial total balances
+        uint256 initialTokenIn = tokenIn.balanceOf(address(this));
+        uint256 initialTokenOut = tokenOut.balanceOf(address(this));
+
+        ISwapRouter02.ExactInputSingleParams memory params = ISwapRouter02
+            .ExactInputSingleParams({
+                tokenIn: address(tokenIn),
+                tokenOut: address(tokenOut),
+                fee: pool.fee(),
+                recipient: order.owner, // we need to receive the token in order to correctly split the fee. tragic.
+                amountIn: order.stopData.amount,
+                amountOutMinimum: order.stopData.startingNode,
+                sqrtPriceLimitX96: 0 //sqrtPriceLimit is not used
+            });
+
+        //approve
+        updateApproval(address(ROUTER), tokenIn, order.stopData.amount);
+        console.log("SWAPPING");
+        bool success;
+        try ROUTER.exactInputSingle(params) {
+            console.log("W");
+
+            success = true;
+            //verify balances
+            //update order
+        } catch {
+            console.log("F");
+            //refund
+            //verify balances
+            //update order
+        }
+
+        //emit a thing?
     }
 
     ///@notice strike price reached, close limit order
@@ -447,5 +511,23 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         ILimitOrderRegistry.PoolData memory data = LimitOrderRegistry
             .poolToData(pool);
         return direction ? data.token0 : data.token1;
+    }
+
+    ///@notice if current approval is insufficient, approve max
+    ///@notice oz safeIncreaseAllowance controls for tokens that require allowance to be reset to 0 before increasing again
+    function updateApproval(
+        address spender,
+        IERC20 token,
+        uint256 amount
+    ) internal {
+        // get current allowance
+        uint256 currentAllowance = token.allowance(address(this), spender);
+        if (currentAllowance < amount) {
+            // amount is a delta, so need to pass max - current to avoid overflow
+            token.safeIncreaseAllowance(
+                spender,
+                type(uint256).max - currentAllowance
+            );
+        }
     }
 }
