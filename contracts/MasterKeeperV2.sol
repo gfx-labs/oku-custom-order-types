@@ -156,16 +156,28 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         //todo ensure current tick > strikePrice
         //market swap at strike tick
 
+        ERC20 assetIn = deduceAsset(pool, direction);
+        IOracleRelay assetInOracle = direction
+            ? oracles[pool][0]
+            : oracles[pool][1]; //todo verify current price is valid
+
+        //verify oracle specified is correct
+        require(
+            address(assetIn) == assetInOracle.underlying(),
+            "assetInOracle incorrect asset"
+        );
+
         //store pending order
         orderCount = orderCount + 1;
         orders[orderCount] = Order({
             orderId: orderCount,
             status: Status.PENDING,
             orderType: OrderType.STOP_MARKET,
+            sell: assetInOracle.currentValue() > strikePrice,
             owner: msg.sender,
             strikePrice: strikePrice,
             batchId: 0,
-            assetInOracle: direction ? oracles[pool][0] : oracles[pool][1], //todo verify current price is valid
+            assetInOracle: assetInOracle,
             stopData: StopLimitOrder({
                 pool: pool,
                 targetTick: 0, //no target tick for market swap
@@ -179,10 +191,16 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         //push pending order
         PendingOrders.push(orders[orderCount]);
 
-        //take funds
-        ERC20 assetIn = deduceAsset(pool, direction);
-        assetIn.safeTransferFrom(msg.sender, address(this), amount);
+        //verify current price is correct
+        //deduce anticipated price movement?
+        //does it matter? yes unless we look for exact match, or use a range?
+        //maybe we just deduce this based on current price
+        //if current price is 3k, and strike price is 2.9k,
+        //then we deduce that anticipated direction is down, so when
+        //price is less <= 2.9k then we execute
 
+        //take funds
+        assetIn.safeTransferFrom(msg.sender, address(this), amount);
         emit OrderCreated(OrderType.STOP_MARKET, orderCount);
     }
 
@@ -197,12 +215,24 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         uint256 deadline,
         uint256 strikePrice
     ) external returns (uint128) {
+        ERC20 assetIn = deduceAsset(pool, direction);
+        //verify oracle specified is correct
+        IOracleRelay assetInOracle = direction
+            ? oracles[pool][0]
+            : oracles[pool][1]; //todo verify current price is valid
+
+        require(
+            address(assetIn) == assetInOracle.underlying(),
+            "assetInOracle incorrect asset"
+        );
+
         //store pending order
         orderCount = orderCount + 1;
         orders[orderCount] = Order({
             orderId: orderCount,
             status: Status.PENDING,
             orderType: OrderType.STOP_CLOSE,
+            sell: assetInOracle.currentValue() > strikePrice,
             owner: msg.sender,
             strikePrice: strikePrice,
             batchId: 0, //this will be set once the strike price is reached todo
@@ -221,7 +251,6 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         PendingOrders.push(orders[orderCount]);
 
         //take funds
-        ERC20 assetIn = deduceAsset(pool, direction);
         assetIn.safeTransferFrom(msg.sender, address(this), amount);
 
         emit OrderCreated(OrderType.STOP_CLOSE, orderCount);
@@ -242,6 +271,7 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
 
         if (performData.orderType == OrderType.STOP_MARKET) {
             //todo
+            performStopMarket(performData.data);
         }
 
         if (performData.orderType == OrderType.STOP_CLOSE) {
@@ -321,9 +351,13 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
             );
         }
 
-        //check if we need to fill any stop-limit orders
-
         //check if we need to fill any stop-market orders
+        (upkeepNeeded, performData) = checkForStopMarket();
+        if (upkeepNeeded) {
+            return (upkeepNeeded, performData);
+        }
+
+        //check if we need to fill any stop-limit orders
     }
 
     ///@notice determine if we need to fill any standard limit orders
@@ -344,19 +378,45 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         }
     }
 
-    ///@notice determine if we need to fill any stop-limit orders
-    function checkForStopLimit()
+    ///@notice determine if we need to fill any stop-market orders
+    function checkForStopMarket()
         internal
         view
         returns (bool upkeepNeeded, bytes memory performData)
     {
         //loop through list
-        //compare current pool tick with strike price
-        //createOrder on LOR if we are in range
+        for (uint i = 0; i < PendingOrders.length; i++) {
+            Order memory order = PendingOrders[i];
+            if (order.sell) {
+                //check if current price is <= strike price
+                if (order.assetInOracle.currentValue() <= order.strikePrice) {
+                    upkeepNeeded = true;
+                    //todo perform data
+                }
+            } else {
+                //check if current price is >= strike price
+                if (order.assetInOracle.currentValue() >= order.strikePrice) {
+                    upkeepNeeded = true;
+                    //todo perform data
+                }
+            }
+            if (upkeepNeeded) {
+                performData = abi.encode(
+                    PerformData({
+                        orderType: OrderType.STOP_MARKET,
+                        orderId: order.orderId,
+                        data: "0x" //todo
+                    })
+                );
+
+                //short circut if upkeep is needed
+                return (upkeepNeeded, performData);
+            }
+        }
     }
 
-    ///@notice determine if we need to fill any stop-market orders
-    function checkForStopMarket()
+    ///@notice determine if we need to fill any stop-limit orders
+    function checkForStopLimit()
         internal
         view
         returns (bool upkeepNeeded, bytes memory performData)

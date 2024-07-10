@@ -7,6 +7,11 @@ import "../IOracleRelay.sol";
 /// @title Testing Oracle
 contract PlaceholderOracle is IOracleRelay {
     uint256 private currentPrice;
+    address public immutable underlying;
+    
+    constructor(address _underlying) {
+        underlying = _underlying;
+    }
 
     function currentValue() external view override returns (uint256) {
         return currentPrice;

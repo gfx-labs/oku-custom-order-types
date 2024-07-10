@@ -11,6 +11,7 @@ import "../uniswap/TickMath.sol";
 contract UniV3TickTwapOracle is IOracleRelay {
     IUniswapV3PoolDerivedState public immutable pool;
     uint32 public immutable lookback;
+    address public immutable underlying;
 
     /// @notice all values set at construction time
     /// @param _lookback how many seconds to twap for
@@ -18,6 +19,7 @@ contract UniV3TickTwapOracle is IOracleRelay {
     constructor(uint32 _lookback, IUniswapV3PoolDerivedState _pool_address) {
         lookback = _lookback;
         pool = _pool_address;
+        underlying = address(pool);
     }
 
     function currentValue() external view override returns (uint256) {

@@ -53,8 +53,8 @@ describe("Master Upkeep V2 Testing on Arbitrum", () => {
         await mkv2.deploymentTransaction()
 
         //deploy test oracles
-        wethOracle = await new PlaceholderOracle__factory(Frank).deploy()
-        usdcOracle = await new PlaceholderOracle__factory(Frank).deploy()
+        wethOracle = await new PlaceholderOracle__factory(Frank).deploy(await WETH.getAddress())
+        usdcOracle = await new PlaceholderOracle__factory(Frank).deploy(await USDC.getAddress())
 
     })
 
@@ -126,11 +126,9 @@ describe("Execute Stop-Market Upkeep", () => {
         //verify pending order exists
         const list = await mkv2.getPendingOrders()
         expect(list.length).to.eq(1, "1 pending order")
-        console.log(list[0])
-
     })
 
-    it("Check, perform, and verify upkeep", async () => {
+    it("Check upkeep", async () => {
 
         //reduce price to strike price
         await wethOracle.setPrice(BigInt(initialEthPrice) - strikeDelta)
@@ -138,6 +136,18 @@ describe("Execute Stop-Market Upkeep", () => {
         //check upkeep
         const result = await mkv2.checkUpkeep("0x")
         expect(result[0]).to.eq(true, "Upkeep is now needed")
+
+    })
+
+    it("Perform Upkeep", async () => {
+        const result = await mkv2.checkUpkeep("0x")
+        const performData = result[1]
+
+        await mkv2.performUpkeep(performData)
+
+    })
+
+    it("Verify", async () => {
 
     })
 })

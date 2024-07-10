@@ -29,6 +29,7 @@ interface IMasterKeeperV2 is AutomationCompatibleInterface {
         uint256 orderId;
         Status status;
         OrderType orderType;
+        bool sell;//initial price > strike price => true (we anticipate price decreasing and selling at that point)
         address owner;
         uint256 strikePrice;
         uint128 batchId;
