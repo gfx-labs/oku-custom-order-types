@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.19;
+import "./interfaces/ILimitOrderRegistry.sol";
 import "./interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "./interfaces/uniswapV3/UniswapV3Pool.sol";
 import "./interfaces/openzeppelin/ERC20.sol";
@@ -60,7 +61,7 @@ interface IMasterKeeperV2 is AutomationCompatibleInterface {
         IOracleRelay oracle1;
     }
 
-
+    function LimitOrderRegistry() external view returns (ILimitOrderRegistry);
     function getOracles(UniswapV3Pool pool) external view returns (IOracleRelay[] memory);
 
 }

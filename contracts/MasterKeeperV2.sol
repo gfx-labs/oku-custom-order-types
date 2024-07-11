@@ -334,6 +334,7 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
 
         //todo
         //decode
+        /**
         PerformData memory data = abi.decode(performData, (PerformData));
         Order memory order = orders[data.orderId];
 
@@ -382,6 +383,7 @@ contract MasterKeeperV2 is IMasterKeeperV2, Ownable {
         }
 
         //emit a thing?
+         */
     }
 
     ///@notice strike price reached, close limit order
