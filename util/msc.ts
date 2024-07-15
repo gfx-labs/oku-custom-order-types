@@ -35,5 +35,8 @@ export const generateUniTx = async (
         sqrtPriceLimitX96: 0n
     }
 
-    return await ROUTER.exactInputSingle.populateTransaction(params)
+    return {
+        data: (await ROUTER.exactInputSingle.populateTransaction(params)).data,
+        params: params
+    }
 }

@@ -144,9 +144,10 @@ contract AutomatedTriggerSwap is Ownable {
     ///this pending order is removed from the array via array mutation
     function performUpkeep(
         address target,
-        IERC20 tokenIn,
         uint256 pendingOrderIdx,
-        bytes memory performData
+        bytes memory performData,
+        ISwapRouter02 router,
+        ISwapRouter02.ExactInputSingleParams memory params
     ) external payable {
         Order memory _order = AllOrders[PendingOrderIds[pendingOrderIdx]];
         uint256 minAmountReceived = getMinAmountReceived(
@@ -160,8 +161,9 @@ contract AutomatedTriggerSwap is Ownable {
         uint256 initialTokenOut = _order.tokenOut.balanceOf(address(this));
 
         //approve
-        updateApproval(target, tokenIn, 1e18);
-        
+        console.log("APPROVING", target);
+        updateApproval(target, _order.tokenIn, _order.amountIn);
+
         console.log("CALLING: ", target);
         //perform the call
         (bool success, bytes memory result) = target.call(performData);

@@ -8,7 +8,7 @@ import { ExactInputSingleParams, generateUniTx, getEvent } from "../util/msc"
 
 const LimitOrderRegistry = "0x54df9e11c7933a9ca3bd1e540b63da15edae40bf"//arbiscan
 const pool = "0xc31e54c7a869b9fcbecc14363cf510d1c41fa443"//WETH/USDC.e pool @ 500
-const router02 = "0xE592427A0AEce92De3Edee1F18E0157C05861564"
+const router02 = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"
 
 
 let AutoTrigger: AutomatedTriggerSwap
@@ -100,10 +100,13 @@ describe("Execute Stop-Market Upkeep", () => {
     before(async () => {
         //steal money for Bob
         await stealMoney(wethWhale, await Bob.getAddress(), await WETH.getAddress(), wethAmount)
-
+        console.log("Stolen")
         //set test oracle price
         await wethOracle.setPrice(initialEthPrice)//CL oracles are priced @ 1e8
+        console.log("weth set")
+
         await usdcOracle.setPrice(ethers.parseUnits("1.001", 8))//CL oracles are priced @ 1e8
+        console.log("usdc set")
 
     })
 
@@ -171,11 +174,13 @@ describe("Execute Stop-Market Upkeep", () => {
             await USDC.getAddress(),
             Bob,
             wethAmount,
-            await AutoTrigger.getMinAmountReceived(await WETH.getAddress(), await USDC.getAddress(), bips)
+            0n,//await AutoTrigger.getMinAmountReceived(await WETH.getAddress(), await USDC.getAddress(), bips)
         )
 
-        console.log("SENDING IT")
-        await AutoTrigger.performUpkeep(pool, result.pendingOrderIdx, txData.data)
+        console.log(txData)
+
+        //console.log("SENDING IT")
+        await AutoTrigger.performUpkeep(router02, result.pendingOrderIdx, txData.data, router02, txData.params)
 
 
     })
