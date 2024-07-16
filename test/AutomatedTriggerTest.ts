@@ -100,14 +100,9 @@ describe("Execute Stop-Market Upkeep", () => {
     before(async () => {
         //steal money for Bob
         await stealMoney(wethWhale, await Bob.getAddress(), await WETH.getAddress(), wethAmount)
-        console.log("Stolen")
         //set test oracle price
         await wethOracle.setPrice(initialEthPrice)//CL oracles are priced @ 1e8
-        console.log("weth set")
-
         await usdcOracle.setPrice(ethers.parseUnits("1.001", 8))//CL oracles are priced @ 1e8
-        console.log("usdc set")
-
     })
 
 
@@ -164,33 +159,43 @@ describe("Execute Stop-Market Upkeep", () => {
         expect(result[0]).to.eq(true, "Upkeep is now needed")
         //get perform data
         //we are doing a market swap on univ3 weth => usdc
-
-
         const txData = await generateUniTx(
-            await AutoTrigger.getAddress(),
             router02,
             UniPool,
             WETH,
             await USDC.getAddress(),
-            Bob,
+            await AutoTrigger.getAddress(),
             wethAmount,
-            0n,//await AutoTrigger.getMinAmountReceived(await WETH.getAddress(), await USDC.getAddress(), bips)
+            await AutoTrigger.getMinAmountReceived(await WETH.getAddress(), await USDC.getAddress(), bips)
         )
 
-        console.log(txData)
 
-        //console.log("SENDING IT")
-        await AutoTrigger.performUpkeep(router02, result.pendingOrderIdx, txData.data, router02, txData.params)
+        await AutoTrigger.performUpkeep(router02, result.pendingOrderIdx, txData.data)
 
 
     })
-    /**
-      it("Verify", async () => {
-  
-      })
-       */
+
+    it("Verify", async () => {
+        //expect user to receive tokens
+        const usdcBalance = await USDC.balanceOf(await Bob.getAddress())
+        expect(usdcBalance).to.be.gt(0n, "USDC received")
+
+        //pending order removed and length == 0
+        expect(await AutoTrigger.PendingOrderIds.length).to.eq(0, "no pending orders left")
+
+        //event
+        const filter = AutoTrigger.filters.OrderProcessed
+        const events = await AutoTrigger.queryFilter(filter, -1)
+        const event = events[0].args
+        expect(event.orderId).to.eq(1, "Order Id 1")
+        expect(event.success).to.eq(true, "Swap succeeded")
+        //no tokens left on contract
+
+    })
+
 })
 
+/**
 describe("Execute Stop-Limit and Stop-Close Upkeep", () => {
 
 
@@ -208,3 +213,4 @@ describe("Execute Stop-Limit and Stop-Close Upkeep", () => {
 
     })
 })
+ */

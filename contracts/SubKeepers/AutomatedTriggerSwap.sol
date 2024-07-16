@@ -138,6 +138,9 @@ contract AutomatedTriggerSwap is Ownable {
     }
 
     //perform upkeep - todo onlyOwner or verify sender?
+    ///@notice recipient of swap should be this contract,
+    ///as we need to account for tokens received.
+    ///This contract will then forward the tokens to the user
     ///@param target refers to some contract where when we send @param performData,
     ///that contract will exchange our tokenIn for tokenOut with at least minAmountReceived
     ///@param pendingOrderIdx is the index of the pending order we are executing,
@@ -145,9 +148,7 @@ contract AutomatedTriggerSwap is Ownable {
     function performUpkeep(
         address target,
         uint256 pendingOrderIdx,
-        bytes memory performData,
-        ISwapRouter02 router,
-        ISwapRouter02.ExactInputSingleParams memory params
+        bytes memory performData
     ) external payable {
         Order memory _order = AllOrders[PendingOrderIds[pendingOrderIdx]];
         uint256 minAmountReceived = getMinAmountReceived(
@@ -161,20 +162,17 @@ contract AutomatedTriggerSwap is Ownable {
         uint256 initialTokenOut = _order.tokenOut.balanceOf(address(this));
 
         //approve
-        console.log("APPROVING", target);
         updateApproval(target, _order.tokenIn, _order.amountIn);
 
-        console.log("CALLING: ", target);
         //perform the call
         (bool success, bytes memory result) = target.call(performData);
 
-        //uint256 finalTokenIn = _order.tokenIn.balanceOf(address(this));
         uint256 finalTokenOut = _order.tokenOut.balanceOf(address(this));
 
         if (success) {
-            console.log("SUCCESS");
             //if success, we expect initialTokenIn to decrease by amountIn
             //and initialTokenOut to increase by at least minAmountReceived
+
             require(
                 finalTokenOut - initialTokenOut > minAmountReceived,
                 "Too Little Received"
