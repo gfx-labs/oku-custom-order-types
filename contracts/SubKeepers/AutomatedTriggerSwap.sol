@@ -50,8 +50,6 @@ contract AutomatedTriggerSwap is Ownable {
     mapping(uint256 => Order) public AllOrders;
     uint256[] public PendingOrderIds;
 
-    //todo consider registering oracles? Or just pass oracle address? just pass for now
-
     constructor(IMasterKeeperV2 _mkv2) {
         MASTER = _mkv2;
     }
@@ -74,6 +72,7 @@ contract AutomatedTriggerSwap is Ownable {
         return PendingOrderIds;
     }
 
+    ///@param strikePrice is in terms of exchange rate of tokenIn / tokenOut
     function createOrder(
         uint256 strikePrice,
         uint256 amountIn,
@@ -102,9 +101,11 @@ contract AutomatedTriggerSwap is Ownable {
             tokenIn: tokenIn,
             tokenOut: tokenOut,
             recipient: msg.sender,
-            direction: getExchangeRate(tokenIn, tokenOut) > strikePrice //todo//exchangeRate in/out > strikePrice
+            direction: getExchangeRate(tokenIn, tokenOut) > strikePrice //exchangeRate in/out > strikePrice
         });
         PendingOrderIds.push(orderCount);
+
+        //console.log("Order: ", orderCount, "Direction: ", getExchangeRate(tokenIn, tokenOut) > strikePrice);
 
         //take asset
         tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
@@ -154,7 +155,8 @@ contract AutomatedTriggerSwap is Ownable {
         uint256 minAmountReceived = getMinAmountReceived(
             _order.tokenIn,
             _order.tokenOut,
-            _order.slippageBips
+            _order.slippageBips,
+            _order.amountIn
         );
 
         //update accounting
@@ -169,30 +171,25 @@ contract AutomatedTriggerSwap is Ownable {
 
         uint256 finalTokenOut = _order.tokenOut.balanceOf(address(this));
 
+        //remove from pending array
+        PendingOrderIds = ArrayMutation.removeFromArray(
+            pendingOrderIdx,
+            PendingOrderIds
+        );
+
         if (success) {
             //if success, we expect initialTokenIn to decrease by amountIn
             //and initialTokenOut to increase by at least minAmountReceived
-
             require(
                 finalTokenOut - initialTokenOut > minAmountReceived,
                 "Too Little Received"
             );
-
-            //remove from pending array
-            PendingOrderIds = ArrayMutation.removeFromArray(
-                pendingOrderIdx,
-                PendingOrderIds
-            );
-
             //send tokenOut
             _order.tokenOut.safeTransfer(
                 _order.recipient,
                 finalTokenOut - initialTokenOut
             );
         } else {
-            console.log("GIANT F");
-            console.log(uint256(bytes32(result)));
-
             //refund tokenIn
             _order.tokenIn.safeTransfer(_order.recipient, _order.amountIn);
         }
@@ -221,10 +218,11 @@ contract AutomatedTriggerSwap is Ownable {
 
     ///todo consider caching price somehow?
     ///todo test a lot more for decimals
+    ///@return exchangeRate should always be 1e8//todo
     function getExchangeRate(
         IERC20 tokenIn,
         IERC20 tokenOut
-    ) internal view returns (uint256 exchangeRate) {
+    ) public view returns (uint256 exchangeRate) {
         //simple exchange rate in 1e8 terms per oracle output
         exchangeRate = divide(
             oracles[tokenIn].currentValue(),
@@ -234,16 +232,22 @@ contract AutomatedTriggerSwap is Ownable {
     }
 
     ///@notice apply slippage
-    ///@return minAmountReceived should be scaled to @param tokenOut decimals
+    ///@return minAmountReceived should return already scaled to @param tokenOut decimals
     function getMinAmountReceived(
         IERC20 tokenIn,
         IERC20 tokenOut,
-        uint88 slippageBips
+        uint88 slippageBips,
+        uint256 amountIn
     ) public view returns (uint256 minAmountReceived) {
-        uint256 fairAmountReceived = getExchangeRate(tokenIn, tokenOut) /
+        //adjust exchange rate by tokenOut Decimals
+        uint256 adjustedExchangeRate = getExchangeRate(tokenIn, tokenOut) /
             (1e8 / (10 ** ERC20(address(tokenOut)).decimals()));
+
+        //minAmountReceived is then adjusted by tokenIn decimals
         minAmountReceived =
-            (fairAmountReceived * ((MAX_BIPS - slippageBips))) /
+            (((adjustedExchangeRate * amountIn) /
+                (10 ** ERC20(address(tokenIn)).decimals())) *
+                ((MAX_BIPS - slippageBips))) /
             MAX_BIPS;
     }
 

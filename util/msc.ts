@@ -1,4 +1,4 @@
-import { AddressLike, BigNumberish, EventLog, Signer } from "ethers";
+import { AddressLike, BigNumberish, EventLog, Signer, Transaction, TransactionReceipt, TransactionResponse } from "ethers";
 import { IERC20, ISwapRouter02, ISwapRouter02__factory, UniswapV3Pool } from "../typechain-types";
 import { ethers } from "hardhat";
 export type ExactInputSingleParams = {
@@ -10,10 +10,14 @@ export type ExactInputSingleParams = {
     amountOutMinimum: BigNumberish,
     sqrtPriceLimitX96: BigNumberish
 }
-export const getEvent = async (result: any, event: string) => {
-    const receipt = await result.wait()
-    console.log(result)
+
+export const getGas = async (result:TransactionResponse) => {
+
+    return Number((await result.wait())?.gasUsed)
+    
 }
+
+
 
 export const generateUniTx = async (
     router: AddressLike,

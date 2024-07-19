@@ -98,6 +98,19 @@ export const resetCurrentArb = async () => {
         ],
     });
 }
+export const resetCurrentArbBlock = async (blockNumber:number) => {
+    await network.provider.request({
+        method: "hardhat_reset",
+        params: [
+            {
+                forking: {
+                    jsonRpcUrl: process.env.ARB_URL!,
+                    blockNumber: blockNumber
+                },
+            },
+        ],
+    });
+}
 
 export const resetCurrentBase = async () => {
     await network.provider.request({
