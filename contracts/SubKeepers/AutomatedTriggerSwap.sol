@@ -54,6 +54,7 @@ contract AutomatedTriggerSwap is Ownable {
         MASTER = _mkv2;
     }
 
+    ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
     function registerOracle(
         IERC20[] calldata _tokens,
         IOracleRelay[] calldata _oracles
@@ -216,9 +217,9 @@ contract AutomatedTriggerSwap is Ownable {
         }
     }
 
-    ///todo consider caching price somehow?
-    ///todo test a lot more for decimals
-    ///@return exchangeRate should always be 1e8//todo
+    ///todo test a lot more for decimals, USDC/WBTC
+    ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
+    ///@return exchangeRate should always be 1e8
     function getExchangeRate(
         IERC20 tokenIn,
         IERC20 tokenOut
