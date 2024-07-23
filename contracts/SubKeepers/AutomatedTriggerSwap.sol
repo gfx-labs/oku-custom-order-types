@@ -42,7 +42,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         bool direction; //true if initial exchange rate > strike price
     }
 
-    struct PerformData {
+    struct UpkeepData {
         uint256 pendingOrderIdx;
         Order order;
     }
@@ -161,6 +161,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
+        console.log("LENGTH: ", PendingOrderIds.length);
         for (uint i = 0; i < PendingOrderIds.length; i++) {
             Order memory _order = AllOrders[PendingOrderIds[i]];
             uint256 exchangeRate = getExchangeRate(
@@ -169,19 +170,22 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
             );
             if (_order.direction) {
                 if (exchangeRate <= _order.strikePrice) {
+                    console.log("TRUE: ", i);
                     return (
                         true,
                         abi.encode(
-                            PerformData({pendingOrderIdx: i, order: _order})
+                            UpkeepData({pendingOrderIdx: i, order: _order})
                         )
                     );
                 }
             } else {
                 if (exchangeRate >= _order.strikePrice) {
+                    console.log("FALSE: ", i);
+
                     return (
                         true,
                         abi.encode(
-                            PerformData({pendingOrderIdx: i, order: _order})
+                            UpkeepData({pendingOrderIdx: i, order: _order})
                         )
                     );
                 }
@@ -198,53 +202,52 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
     /// pendingOrderIdx is the index of the pending order we are executing,
     ///this pending order is removed from the array via array mutation
     function performUpkeep(bytes calldata performData) external override {
-        (address target, PerformData memory data) = abi.decode(
-            performData,
-            (address, PerformData)
-        );
+        (address target, uint256 pendingOrderIdx, bytes memory txData) = abi.decode(performData, (address, uint256, bytes));
+        console.log("Decoded");
+        Order memory order = AllOrders[PendingOrderIds[pendingOrderIdx]];
 
         //update accounting
-        uint256 initialTokenOut = data.order.tokenOut.balanceOf(address(this));
+        uint256 initialTokenOut = order.tokenOut.balanceOf(address(this));
 
         //approve
-        updateApproval(target, data.order.tokenIn, data.order.amountIn);
+        updateApproval(target, order.tokenIn, order.amountIn);
 
         //perform the call
-        (bool success, bytes memory result) = target.call(performData);
+        console.log("SENDING");
+        (bool success, bytes memory result) = target.call(txData);
 
         if (success) {
-            uint256 finalTokenOut = data.order.tokenOut.balanceOf(
-                address(this)
-            );
+            console.log("SUCCESS", success);
+            uint256 finalTokenOut = order.tokenOut.balanceOf(address(this));
 
             //if success, we expect tokenIn balance to decrease by amountIn
             //and tokenOut balance to increase by at least minAmountReceived
             require(
                 finalTokenOut - initialTokenOut >
                     getMinAmountReceived(
-                        data.order.tokenIn,
-                        data.order.tokenOut,
-                        data.order.slippageBips,
-                        data.order.amountIn
+                        order.tokenIn,
+                        order.tokenOut,
+                        order.slippageBips,
+                        order.amountIn
                     ),
                 "Too Little Received"
             );
 
             //remove from pending array
             PendingOrderIds = ArrayMutation.removeFromArray(
-                data.pendingOrderIdx,
+                pendingOrderIdx,
                 PendingOrderIds
             );
 
             //send tokenOut to recipient
-            data.order.tokenOut.safeTransfer(
-                data.order.recipient,
+            order.tokenOut.safeTransfer(
+                order.recipient,
                 finalTokenOut - initialTokenOut
             );
         }
 
         //emit
-        emit OrderProcessed(data.order.orderId, success, result);
+        emit OrderProcessed(order.orderId, success, result);
     }
 
     ///@notice if current approval is insufficient, approve max
