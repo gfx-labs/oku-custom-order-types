@@ -44,6 +44,7 @@ contract AutomatedTriggerSwap is Ownable {
 
     event OrderCreated(uint256 orderId);
     event OrderProcessed(uint256 orderId, bool success, bytes result);
+    event OrderCancelled(uint256 orderId);
 
     ///@notice idx for all orders
     uint256 public orderCount;
@@ -115,11 +116,42 @@ contract AutomatedTriggerSwap is Ownable {
         emit OrderCreated(orderCount);
     }
 
+    ///@notice only the order recipient can cancel their order
+    ///@notice only pending orders can be cancelled
+    function cancelOrder(uint256 orderId) external {
+        Order memory order = AllOrders[orderId];
+        require(msg.sender == order.recipient, "Only Order Owner");
+        require(_cancelOrder(orderId), "Order not active");
+    }
+
+    function _cancelOrder(uint256 orderId) internal returns (bool) {
+        Order memory order = AllOrders[orderId];
+        for (uint i = 0; i < PendingOrderIds.length; i++) {
+            if (PendingOrderIds[i] == orderId) {
+                //remove from pending array
+                PendingOrderIds = ArrayMutation.removeFromArray(
+                    i,
+                    PendingOrderIds
+                );
+
+                //refund tokens
+                order.tokenIn.safeTransfer(order.recipient, order.amountIn);
+
+                //emit event
+                emit OrderCancelled(orderId);
+
+                //short circuit loop
+                return true;
+            }
+        }
+        return false;
+    }
+
     //check upkeep
     function checkUpkeep()
         external
         view
-        returns (bool upkeepNeeded, uint256 pendingOrderIdx)
+        returns (bool upkeepNeeded, uint256 pendingOrderIdx, Order memory order)
     {
         for (uint i = 0; i < PendingOrderIds.length; i++) {
             Order memory _order = AllOrders[PendingOrderIds[i]];
@@ -129,11 +161,11 @@ contract AutomatedTriggerSwap is Ownable {
             );
             if (_order.direction) {
                 if (exchangeRate <= _order.strikePrice) {
-                    return (true, i);
+                    return (true, i, _order);
                 }
             } else {
                 if (exchangeRate >= _order.strikePrice) {
-                    return (true, i);
+                    return (true, i, _order);
                 }
             }
         }
@@ -153,15 +185,8 @@ contract AutomatedTriggerSwap is Ownable {
         bytes memory performData
     ) external payable {
         Order memory _order = AllOrders[PendingOrderIds[pendingOrderIdx]];
-        uint256 minAmountReceived = getMinAmountReceived(
-            _order.tokenIn,
-            _order.tokenOut,
-            _order.slippageBips,
-            _order.amountIn
-        );
 
         //update accounting
-        //uint256 initialTokenIn = _order.tokenIn.balanceOf(address(this));
         uint256 initialTokenOut = _order.tokenOut.balanceOf(address(this));
 
         //approve
@@ -170,29 +195,33 @@ contract AutomatedTriggerSwap is Ownable {
         //perform the call
         (bool success, bytes memory result) = target.call(performData);
 
-        uint256 finalTokenOut = _order.tokenOut.balanceOf(address(this));
-
-        //remove from pending array
-        PendingOrderIds = ArrayMutation.removeFromArray(
-            pendingOrderIdx,
-            PendingOrderIds
-        );
-
         if (success) {
-            //if success, we expect initialTokenIn to decrease by amountIn
-            //and initialTokenOut to increase by at least minAmountReceived
+            uint256 finalTokenOut = _order.tokenOut.balanceOf(address(this));
+
+            //if success, we expect tokenIn balance to decrease by amountIn
+            //and tokenOut balance to increase by at least minAmountReceived
             require(
-                finalTokenOut - initialTokenOut > minAmountReceived,
+                finalTokenOut - initialTokenOut >
+                    getMinAmountReceived(
+                        _order.tokenIn,
+                        _order.tokenOut,
+                        _order.slippageBips,
+                        _order.amountIn
+                    ),
                 "Too Little Received"
             );
-            //send tokenOut
+
+            //remove from pending array
+            PendingOrderIds = ArrayMutation.removeFromArray(
+                pendingOrderIdx,
+                PendingOrderIds
+            );
+
+            //send tokenOut to recipient
             _order.tokenOut.safeTransfer(
                 _order.recipient,
                 finalTokenOut - initialTokenOut
             );
-        } else {
-            //refund tokenIn
-            _order.tokenIn.safeTransfer(_order.recipient, _order.amountIn);
         }
 
         //emit
@@ -218,12 +247,17 @@ contract AutomatedTriggerSwap is Ownable {
     }
 
     ///todo test a lot more for decimals, USDC/WBTC
+    ///@notice Direction of swap does not effect exchange rate
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
     ///@return exchangeRate should always be 1e8
     function getExchangeRate(
         IERC20 tokenIn,
         IERC20 tokenOut
     ) public view returns (uint256 exchangeRate) {
+        
+        //control for direction
+        if (address(tokenIn) > address(tokenOut)) (tokenIn, tokenOut) = (tokenOut, tokenIn);
+
         //simple exchange rate in 1e8 terms per oracle output
         exchangeRate = divide(
             oracles[tokenIn].currentValue(),
