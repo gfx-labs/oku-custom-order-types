@@ -22,7 +22,7 @@ import "hardhat/console.sol";
 ///@notice This contract owns and handles all logic associated with STOP_MARKET orders
 ///@notice STOP_MARKET orders check an external oracle for a pre-determined strike price,
 ///once this price is reached, a market swap occurs
-contract AutomatedTriggerSwap is Ownable {
+contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
     using SafeERC20 for IERC20;
 
     uint88 MAX_BIPS = 10000;
@@ -40,6 +40,11 @@ contract AutomatedTriggerSwap is Ownable {
         address recipient; //addr to receive swap results
         uint88 slippageBips;
         bool direction; //true if initial exchange rate > strike price
+    }
+
+    struct PerformData {
+        uint256 pendingOrderIdx;
+        Order order;
     }
 
     event OrderCreated(uint256 orderId);
@@ -148,10 +153,13 @@ contract AutomatedTriggerSwap is Ownable {
     }
 
     //check upkeep
-    function checkUpkeep()
+    function checkUpkeep(
+        bytes calldata /**checkData */
+    )
         external
         view
-        returns (bool upkeepNeeded, uint256 pendingOrderIdx, Order memory order)
+        override
+        returns (bool upkeepNeeded, bytes memory performData)
     {
         for (uint i = 0; i < PendingOrderIds.length; i++) {
             Order memory _order = AllOrders[PendingOrderIds[i]];
@@ -161,11 +169,21 @@ contract AutomatedTriggerSwap is Ownable {
             );
             if (_order.direction) {
                 if (exchangeRate <= _order.strikePrice) {
-                    return (true, i, _order);
+                    return (
+                        true,
+                        abi.encode(
+                            PerformData({pendingOrderIdx: i, order: _order})
+                        )
+                    );
                 }
             } else {
                 if (exchangeRate >= _order.strikePrice) {
-                    return (true, i, _order);
+                    return (
+                        true,
+                        abi.encode(
+                            PerformData({pendingOrderIdx: i, order: _order})
+                        )
+                    );
                 }
             }
         }
@@ -175,57 +193,58 @@ contract AutomatedTriggerSwap is Ownable {
     ///@notice recipient of swap should be this contract,
     ///as we need to account for tokens received.
     ///This contract will then forward the tokens to the user
-    ///@param target refers to some contract where when we send @param performData,
+    /// target refers to some contract where when we send @param performData,
     ///that contract will exchange our tokenIn for tokenOut with at least minAmountReceived
-    ///@param pendingOrderIdx is the index of the pending order we are executing,
+    /// pendingOrderIdx is the index of the pending order we are executing,
     ///this pending order is removed from the array via array mutation
-    function performUpkeep(
-        address target,
-        uint256 pendingOrderIdx,
-        bytes memory performData
-    ) external payable {
-        Order memory _order = AllOrders[PendingOrderIds[pendingOrderIdx]];
+    function performUpkeep(bytes calldata performData) external override {
+        (address target, PerformData memory data) = abi.decode(
+            performData,
+            (address, PerformData)
+        );
 
         //update accounting
-        uint256 initialTokenOut = _order.tokenOut.balanceOf(address(this));
+        uint256 initialTokenOut = data.order.tokenOut.balanceOf(address(this));
 
         //approve
-        updateApproval(target, _order.tokenIn, _order.amountIn);
+        updateApproval(target, data.order.tokenIn, data.order.amountIn);
 
         //perform the call
         (bool success, bytes memory result) = target.call(performData);
 
         if (success) {
-            uint256 finalTokenOut = _order.tokenOut.balanceOf(address(this));
+            uint256 finalTokenOut = data.order.tokenOut.balanceOf(
+                address(this)
+            );
 
             //if success, we expect tokenIn balance to decrease by amountIn
             //and tokenOut balance to increase by at least minAmountReceived
             require(
                 finalTokenOut - initialTokenOut >
                     getMinAmountReceived(
-                        _order.tokenIn,
-                        _order.tokenOut,
-                        _order.slippageBips,
-                        _order.amountIn
+                        data.order.tokenIn,
+                        data.order.tokenOut,
+                        data.order.slippageBips,
+                        data.order.amountIn
                     ),
                 "Too Little Received"
             );
 
             //remove from pending array
             PendingOrderIds = ArrayMutation.removeFromArray(
-                pendingOrderIdx,
+                data.pendingOrderIdx,
                 PendingOrderIds
             );
 
             //send tokenOut to recipient
-            _order.tokenOut.safeTransfer(
-                _order.recipient,
+            data.order.tokenOut.safeTransfer(
+                data.order.recipient,
                 finalTokenOut - initialTokenOut
             );
         }
 
         //emit
-        emit OrderProcessed(_order.orderId, success, result);
+        emit OrderProcessed(data.order.orderId, success, result);
     }
 
     ///@notice if current approval is insufficient, approve max
@@ -254,9 +273,9 @@ contract AutomatedTriggerSwap is Ownable {
         IERC20 tokenIn,
         IERC20 tokenOut
     ) public view returns (uint256 exchangeRate) {
-        
         //control for direction
-        if (address(tokenIn) > address(tokenOut)) (tokenIn, tokenOut) = (tokenOut, tokenIn);
+        if (address(tokenIn) > address(tokenOut))
+            (tokenIn, tokenOut) = (tokenOut, tokenIn);
 
         //simple exchange rate in 1e8 terms per oracle output
         exchangeRate = divide(
@@ -266,6 +285,7 @@ contract AutomatedTriggerSwap is Ownable {
         );
     }
 
+    //todo incorporate direction after exchange rate change
     ///@notice apply slippage
     ///@return minAmountReceived should return already scaled to @param tokenOut decimals
     function getMinAmountReceived(
