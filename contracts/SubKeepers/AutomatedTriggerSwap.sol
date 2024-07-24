@@ -25,7 +25,12 @@ import "hardhat/console.sol";
 contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
     using SafeERC20 for IERC20;
 
-    uint88 MAX_BIPS = 10000;
+    uint88 public MAX_BIPS = 10000;
+
+    uint16 public maxPendingOrders;
+
+    ///@notice USD value in 1e8 terms
+    uint256 public minOrderSize;
 
     IMasterKeeperV2 public immutable MASTER;
 
@@ -71,6 +76,16 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         }
     }
 
+    function setMaxPendingOrders(uint16 _max) external onlyOwner {
+        maxPendingOrders = _max;
+    }
+
+    ///@param usdValue must be in 1e8 terms
+    function setMinOrderSize(uint256 usdValue) external onlyOwner {
+        minOrderSize = usdValue;
+    }
+
+    
     function getPendingOrders()
         external
         view
@@ -90,14 +105,19 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
             address(oracles[tokenIn]) != address(0x0),
-            "Token In Oracle !exist"
+            "tokenIn Oracle !exist"
         );
         require(
             address(oracles[tokenOut]) != address(0x0),
-            "Token Out Oracle !exist"
+            "tokenOut Oracle !exist"
         );
 
-        require(slippageBips <= MAX_BIPS, "INVALID BIPS");
+        require(orderCount < maxPendingOrders, "Max Order Count Reached");
+
+        require(slippageBips <= MAX_BIPS, "Invalid Slippage BIPS");
+
+        //verify order amount is at least the minimum
+        checkMinOrderSize(tokenIn, amountIn);
 
         orderCount++;
         AllOrders[orderCount] = Order({
@@ -261,7 +281,6 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         }
     }
 
-    ///todo test a lot more for decimals, USDC/WBTC
     ///@notice Direction of swap does not effect exchange rate
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
     ///@return exchangeRate should always be 1e8
@@ -288,12 +307,9 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         );
     }
 
-    //3413.49006826
-    //0.00029295
-
-    //todo incorporate direction after exchange rate change
-    ///@notice apply slippage
-    ///@return minAmountReceived should return already scaled to @param tokenOut decimals
+    ///@notice Calculate price using external oracles,
+    ///and apply @param slippageBips to deduce @return minAmountReceived
+    ///@return minAmountReceived is scaled to @param tokenOut decimals
     function getMinAmountReceived(
         IERC20 tokenIn,
         IERC20 tokenOut,
@@ -320,6 +336,14 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
 
         //scale by slippage
         return (fairAmountOut * (MAX_BIPS - slippageBips)) / MAX_BIPS;
+    }
+    
+
+    function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) internal view{
+        uint256 currentPrice = oracles[tokenIn].currentValue();
+        uint256 usdValue = (currentPrice * amountIn) / (10 ** ERC20(address(tokenIn)).decimals());
+
+        require(usdValue > minOrderSize, "order too small");
     }
 
     ///@notice floating point division at @param factor scale

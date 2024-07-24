@@ -152,10 +152,39 @@ describe("Execute Stop-Market Upkeep", () => {
 
 
 
+
+
+
     it("Create stop-market order", async () => {
         const currentPrice = await AutoTrigger.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
 
         await WETH.connect(Bob).approve(await AutoTrigger.getAddress(), wethAmount)
+
+        //check for max pending orders
+        expect(AutoTrigger.connect(Bob).createOrder(
+            currentPrice - strikeDelta,
+            wethAmount,
+            bips,
+            await WETH.getAddress(),
+            await USDC.getAddress()
+        )).to.be.revertedWith("Max Order Count Reached")
+
+        //set max order size
+        await AutoTrigger.connect(Frank).setMaxPendingOrders(50)
+
+        //check for min order size
+        //set limit too high for failure - order size should be un USDe8 terms
+        await AutoTrigger.connect(Frank).setMinOrderSize(ethers.parseUnits("50", 18))
+        expect(AutoTrigger.connect(Bob).createOrder(
+            currentPrice - strikeDelta,
+            wethAmount,
+            bips,
+            await WETH.getAddress(),
+            await USDC.getAddress()
+        )).to.be.revertedWith("order too small")
+
+        //set appropriate limit
+        await AutoTrigger.connect(Frank).setMinOrderSize(ethers.parseUnits("50", 8))
         await AutoTrigger.connect(Bob).createOrder(
             currentPrice - strikeDelta,
             wethAmount,
@@ -176,7 +205,11 @@ describe("Execute Stop-Market Upkeep", () => {
         //verify our input token was received
         const balance = await WETH.balanceOf(await AutoTrigger.getAddress())
         expect(balance).to.eq(wethAmount, "WETH received")
+
+
+
     })
+
 
     it("Check upkeep", async () => {
 
@@ -241,8 +274,8 @@ describe("Execute Stop-Market Upkeep", () => {
         const check = await AutoTrigger.checkUpkeep("0x")
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
     })
-
 })
+
 
 ///Charles trades in opposite direction to Bob
 describe("Inverted order", async () => {
@@ -508,4 +541,3 @@ describe("Test for failure", () => {
 
     })
 })
-
