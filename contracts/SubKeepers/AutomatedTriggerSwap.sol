@@ -213,17 +213,6 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         if (success) {
             uint256 finalTokenOut = order.tokenOut.balanceOf(address(this));
 
-            console.log("Actual: ", finalTokenOut - initialTokenOut);
-            console.log(
-                "Minimu: ",
-                getMinAmountReceived(
-                    order.tokenIn,
-                    order.tokenOut,
-                    order.slippageBips,
-                    order.amountIn
-                )
-            );
-
             //if success, we expect tokenIn balance to decrease by amountIn
             //and tokenOut balance to increase by at least minAmountReceived
             require(
@@ -251,7 +240,6 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         }
 
         //emit
-        console.log("SUCCESS", success);
         emit OrderProcessed(order.orderId, success, result);
     }
 
@@ -313,61 +301,25 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         uint256 amountIn
     ) public view returns (uint256 minAmountReceived) {
         uint256 exchangeRate = _getExchangeRate(tokenIn, tokenOut, false);
-        console.log("ER: ", exchangeRate);
-        console.log("AI: ", amountIn); //5000.000000
 
-        /**
-        29295
-        2.9295
-        100000000000000
-        2.9295e-14
-        0.000000000000029295 eth
-
-        if both tokens are regular 1e18, 
-        then we need to only scale the exchange rate from 1e8 => 1e18
-
-        exchange rate is always going to be in 1e8 terms
-        we need to scale amount in to 1e8 and apply exchange rate - bips
-
-
-        1. scale exchange rate to tokenIn decimals 1e8 => 1e6
-        2. now we can use raw amountIn * exchange rate to get spot price
-
-
-        This gives the spot amount in tokenIn terms
-        (amountIn * exchangeRate) / 1e8
-
-         */
-        uint256 unscaled = ((amountIn) * exchangeRate) / 1e8;
+        //this assumes decimalIn == decimalOut
+        uint256 fairAmountOut = ((amountIn) * exchangeRate) / 1e8;
 
         uint8 decimalIn = ERC20(address(tokenIn)).decimals();
         uint8 decimalOut = ERC20(address(tokenOut)).decimals();
 
-        if(decimalIn == decimalOut){
-            return unscaled; //todo modify by bips
+        if (decimalIn > decimalOut) {
+            uint256 factor = (10 ** (decimalIn - decimalOut));
+            fairAmountOut = (fairAmountOut / factor);
         }
 
-        console.log("Unscaled: ", unscaled);
-        console.log("Scaled  : ", unscaled * 1e12);
+        if (decimalIn < decimalOut) {
+            uint256 factor = (10 ** (decimalOut - decimalIn));
+            fairAmountOut = (fairAmountOut * factor);
+        }
 
-        /**
-        console.log("T1: ", (10 ** ERC20(address(tokenOut)).decimals()));
-        uint256 test = divide(exchangeRate, divide(1e8, (10 ** ERC20(address(tokenOut)).decimals()), 8), 8);
-        console.log("TS: ", test);
-
-        //adjust exchange rate by tokenOut Decimals
-        uint256 adjustedExchangeRate = exchangeRate /
-            (1e8 / (10 ** ERC20(address(tokenOut)).decimals()));
-
-        console.log("AJ: ", adjustedExchangeRate);
-
-        //minAmountReceived is then adjusted by tokenIn decimals
-        minAmountReceived =
-            (((adjustedExchangeRate * amountIn) /
-                (10 ** ERC20(address(tokenIn)).decimals())) *
-                ((MAX_BIPS - slippageBips))) /
-            MAX_BIPS;
-         */
+        //scale by slippage
+        return (fairAmountOut * (MAX_BIPS - slippageBips)) / MAX_BIPS;
     }
 
     ///@notice floating point division at @param factor scale
