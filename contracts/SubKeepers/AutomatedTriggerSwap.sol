@@ -108,11 +108,9 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
             tokenIn: tokenIn,
             tokenOut: tokenOut,
             recipient: msg.sender,
-            direction: getExchangeRate(tokenIn, tokenOut) > strikePrice //exchangeRate in/out > strikePrice
+            direction: _getExchangeRate(tokenIn, tokenOut, true) > strikePrice //exchangeRate in/out > strikePrice
         });
         PendingOrderIds.push(orderCount);
-
-        //console.log("Order: ", orderCount, "Direction: ", getExchangeRate(tokenIn, tokenOut) > strikePrice);
 
         //take asset
         tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
@@ -161,16 +159,15 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        console.log("LENGTH: ", PendingOrderIds.length);
         for (uint i = 0; i < PendingOrderIds.length; i++) {
             Order memory _order = AllOrders[PendingOrderIds[i]];
-            uint256 exchangeRate = getExchangeRate(
+            uint256 exchangeRate = _getExchangeRate(
                 _order.tokenIn,
-                _order.tokenOut
+                _order.tokenOut,
+                true
             );
             if (_order.direction) {
                 if (exchangeRate <= _order.strikePrice) {
-                    console.log("TRUE: ", i);
                     return (
                         true,
                         abi.encode(
@@ -180,8 +177,6 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
                 }
             } else {
                 if (exchangeRate >= _order.strikePrice) {
-                    console.log("FALSE: ", i);
-
                     return (
                         true,
                         abi.encode(
@@ -202,8 +197,8 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
     /// pendingOrderIdx is the index of the pending order we are executing,
     ///this pending order is removed from the array via array mutation
     function performUpkeep(bytes calldata performData) external override {
-        (address target, uint256 pendingOrderIdx, bytes memory txData) = abi.decode(performData, (address, uint256, bytes));
-        console.log("Decoded");
+        (address target, uint256 pendingOrderIdx, bytes memory txData) = abi
+            .decode(performData, (address, uint256, bytes));
         Order memory order = AllOrders[PendingOrderIds[pendingOrderIdx]];
 
         //update accounting
@@ -213,12 +208,21 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         updateApproval(target, order.tokenIn, order.amountIn);
 
         //perform the call
-        console.log("SENDING");
         (bool success, bytes memory result) = target.call(txData);
 
         if (success) {
-            console.log("SUCCESS", success);
             uint256 finalTokenOut = order.tokenOut.balanceOf(address(this));
+
+            console.log("Actual: ", finalTokenOut - initialTokenOut);
+            console.log(
+                "Minimu: ",
+                getMinAmountReceived(
+                    order.tokenIn,
+                    order.tokenOut,
+                    order.slippageBips,
+                    order.amountIn
+                )
+            );
 
             //if success, we expect tokenIn balance to decrease by amountIn
             //and tokenOut balance to increase by at least minAmountReceived
@@ -247,6 +251,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         }
 
         //emit
+        console.log("SUCCESS", success);
         emit OrderProcessed(order.orderId, success, result);
     }
 
@@ -275,11 +280,18 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
     function getExchangeRate(
         IERC20 tokenIn,
         IERC20 tokenOut
-    ) public view returns (uint256 exchangeRate) {
-        //control for direction
-        if (address(tokenIn) > address(tokenOut))
-            (tokenIn, tokenOut) = (tokenOut, tokenIn);
+    ) external view returns (uint256 exchangeRate) {
+        return _getExchangeRate(tokenIn, tokenOut, true);
+    }
 
+    function _getExchangeRate(
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        bool fixedDirection
+    ) internal view returns (uint256 exchangeRate) {
+        //control for direction
+        if (fixedDirection && (address(tokenIn) > address(tokenOut)))
+            (tokenIn, tokenOut) = (tokenOut, tokenIn);
         //simple exchange rate in 1e8 terms per oracle output
         exchangeRate = divide(
             oracles[tokenIn].currentValue(),
@@ -287,6 +299,9 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
             8
         );
     }
+
+    //3413.49006826
+    //0.00029295
 
     //todo incorporate direction after exchange rate change
     ///@notice apply slippage
@@ -297,9 +312,54 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         uint88 slippageBips,
         uint256 amountIn
     ) public view returns (uint256 minAmountReceived) {
+        uint256 exchangeRate = _getExchangeRate(tokenIn, tokenOut, false);
+        console.log("ER: ", exchangeRate);
+        console.log("AI: ", amountIn); //5000.000000
+
+        /**
+        29295
+        2.9295
+        100000000000000
+        2.9295e-14
+        0.000000000000029295 eth
+
+        if both tokens are regular 1e18, 
+        then we need to only scale the exchange rate from 1e8 => 1e18
+
+        exchange rate is always going to be in 1e8 terms
+        we need to scale amount in to 1e8 and apply exchange rate - bips
+
+
+        1. scale exchange rate to tokenIn decimals 1e8 => 1e6
+        2. now we can use raw amountIn * exchange rate to get spot price
+
+
+        This gives the spot amount in tokenIn terms
+        (amountIn * exchangeRate) / 1e8
+
+         */
+        uint256 unscaled = ((amountIn) * exchangeRate) / 1e8;
+
+        uint8 decimalIn = ERC20(address(tokenIn)).decimals();
+        uint8 decimalOut = ERC20(address(tokenOut)).decimals();
+
+        if(decimalIn == decimalOut){
+            return unscaled; //todo modify by bips
+        }
+
+        console.log("Unscaled: ", unscaled);
+        console.log("Scaled  : ", unscaled * 1e12);
+
+        /**
+        console.log("T1: ", (10 ** ERC20(address(tokenOut)).decimals()));
+        uint256 test = divide(exchangeRate, divide(1e8, (10 ** ERC20(address(tokenOut)).decimals()), 8), 8);
+        console.log("TS: ", test);
+
         //adjust exchange rate by tokenOut Decimals
-        uint256 adjustedExchangeRate = getExchangeRate(tokenIn, tokenOut) /
+        uint256 adjustedExchangeRate = exchangeRate /
             (1e8 / (10 ** ERC20(address(tokenOut)).decimals()));
+
+        console.log("AJ: ", adjustedExchangeRate);
 
         //minAmountReceived is then adjusted by tokenIn decimals
         minAmountReceived =
@@ -307,6 +367,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
                 (10 ** ERC20(address(tokenIn)).decimals())) *
                 ((MAX_BIPS - slippageBips))) /
             MAX_BIPS;
+         */
     }
 
     ///@notice floating point division at @param factor scale
