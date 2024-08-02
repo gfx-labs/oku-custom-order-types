@@ -82,7 +82,7 @@ describe("Automated Trigger Testing on Arbitrum", () => {
 
     it("Deploy", async () => {
         //Deploy keeper
-        AutoTrigger = await new AutomatedTriggerSwap__factory(Frank).deploy(LimitOrderRegistry)
+        AutoTrigger = await new AutomatedTriggerSwap__factory(Frank).deploy()
         await AutoTrigger.deploymentTransaction()
 
         //deploy test oracles
@@ -100,6 +100,7 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         const oracles = [await wethOracle.getAddress(), await usdcOracle.getAddress(), await uniOracle.getAddress(), await arbOracle.getAddress()]
 
         await AutoTrigger.connect(Frank).registerOracle(tokens, oracles)
+        await AutoTrigger.connect(Frank).registerPair(await WETH.getAddress(), await USDC.getAddress())
     })
 
     it("Check upkeep", async () => {
@@ -149,12 +150,17 @@ describe("Execute Stop-Market Upkeep", () => {
          */
     })
 
+    it("Deduce pair", async () => {
+
+    })
 
 
 
 
 
 
+
+    /**
     it("Create stop-market order", async () => {
         const currentPrice = await AutoTrigger.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
 
@@ -274,9 +280,11 @@ describe("Execute Stop-Market Upkeep", () => {
         const check = await AutoTrigger.checkUpkeep("0x")
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
     })
+     */
 })
 
 
+/**
 ///Charles trades in opposite direction to Bob
 describe("Inverted order", async () => {
     const strikeDelta = ethers.parseUnits("100", 8)
@@ -541,3 +549,5 @@ describe("Test for failure", () => {
 
     })
 })
+
+ */

@@ -14,8 +14,6 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 
 import "../oracle/IOracleRelay.sol";
 
-//import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
-
 ///testing
 import "hardhat/console.sol";
 
@@ -29,12 +27,18 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
 
     uint16 public maxPendingOrders;
 
-    ///@notice USD value in 1e8 terms
     uint256 public minOrderSize;
 
-    IMasterKeeperV2 public immutable MASTER;
+    uint256 public orderCount;
 
+    uint256[] public PendingOrderIds;
+
+    mapping(uint256 => Order) public AllOrders;
     mapping(IERC20 => IOracleRelay) public oracles;
+
+    //map each token to its respective set of opposite pair tokens
+    mapping(IERC20 => IERC20[]) public token0_token1s;
+    mapping(IERC20 => IERC20[]) public token1_token0s;
 
     struct Order {
         uint256 orderId;
@@ -56,15 +60,6 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
     event OrderProcessed(uint256 orderId, bool success, bytes result);
     event OrderCancelled(uint256 orderId);
 
-    ///@notice idx for all orders
-    uint256 public orderCount;
-    mapping(uint256 => Order) public AllOrders;
-    uint256[] public PendingOrderIds;
-
-    constructor(IMasterKeeperV2 _mkv2) {
-        MASTER = _mkv2;
-    }
-
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
     function registerOracle(
         IERC20[] calldata _tokens,
@@ -76,6 +71,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         }
     }
 
+    ///@notice set max pending orders, limiting checkUpkeep compute requirement
     function setMaxPendingOrders(uint16 _max) external onlyOwner {
         maxPendingOrders = _max;
     }
@@ -85,7 +81,12 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         minOrderSize = usdValue;
     }
 
-    
+    ///@notice admin registers a pair for trading
+    function registerPair(IERC20 _token0, IERC20 _token1) external onlyOwner {
+        token0_token1s[_token0].push(_token1);
+        token1_token0s[_token1].push(_token0);
+    }
+
     function getPendingOrders()
         external
         view
@@ -145,6 +146,10 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         Order memory order = AllOrders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(orderId), "Order not active");
+    }
+
+    function adminCancelOrder(uint256 orderId) external onlyOwner {
+        _cancelOrder(orderId);
     }
 
     function _cancelOrder(uint256 orderId) internal returns (bool) {
@@ -299,6 +304,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         //control for direction
         if (fixedDirection && (address(tokenIn) > address(tokenOut)))
             (tokenIn, tokenOut) = (tokenOut, tokenIn);
+
         //simple exchange rate in 1e8 terms per oracle output
         exchangeRate = divide(
             oracles[tokenIn].currentValue(),
@@ -337,13 +343,17 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         //scale by slippage
         return (fairAmountOut * (MAX_BIPS - slippageBips)) / MAX_BIPS;
     }
-    
 
-    function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) internal view{
+    function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) internal view {
         uint256 currentPrice = oracles[tokenIn].currentValue();
-        uint256 usdValue = (currentPrice * amountIn) / (10 ** ERC20(address(tokenIn)).decimals());
+        uint256 usdValue = (currentPrice * amountIn) /
+            (10 ** ERC20(address(tokenIn)).decimals());
 
         require(usdValue > minOrderSize, "order too small");
+    }
+
+    function deducePair() internal view returns (bool){
+        
     }
 
     ///@notice floating point division at @param factor scale

@@ -78,3 +78,28 @@ export const generateUniTx = async (
 
     return encodedPerformData
 }
+
+export const getStrikePrice = async (
+    currentPrice: bigint,
+    delta: number,
+    recip: boolean
+) => {
+
+    let formatPrice = Number(ethers.formatUnits(currentPrice, 8))
+    
+    if(recip){
+        formatPrice = 1 / formatPrice
+        console.log("RECIP PRICE: ", formatPrice)
+    }
+
+    let strikePrice = formatPrice + delta
+    console.log("STRIKE: ", strikePrice)
+
+    if(recip){
+        strikePrice = 1 / strikePrice
+    }
+
+
+    return BigInt(ethers.parseUnits(strikePrice.toFixed(8).toString(), 8))
+
+}
