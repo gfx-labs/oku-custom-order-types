@@ -81,6 +81,7 @@ describe("Automated Trigger Testing on Arbitrum", () => {
     })
 
     it("Deploy", async () => {
+        console.log("DEPLOYING")
         //Deploy keeper
         AutoTrigger = await new AutomatedTriggerSwap__factory(Frank).deploy()
         await AutoTrigger.deploymentTransaction()
@@ -100,7 +101,12 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         const oracles = [await wethOracle.getAddress(), await usdcOracle.getAddress(), await uniOracle.getAddress(), await arbOracle.getAddress()]
 
         await AutoTrigger.connect(Frank).registerOracle(tokens, oracles)
-        await AutoTrigger.connect(Frank).registerPair(await WETH.getAddress(), await USDC.getAddress())
+
+        //register all pairs
+        const token0s = [await WETH.getAddress(), await ARB.getAddress()]
+        const token1s = [await USDC.getAddress(), await UNI.getAddress()]
+        await AutoTrigger.connect(Frank).registerPair(token0s, token1s)
+
     })
 
     it("Check upkeep", async () => {
@@ -132,159 +138,153 @@ describe("Execute Stop-Market Upkeep", () => {
 
     it("Verify exchange rate and minAmountReceived logic", async () => {
 
+        const pairList = await AutoTrigger.getPairList()
+
 
         /**
         console.log("")
         console.log("Decimal in > Decimal out")
-        console.log("WETH => USDC: ", await AutoTrigger.getMinAmountReceived(WETH, USDC, bips, wethAmount))
+        console.log("WETH => USDC: ", await AutoTrigger.getMinAmountReceived(0, true, bips, wethAmount))
         console.log("EXPECTED: ", Number(ethers.parseUnits("5597.837", 6)))
         console.log("")
         console.log("Decimal in < Decimal out")
-        console.log("USDC => WETH: ", await AutoTrigger.getMinAmountReceived(USDC, WETH, bips, usdcAmount))
+        console.log("USDC => WETH: ", await AutoTrigger.getMinAmountReceived(0, false, bips, usdcAmount))
         console.log("EXPECTED: ", Number(ethers.parseUnits("1.47375", 18)))
         console.log("")
         console.log("Decimal in == Decimal out")
-        console.log("ARB => UNI: ", await AutoTrigger.getMinAmountReceived(ARB, UNI, bips, arbAmount))
+        console.log("ARB => UNI: ", await AutoTrigger.getMinAmountReceived(1, true, bips, arbAmount))
         console.log("EXPECTED: ", Number(ethers.parseUnits("661.320584", 18)))
         console.log("")
+        //.01400062
          */
-    })
-
-    it("Deduce pair", async () => {
-
-    })
-
-
-
-
-
-
-
-    /**
-    it("Create stop-market order", async () => {
-        const currentPrice = await AutoTrigger.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
-
-        await WETH.connect(Bob).approve(await AutoTrigger.getAddress(), wethAmount)
-
-        //check for max pending orders
-        expect(AutoTrigger.connect(Bob).createOrder(
-            currentPrice - strikeDelta,
-            wethAmount,
-            bips,
-            await WETH.getAddress(),
-            await USDC.getAddress()
-        )).to.be.revertedWith("Max Order Count Reached")
-
-        //set max order size
-        await AutoTrigger.connect(Frank).setMaxPendingOrders(50)
-
-        //check for min order size
-        //set limit too high for failure - order size should be un USDe8 terms
-        await AutoTrigger.connect(Frank).setMinOrderSize(ethers.parseUnits("50", 18))
-        expect(AutoTrigger.connect(Bob).createOrder(
-            currentPrice - strikeDelta,
-            wethAmount,
-            bips,
-            await WETH.getAddress(),
-            await USDC.getAddress()
-        )).to.be.revertedWith("order too small")
-
-        //set appropriate limit
-        await AutoTrigger.connect(Frank).setMinOrderSize(ethers.parseUnits("50", 8))
-        await AutoTrigger.connect(Bob).createOrder(
-            currentPrice - strikeDelta,
-            wethAmount,
-            bips,
-            await WETH.getAddress(),
-            await USDC.getAddress()
-        )
-
-        const filter = AutoTrigger.filters.OrderCreated
-        const events = await AutoTrigger.queryFilter(filter, -1)
-        const event = events[0].args
-        expect(Number(event[0])).to.eq(1, "First order Id")
-
-        //verify pending order exists
-        const list = await AutoTrigger.getPendingOrders()
-        expect(list.length).to.eq(1, "1 pending order")
-
-        //verify our input token was received
-        const balance = await WETH.balanceOf(await AutoTrigger.getAddress())
-        expect(balance).to.eq(wethAmount, "WETH received")
-
 
 
     })
 
-
-    it("Check upkeep", async () => {
-
-        //should be no upkeep needed yet
-        const initial = await AutoTrigger.checkUpkeep("0x")
-        expect(initial.upkeepNeeded).to.eq(false)
-
-        //reduce price to strike price
-        await wethOracle.setPrice(initialEthPrice - (strikeDelta))
-
-        //check upkeep
-        const result = await AutoTrigger.checkUpkeep("0x")
-        expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
-
-    })
-
-    it("Perform Upkeep", async () => {
-        //check upkeep
-        const result = await AutoTrigger.checkUpkeep("0x")
-
-        //get pending order idx
-        const decoded = await decodeUpkeepData(result.performData)
-
-        //get perform data
-        //we are doing a market swap on univ3 weth => usdc
-        const encodedTxData = await generateUniTx(
-            router02,
-            decoded.pendingOrderIdx,
-            router02,
-            UniPool,
-            WETH,
-            await USDC.getAddress(),
-            await AutoTrigger.getAddress(),
-            wethAmount,
-            await AutoTrigger.getMinAmountReceived(await WETH.getAddress(), await USDC.getAddress(), bips, wethAmount)
-        )
-
-        console.log("Gas to performUpkeep: ", await getGas(await AutoTrigger.performUpkeep(encodedTxData)))
-
-    })
-
-    it("Verify", async () => {
-        //expect user to receive tokens
-        const usdcBalance = await USDC.balanceOf(await Bob.getAddress())
-        expect(usdcBalance).to.be.gt(0n, "USDC received")
-
-        //pending order removed and length == 0
-        expect(await AutoTrigger.PendingOrderIds.length).to.eq(0, "no pending orders left")
-
-        //event
-        const filter = AutoTrigger.filters.OrderProcessed
-        const events = await AutoTrigger.queryFilter(filter, -1)
-        const event = events[0].args
-        expect(event.orderId).to.eq(1, "Order Id 1")
-        expect(event.success).to.eq(true, "Swap succeeded")
-
-        //no tokens left on contract
-        expect(await WETH.balanceOf(await AutoTrigger.getAddress())).to.eq(0n, "0 WETH left on contract")
-        expect(await USDC.balanceOf(await AutoTrigger.getAddress())).to.eq(0n, "0 USDC left on contract")
-
-        //check upkeep
-        const check = await AutoTrigger.checkUpkeep("0x")
-        expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
-    })
-     */
+        it("Create stop-market order", async () => {
+            const currentPrice = await AutoTrigger.getExchangeRate(0)
+    
+            await WETH.connect(Bob).approve(await AutoTrigger.getAddress(), wethAmount)
+    
+            //check for max pending orders
+            expect(AutoTrigger.connect(Bob).createOrder(
+                currentPrice - strikeDelta,
+                wethAmount,
+                0,
+                bips,
+                true
+            )).to.be.revertedWith("Max Order Count Reached")
+    
+            //set max order size
+            await AutoTrigger.connect(Frank).setMaxPendingOrders(50)
+    
+            //check for min order size
+            //set limit too high for failure - order size should be un USDe8 terms
+            await AutoTrigger.connect(Frank).setMinOrderSize(ethers.parseUnits("50", 18))
+            expect(AutoTrigger.connect(Bob).createOrder(
+                currentPrice - strikeDelta,
+                wethAmount,
+                0,
+                bips,
+                true
+            )).to.be.revertedWith("order too small")
+    
+            //set appropriate limit
+            await AutoTrigger.connect(Frank).setMinOrderSize(ethers.parseUnits("50", 8))
+            await AutoTrigger.connect(Bob).createOrder(
+                currentPrice - strikeDelta,
+                wethAmount,
+                0,
+                bips,
+                true
+            )
+    
+            const filter = AutoTrigger.filters.OrderCreated
+            const events = await AutoTrigger.queryFilter(filter, -1)
+            const event = events[0].args
+            expect(Number(event[0])).to.eq(1, "First order Id")
+    
+            //verify pending order exists
+            const list = await AutoTrigger.getPendingOrders()
+            expect(list.length).to.eq(1, "1 pending order")
+    
+            //verify our input token was received
+            const balance = await WETH.balanceOf(await AutoTrigger.getAddress())
+            expect(balance).to.eq(wethAmount, "WETH received")
+    
+    
+    
+        })
+       
+    
+        it("Check upkeep", async () => {
+    
+            //should be no upkeep needed yet
+            const initial = await AutoTrigger.checkUpkeep("0x")
+            expect(initial.upkeepNeeded).to.eq(false)
+    
+            //reduce price to strike price
+            await wethOracle.setPrice(initialEthPrice - (strikeDelta))
+    
+            //check upkeep
+            const result = await AutoTrigger.checkUpkeep("0x")
+            expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
+    
+        })
+    
+        it("Perform Upkeep", async () => {
+            //check upkeep
+            const result = await AutoTrigger.checkUpkeep("0x")
+    
+            //get pending order idx
+            const decoded = await decodeUpkeepData(result.performData)
+    
+            //get perform data
+            //we are doing a market swap on univ3 weth => usdc
+            const encodedTxData = await generateUniTx(
+                router02,
+                decoded.pendingOrderIdx,
+                router02,
+                UniPool,
+                WETH,
+                await USDC.getAddress(),
+                await AutoTrigger.getAddress(),
+                wethAmount,
+                await AutoTrigger.getMinAmountReceived(0, true, bips, wethAmount)
+            )
+    
+            console.log("Gas to performUpkeep: ", await getGas(await AutoTrigger.performUpkeep(encodedTxData)))
+    
+        })
+    
+        it("Verify", async () => {
+            //expect user to receive tokens
+            const usdcBalance = await USDC.balanceOf(await Bob.getAddress())
+            expect(usdcBalance).to.be.gt(0n, "USDC received")
+    
+            //pending order removed and length == 0
+            expect(await AutoTrigger.PendingOrderIds.length).to.eq(0, "no pending orders left")
+    
+            //event
+            const filter = AutoTrigger.filters.OrderProcessed
+            const events = await AutoTrigger.queryFilter(filter, -1)
+            const event = events[0].args
+            expect(event.orderId).to.eq(1, "Order Id 1")
+            expect(event.success).to.eq(true, "Swap succeeded")
+    
+            //no tokens left on contract
+            expect(await WETH.balanceOf(await AutoTrigger.getAddress())).to.eq(0n, "0 WETH left on contract")
+            expect(await USDC.balanceOf(await AutoTrigger.getAddress())).to.eq(0n, "0 USDC left on contract")
+    
+            //check upkeep
+            const check = await AutoTrigger.checkUpkeep("0x")
+            expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
+        })
+        
 })
 
 
-/**
+
 ///Charles trades in opposite direction to Bob
 describe("Inverted order", async () => {
     const strikeDelta = ethers.parseUnits("100", 8)
@@ -300,17 +300,15 @@ describe("Inverted order", async () => {
 
     it("Create order", async () => {
 
-        const invertedInput = await AutoTrigger.getExchangeRate(await USDC.getAddress(), await WETH.getAddress())
-        const currentPrice = await AutoTrigger.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
-        expect(currentPrice).to.eq(invertedInput, "Exchange Rate inversion is working")
+        const currentPrice = await AutoTrigger.getExchangeRate(0)
 
         await USDC.connect(Charles).approve(await AutoTrigger.getAddress(), usdcAmount)
         await AutoTrigger.connect(Charles).createOrder(
             currentPrice - strikeDelta,
             usdcAmount,
+            0,
             bips,
-            await USDC.getAddress(),
-            await WETH.getAddress()
+            false
         )
 
         const filter = AutoTrigger.filters.OrderCreated
@@ -361,7 +359,7 @@ describe("Inverted order", async () => {
             await WETH.getAddress(),
             await AutoTrigger.getAddress(),
             usdcAmount,
-            await AutoTrigger.getMinAmountReceived(await USDC.getAddress(), await WETH.getAddress(), bips, usdcAmount)
+            await AutoTrigger.getMinAmountReceived(0, false, bips, usdcAmount)
         )
         console.log("Gas to performUpkeep: ", await getGas(await AutoTrigger.performUpkeep(encodedTxData)))
 
@@ -389,11 +387,7 @@ describe("Inverted order", async () => {
         //check upkeep
         const check = await AutoTrigger.checkUpkeep("0x")
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
-
-
     })
-
-
 })
 
 
@@ -412,7 +406,7 @@ describe("Test for failure", () => {
     before(async () => {
         //reset price
         await wethOracle.setPrice(initialEthPrice)
-        currentPrice = await AutoTrigger.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
+        currentPrice = await AutoTrigger.getExchangeRate(0)
         const signers = await ethers.getSigners()
 
         //create some background orders
@@ -431,22 +425,18 @@ describe("Test for failure", () => {
             await AutoTrigger.connect(signer).createOrder(
                 currentPrice - npcStrikeDelta,
                 wethAmount,
+                0,
                 npcBips,
-                await WETH.getAddress(),
-                await USDC.getAddress()
+                true
             )
         }
     })
     beforeEach(async () => {
         //reset price
         await wethOracle.setPrice(initialEthPrice)
-        currentPrice = await AutoTrigger.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
+        currentPrice = await AutoTrigger.getExchangeRate(0)
 
     })
-    it("Oracles don't exist", async () => {
-        //todo
-    })
-
     it("Swap fails due to slippage", async () => {
 
         //fund and setup andy order
@@ -455,14 +445,14 @@ describe("Test for failure", () => {
         await AutoTrigger.connect(Andy).createOrder(
             currentPrice + strikeDelta,
             andyWeth,
+            0,
             smallSlippage,
-            await WETH.getAddress(),
-            await USDC.getAddress()
+            true
         )
 
         andyOrder1 = Number(await AutoTrigger.orderCount())
         const order = await AutoTrigger.AllOrders(andyOrder1)
-        expect(order[5]).to.eq(await Andy.getAddress(), "Andy's order")
+        expect(order[4]).to.eq(await Andy.getAddress(), "Andy's order")
 
         //check upkeep
         const check = await AutoTrigger.checkUpkeep("0x")
@@ -490,7 +480,7 @@ describe("Test for failure", () => {
             await USDC.getAddress(),
             await AutoTrigger.getAddress(),
             wethAmount,
-            await AutoTrigger.getMinAmountReceived(await WETH.getAddress(), await USDC.getAddress(), smallSlippage * 20, wethAmount)
+            await AutoTrigger.getMinAmountReceived(0, true, smallSlippage * 20, wethAmount)
         )
         expect(AutoTrigger.performUpkeep(txData)).to.be.revertedWith("Too Little Received")
     })
@@ -517,7 +507,7 @@ describe("Test for failure", () => {
             await USDC.getAddress(),
             await AutoTrigger.getAddress(),
             andyWeth * 5n,//input amount is way too much
-            await AutoTrigger.getMinAmountReceived(await WETH.getAddress(), await USDC.getAddress(), smallSlippage, andyWeth)
+            await AutoTrigger.getMinAmountReceived(0, true, smallSlippage, andyWeth)
         )
 
 
@@ -550,4 +540,3 @@ describe("Test for failure", () => {
     })
 })
 
- */
