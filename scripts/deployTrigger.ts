@@ -12,9 +12,9 @@ const { ethers } = require("hardhat");
 
 //"https://github.com/adrastia-oracle/oku-automation-config/blob/main/worker-config.ts"
 
-const triggerAddr = "0x4f38FA4F676a053ea497F295f855B2dC3580f517"
-const wethOracleAddress = "0x064E3A830f905686a718cb100708ff3D90aB5202"
-const usdcOracleAddress = "0x8B5AbFbdC5Ec4B88A4e94afBf9f22b81F71a25a9"
+let triggerAddr = "0x8327B0168858bd918A0177e89b2c172475F6B16f"//second deploy//0x4f38FA4F676a053ea497F295f855B2dC3580f517"//initial deploy
+let wethOracleAddress = "0x064E3A830f905686a718cb100708ff3D90aB5202"
+let usdcOracleAddress = "0x8B5AbFbdC5Ec4B88A4e94afBf9f22b81F71a25a9"
 
 const router02 = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"
 const pool = "0x1fb3cf6e48F1E7B10213E7b6d87D4c073C7Fdb7b"
@@ -56,7 +56,7 @@ async function main() {
 
   //await deploy(user)
   //await deployOracles(user)
-  //await test(user)
+  //await setup(user)
   //await createOrder(user)
   await checkUpkeep(user)
 
@@ -66,7 +66,17 @@ async function main() {
 
 const deploy = async (signer: Signer) => {
 
+  if (!mainnet) {
+    signer = await ethers.getSigner("0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89")
+
+    //testing does not scale tx cost correctly 
+    await setBalance(await signer.getAddress(), ethers.parseEther("1"))
+    await impersonateAccount(await signer.getAddress())
+
+  }
+
   trigger = await DeployContract(new AutomatedTriggerSwap__factory(signer), signer)
+  triggerAddr = await trigger.getAddress()
   console.log("DEPLOYED: ", await trigger.getAddress())
 
   if (mainnet) {
@@ -82,10 +92,12 @@ const deploy = async (signer: Signer) => {
 const deployOracles = async (signer: Signer) => {
 
   const wethOracle: IOracleRelay = await DeployContract(new OracleRelay__factory(signer), signer, wethAddress, wethFeedAddr)
+  wethOracleAddress = await wethOracle.getAddress()
   console.log("DEPLOYED: ", await wethOracle.getAddress())
   console.log("WETH: ", ethers.formatUnits((await wethOracle.currentValue()).toString(), 8))
 
   const usdcOracle: IOracleRelay = await DeployContract(new OracleRelay__factory(signer), signer, usdcAddress, usdcFeedAddr)
+  usdcOracleAddress = await usdcOracle.getAddress()
   console.log("DEPLOYED: ", await usdcOracle.getAddress())
   console.log("USDC: ", ethers.formatUnits((await usdcOracle.currentValue()).toString(), 8))
 
@@ -103,7 +115,7 @@ const deployOracles = async (signer: Signer) => {
   }
 
 }
-const test = async (signer: Signer) => {
+const setup = async (signer: Signer) => {
 
   trigger = AutomatedTriggerSwap__factory.connect(triggerAddr, signer)
 
@@ -129,7 +141,12 @@ const test = async (signer: Signer) => {
   await trigger.connect(signer).setMinOrderSize(ethers.parseUnits("0.5", 8))
   console.log("SET MIN ORDER SIZE")
 
-  console.log("CURRENT EXCHANGE RATE: ", ethers.formatUnits((await trigger.getExchangeRate(wethAddress, usdcAddress)), 8))
+  const token0s = [wethAddress]
+  const token1s = [usdcAddress]
+  await trigger.connect(signer).registerPair(token0s, token1s)
+  console.log("SET PAIR")
+
+  //console.log("CURRENT EXCHANGE RATE: ", ethers.formatUnits((await trigger.getExchangeRate(0)), 8))
 
 
 }
@@ -149,18 +166,17 @@ const createOrder = async (signer: Signer) => {
   const wethAmount = ethers.parseEther("0.0002")
   const strikeDelta = -1
 
-  const rawER = await trigger.getExchangeRate(wethAddress, usdcAddress)
-  const strikePrice = await getStrikePrice(rawER, strikeDelta, true)
-
-
+  const exchangeRate = await trigger.getExchangeRate(0)
+  const strikePrice = await getStrikePrice(exchangeRate, strikeDelta, false)
 
   await WETH.connect(signer).approve(await trigger.getAddress(), wethAmount)
+
   await trigger.connect(signer).createOrder(
     strikePrice,
     wethAmount,
+    0,
     500,
-    wethAddress,
-    usdcAddress
+    true
   )
 
   const filter = trigger.filters.OrderCreated
@@ -172,6 +188,7 @@ const createOrder = async (signer: Signer) => {
 }
 
 const checkUpkeep = async (signer: Signer) => {
+  console.log("CHECKING UPKEEP")
 
   //this block requires upkeep
   const UniPool = UniswapV3Pool__factory.connect(pool, signer)
@@ -180,7 +197,8 @@ const checkUpkeep = async (signer: Signer) => {
   const WETH = IERC20__factory.connect(wethAddress, signer)
   const USDC = IERC20__factory.connect(usdcAddress, signer)
   if (!mainnet) {
-    await resetCurrentOPblock(123390401)
+    console.log("Reset to OP")
+    await resetCurrentOP()
 
     signer = await ethers.getSigner("0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89")
 
@@ -188,23 +206,26 @@ const checkUpkeep = async (signer: Signer) => {
     await setBalance(await signer.getAddress(), ethers.parseEther("1"))
     await impersonateAccount(await signer.getAddress())
   }
-
+  console.log("Checking....")
   const result = await trigger.checkUpkeep("0x")
-  const decoded = await decodeUpkeepData(result.performData)
-
-  const encodedTxData = await generateUniTx(
-    router02,
-    decoded.pendingOrderIdx,
-    router02,
-    UniPool,
-    WETH,
-    await USDC.getAddress(),
-    await trigger.getAddress(),
-    BigInt(decoded.order.amountIn.toString()),
-    await trigger.getMinAmountReceived(await WETH.getAddress(), await USDC.getAddress(), BigInt(decoded.order.slippageBips.toString()), BigInt(decoded.order.amountIn.toString()))
-  )
-
-  await trigger.performUpkeep(encodedTxData)
+  if(result.upkeepNeeded){
+    console.log("UPKEEP NEEDED")
+    const decoded = await decodeUpkeepData(result.performData)
+    const encodedTxData = await generateUniTx(
+      router02,
+      decoded.pendingOrderIdx,
+      router02,
+      UniPool,
+      WETH,
+      await USDC.getAddress(),
+      await trigger.getAddress(),
+      BigInt(decoded.order.amountIn.toString()),
+      await trigger.getMinAmountReceived(0, true, BigInt(decoded.order.slippageBips.toString()), BigInt(decoded.order.amountIn.toString()))
+    )
+    console.log("PERFORMING")
+    await trigger.performUpkeep(encodedTxData)
+  }
+  
 
 
 }

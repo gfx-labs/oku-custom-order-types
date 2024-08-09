@@ -36,7 +36,7 @@ export const decodeUpkeepData = async (data: BytesLike) => {
 
     //get pending order idx
     const decoded = abi.decode(
-        ["uint256", "tuple(uint256 orderId, uint256 strikePrice, uint256 amountIn, address tokenIn, address tokenOut, address recipient, uint88 slippageBips, bool direction) order"],
+        ["uint256", "tuple(uint256 orderId, uint256 strikePrice, uint256 amountIn, uint256 pairId, address recipient, uint80 slippageBips, bool zeroForOne, bool direction) order"],
         data
     )
     const pendingOrderIdx = decoded[0]
@@ -89,11 +89,9 @@ export const getStrikePrice = async (
     
     if(recip){
         formatPrice = 1 / formatPrice
-        console.log("RECIP PRICE: ", formatPrice)
     }
 
     let strikePrice = formatPrice + delta
-    console.log("STRIKE: ", strikePrice)
 
     if(recip){
         strikePrice = 1 / strikePrice

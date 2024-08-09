@@ -126,7 +126,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         uint80 slippageBips,
         bool zeroForOne
     ) external {
-        (IERC20 tokenIn, IERC20 tokenOut) = deducePair(pairId, zeroForOne);
+        (IERC20 tokenIn, IERC20 tokenOut) = _deducePair(pairId, zeroForOne);
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
             address(oracles[tokenIn]) != address(0x0),
@@ -187,7 +187,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
                 );
 
                 //refund tokens
-                (IERC20 tokenIn, ) = deducePair(order.pairId, order.zeroForOne);
+                (IERC20 tokenIn, ) = _deducePair(order.pairId, order.zeroForOne);
                 tokenIn.safeTransfer(order.recipient, order.amountIn);
 
                 //emit event
@@ -246,7 +246,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         (address target, uint256 pendingOrderIdx, bytes memory txData) = abi
             .decode(performData, (address, uint256, bytes));
         Order memory order = AllOrders[PendingOrderIds[pendingOrderIdx]];
-        (IERC20 tokenIn, IERC20 tokenOut) = deducePair(
+        (IERC20 tokenIn, IERC20 tokenOut) = _deducePair(
             order.pairId,
             order.zeroForOne
         );
@@ -347,7 +347,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         uint80 slippageBips,
         uint256 amountIn
     ) public view returns (uint256 minAmountReceived) {
-        (IERC20 tokenIn, IERC20 tokenOut) = deducePair(pairId, zeroForOne);
+        (IERC20 tokenIn, IERC20 tokenOut) = _deducePair(pairId, zeroForOne);
         //er is 0 / 1 => tokenIn / tokenOut
         //if tokenIn != token 0 then recip
         bool recip = tokenIn != registeredPairs[pairId].token0;
@@ -383,6 +383,12 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
 
     ///@notice decode pair and direction into @return tokenIn and @return tokenOut
     function deducePair(
+        uint256 pairId,
+        bool zeroForOne
+    ) external view returns (IERC20 tokenIn, IERC20 tokenOut) {
+        return _deducePair(pairId, zeroForOne);
+    }
+    function _deducePair(
         uint256 pairId,
         bool zeroForOne
     ) internal view returns (IERC20 tokenIn, IERC20 tokenOut) {
