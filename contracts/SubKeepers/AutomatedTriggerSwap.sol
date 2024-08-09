@@ -58,6 +58,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
     struct UpkeepData {
         uint256 pendingOrderIdx;
         Order order;
+        uint256 exchangeRate;
     }
 
     event OrderCreated(uint256 orderId);
@@ -217,7 +218,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
                     return (
                         true,
                         abi.encode(
-                            UpkeepData({pendingOrderIdx: i, order: order})
+                            UpkeepData({pendingOrderIdx: i, order: order, exchangeRate: exchangeRate})
                         )
                     );
                 }
@@ -226,7 +227,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
                     return (
                         true,
                         abi.encode(
-                            UpkeepData({pendingOrderIdx: i, order: order})
+                            UpkeepData({pendingOrderIdx: i, order: order, exchangeRate: exchangeRate})
                         )
                     );
                 }
