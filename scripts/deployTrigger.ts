@@ -7,29 +7,28 @@ import { Signer } from "ethers";
 import { ceaseImpersonation, impersonateAccount } from "../util/impersonator";
 import { setBalance } from "@nomicfoundation/hardhat-network-helpers";
 import { decodeUpkeepData, generateUniTx, getStrikePrice } from "../util/msc";
+import { a, o } from "../util/addresser";
 
 const { ethers } = require("hardhat");
 
 //"https://github.com/adrastia-oracle/oku-automation-config/blob/main/worker-config.ts"
 
-let triggerAddr = "0x8327B0168858bd918A0177e89b2c172475F6B16f"//second deploy//0x4f38FA4F676a053ea497F295f855B2dC3580f517"//initial deploy
-let wethOracleAddress = "0x064E3A830f905686a718cb100708ff3D90aB5202"
-let usdcOracleAddress = "0x8B5AbFbdC5Ec4B88A4e94afBf9f22b81F71a25a9"
+let triggerAddr: string //"0x8327B0168858bd918A0177e89b2c172475F6B16f"//second deploy//0x4f38FA4F676a053ea497F295f855B2dC3580f517"//initial deploy
+let wethOracleAddress: string
+let usdcOracleAddress: string
+let router02: string
+let pool: string
+let wethAddress: string
+let usdcAddress: string
+let wethFeedAddr: string
+let usdcFeedAddr: string
 
-const router02 = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"
-const pool = "0x1fb3cf6e48F1E7B10213E7b6d87D4c073C7Fdb7b"
-
-const wethAddress = "0x4200000000000000000000000000000000000006"
-const usdcAddress = "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"
-
-const wethFeedAddr = "0x13e3Ee699D1909E989722E753853AE30b17e08c5"
-const usdcFeedAddr = "0x16a9FA2FDa030272Ce99B29CF780dFA30361E0f3"
 
 let mainnet = true
 let trigger: AutomatedTriggerSwap
 
 //SET THIS FOR TESTING
-const testingNetwork = "op"
+const testingNetwork = "arbitrum"
 
 let masterKeeper: MasterKeeper
 async function main() {
@@ -46,9 +45,42 @@ async function main() {
     console.log("Deploying for real to: ", networkName)
   }
 
-  if (networkName == "op" && !mainnet) {
-    await resetCurrentOP()
-    console.log("Testing on OP @", (await currentBlock())?.number)
+  if (networkName == "op") {
+    if (!mainnet) {
+      await resetCurrentOP()
+      console.log("Testing on OP @", (await currentBlock())?.number)
+    }
+
+    triggerAddr = o.triggerAddress
+    wethOracleAddress = o.wethOracleAddress
+    usdcOracleAddress = o.usdcOracleAddress
+    router02 = o.uniRouter
+    pool: o.wethUsdcPoolAddress
+    wethAddress = o.wethAddress
+    usdcAddress = o.nativeUsdcAddress
+    wethFeedAddr = o.wethFeed
+    usdcFeedAddr = o.usdcFeed
+
+
+  }
+
+  if (networkName == "arbitrum") {
+
+    if (!mainnet) {
+      await resetCurrentArb()
+      console.log("Testing on OP @", (await currentBlock())?.number)
+
+    }
+
+    triggerAddr = a.triggerAddress
+    wethOracleAddress = a.wethOracleAddress
+    usdcOracleAddress = a.usdcOracleAddress
+    router02 = a.uniRouter
+    pool: a.wethUsdcPoolAddress
+    wethAddress = a.wethAddress
+    usdcAddress = a.nativeUsdcAddress
+    wethFeedAddr = a.wethFeed
+    usdcFeedAddr = a.usdcFeed
   }
 
   const [user] = await ethers.getSigners()
@@ -56,9 +88,9 @@ async function main() {
 
   //await deploy(user)
   //await deployOracles(user)
-  //await setup(user)
-  //await createOrder(user)
-  await checkUpkeep(user)
+  await setup(user)
+  await createOrder(user)
+  //await checkUpkeep(user)
 
 
   console.log("DONE")
@@ -77,7 +109,7 @@ const deploy = async (signer: Signer) => {
 
   trigger = await DeployContract(new AutomatedTriggerSwap__factory(signer), signer)
   triggerAddr = await trigger.getAddress()
-  console.log("DEPLOYED: ", await trigger.getAddress())
+  console.log("DEPLOYED TRIGGER: ", await trigger.getAddress())
 
   if (mainnet) {
     console.log("Verifying...")
@@ -93,12 +125,12 @@ const deployOracles = async (signer: Signer) => {
 
   const wethOracle: IOracleRelay = await DeployContract(new OracleRelay__factory(signer), signer, wethAddress, wethFeedAddr)
   wethOracleAddress = await wethOracle.getAddress()
-  console.log("DEPLOYED: ", await wethOracle.getAddress())
+  console.log("DEPLOYED ETH ORACLE: ", await wethOracle.getAddress())
   console.log("WETH: ", ethers.formatUnits((await wethOracle.currentValue()).toString(), 8))
 
   const usdcOracle: IOracleRelay = await DeployContract(new OracleRelay__factory(signer), signer, usdcAddress, usdcFeedAddr)
   usdcOracleAddress = await usdcOracle.getAddress()
-  console.log("DEPLOYED: ", await usdcOracle.getAddress())
+  console.log("DEPLOYED USDC ORACLE: ", await usdcOracle.getAddress())
   console.log("USDC: ", ethers.formatUnits((await usdcOracle.currentValue()).toString(), 8))
 
 
@@ -208,7 +240,7 @@ const checkUpkeep = async (signer: Signer) => {
   }
   console.log("Checking....")
   const result = await trigger.checkUpkeep("0x")
-  if(result.upkeepNeeded){
+  if (result.upkeepNeeded) {
     console.log("UPKEEP NEEDED")
     const decoded = await decodeUpkeepData(result.performData)
     const encodedTxData = await generateUniTx(
@@ -225,7 +257,7 @@ const checkUpkeep = async (signer: Signer) => {
     console.log("PERFORMING")
     await trigger.performUpkeep(encodedTxData)
   }
-  
+
 
 
 }
