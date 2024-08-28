@@ -124,7 +124,7 @@ export class ArbAddresses{
     readonly pcsSwapRouter: string = "0x32226588378236Fd0c7c4053999F88aC0e5cAc77"//"0x1b81D678ffb9C0263b24A97847620C99d213eB14"
 
     //automated trigger
-    readonly triggerAddress: string = "0x8fBdE56be121275a80682513292F7831dc951215"
+    readonly triggerAddress: string = "0x27F63920D2855853E5aAC290e9fF2406f3c46Dc0"//"0x8fBdE56be121275a80682513292F7831dc951215"
     readonly wethFeed: string = "0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612"
     readonly usdcFeed: string = "0x50834F3163758fcC1Df9973b6e91f0F0F0434aD3"
     readonly wethOracleAddress: string = "0x384542D720A765aE399CFDDF079CBE515731F044"//usd price in 1e8 terms

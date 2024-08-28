@@ -27,21 +27,43 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
 
     uint16 public maxPendingOrders;
 
-    uint256 public minOrderSize; //152
+    uint256 public minOrderSize;
 
     uint256 public orderCount;
+    uint256 public limitOrderCount;
+    uint256 public stopOrderCount;
+
     uint256 public pairCount;
 
-    uint256[] public PendingOrderIds;
+    mapping(uint256 => UniversalOrder) public AllOrders;
+    mapping(uint256 => Order) public orders;
+    mapping(uint256 => StopLimitOrder) public stopOrders;
 
-    mapping(uint256 => Order) public AllOrders;
+    uint256[] public PendingOrderIds; //refers to universal orders - orderCount//todo need to define the type
+
     mapping(IERC20 => IOracleRelay) public oracles;
 
     mapping(uint256 => Pair) public registeredPairs; //todo offload exchange rate to single oracle contract?
 
+    enum OrderTypes {
+        LIMIT,
+        STOP_LIMIT
+    }
+
+    struct UniversalOrder {
+        OrderTypes orderType;
+        uint256 universalId;
+    }
+
     struct Pair {
         IERC20 token0;
         IERC20 token1;
+    }
+
+    struct StopLimitOrder {
+        uint256 stopOrderId;
+        uint256 initialStrikePrice;
+        Order order;
     }
 
     struct Order {
@@ -59,11 +81,12 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         uint256 pendingOrderIdx;
         Order order;
         uint256 exchangeRate;
+        Pair pair;
     }
 
-    event OrderCreated(uint256 orderId);
-    event OrderProcessed(uint256 orderId, bool success, bytes result);
-    event OrderCancelled(uint256 orderId);
+    event OrderCreated(uint256 universalId);
+    event OrderProcessed(uint256 universalId, bool success, bytes result);
+    event OrderCancelled(uint256 universalId);
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
     function registerOracle(
@@ -119,14 +142,53 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         }
     }
 
-    ///@param strikePrice is in terms of exchange rate of tokenIn / tokenOut
-    function createOrder(
+    function createStopLimitOrder(
+        uint256 initialStrikePrice,
         uint256 strikePrice,
         uint256 amountIn,
         uint256 pairId,
         uint80 slippageBips,
         bool zeroForOne
     ) external {
+        stopOrderCount++;
+        orderCount++;
+        Order memory order = produceOrder(
+            strikePrice,
+            amountIn,
+            pairId,
+            slippageBips,
+            zeroForOne
+        );
+        (IERC20 tokenIn, ) = _deducePair(pairId, zeroForOne);
+
+        stopOrders[stopOrderCount] = StopLimitOrder({
+            stopOrderId: stopOrderCount,
+            initialStrikePrice: initialStrikePrice,
+            order: order
+        });
+
+        AllOrders[orderCount] = UniversalOrder({
+            orderType: OrderTypes.STOP_LIMIT,
+            universalId: orderCount
+        });
+
+        //todo push pending orders
+        PendingOrderIds.push(orderCount);
+
+        //take asset
+        tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
+
+        //emit
+        emit OrderCreated(orderCount);
+    }
+
+    function produceOrder(
+        uint256 strikePrice,
+        uint256 amountIn,
+        uint256 pairId,
+        uint80 slippageBips,
+        bool zeroForOne
+    ) internal view returns (Order memory order) {
         (IERC20 tokenIn, IERC20 tokenOut) = _deducePair(pairId, zeroForOne);
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
@@ -145,21 +207,46 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         //verify order amount is at least the minimum
         checkMinOrderSize(tokenIn, amountIn);
 
+        return (
+            Order({
+                orderId: orderCount,
+                strikePrice: strikePrice,
+                amountIn: amountIn,
+                slippageBips: slippageBips,
+                pairId: pairId,
+                recipient: msg.sender,
+                zeroForOne: zeroForOne,
+                direction: _getExchangeRate(pairId, false) > strikePrice //exchangeRate in/out > strikePrice
+            })
+        );
+    }
+    ///@param strikePrice is in terms of exchange rate of tokenIn / tokenOut
+    function createOrder(
+        uint256 strikePrice,
+        uint256 amountIn,
+        uint256 pairId,
+        uint80 slippageBips,
+        bool zeroForOne
+    ) external {
+        _createOrder(
+            produceOrder(
+                strikePrice,
+                amountIn,
+                pairId,
+                slippageBips,
+                zeroForOne
+            )
+        );
+    }
+    function _createOrder(Order memory order) internal {
         orderCount++;
-        AllOrders[orderCount] = Order({
-            orderId: orderCount,
-            strikePrice: strikePrice,
-            amountIn: amountIn,
-            slippageBips: slippageBips,
-            pairId: pairId,
-            recipient: msg.sender,
-            zeroForOne: zeroForOne,
-            direction: _getExchangeRate(pairId, false) > strikePrice //exchangeRate in/out > strikePrice
-        });
+        limitOrderCount++;
+        orders[orderCount] = order;
         PendingOrderIds.push(orderCount);
+        (IERC20 tokenIn, ) = _deducePair(order.pairId, order.zeroForOne);
 
         //take asset
-        tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
+        tokenIn.safeTransferFrom(msg.sender, address(this), order.amountIn);
 
         //emit
         emit OrderCreated(orderCount);
@@ -168,7 +255,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
     function cancelOrder(uint256 orderId) external {
-        Order memory order = AllOrders[orderId];
+        Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(orderId), "Order not active");
     }
@@ -177,8 +264,9 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         _cancelOrder(orderId);
     }
 
+    //todo fix for stop-limit
     function _cancelOrder(uint256 orderId) internal returns (bool) {
-        Order memory order = AllOrders[orderId];
+        Order memory order = orders[orderId];
         for (uint i = 0; i < PendingOrderIds.length; i++) {
             if (PendingOrderIds[i] == orderId) {
                 //remove from pending array
@@ -188,7 +276,10 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
                 );
 
                 //refund tokens
-                (IERC20 tokenIn, ) = _deducePair(order.pairId, order.zeroForOne);
+                (IERC20 tokenIn, ) = _deducePair(
+                    order.pairId,
+                    order.zeroForOne
+                );
                 tokenIn.safeTransfer(order.recipient, order.amountIn);
 
                 //emit event
@@ -201,7 +292,7 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         return false;
     }
 
-    //check upkeep
+    //todo fix for stop-limit
     function checkUpkeep(
         bytes calldata /**checkData */
     )
@@ -211,30 +302,26 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
         returns (bool upkeepNeeded, bytes memory performData)
     {
         for (uint i = 0; i < PendingOrderIds.length; i++) {
-            Order memory order = AllOrders[PendingOrderIds[i]];
-            uint256 exchangeRate = _getExchangeRate(order.pairId, false);
-            if (order.direction) {
-                if (exchangeRate <= order.strikePrice) {
-                    return (
-                        true,
-                        abi.encode(
-                            UpkeepData({pendingOrderIdx: i, order: order, exchangeRate: exchangeRate})
-                        )
-                    );
-                }
-            } else {
-                if (exchangeRate >= order.strikePrice) {
-                    return (
-                        true,
-                        abi.encode(
-                            UpkeepData({pendingOrderIdx: i, order: order, exchangeRate: exchangeRate})
-                        )
-                    );
-                }
+            Order memory order = orders[PendingOrderIds[i]];
+            (bool inRange, uint256 exchangeRate) = checkInRange(order);
+
+            if (inRange) {
+                return (
+                    true,
+                    abi.encode(
+                        UpkeepData({
+                            pendingOrderIdx: i,
+                            order: order,
+                            exchangeRate: exchangeRate,
+                            pair: registeredPairs[order.pairId]
+                        })
+                    )
+                );
             }
         }
     }
 
+        //todo fix for stop-limit
     //perform upkeep - todo onlyOwner or verify sender?
     ///@notice recipient of swap should be this contract,
     ///as we need to account for tokens received.
@@ -246,7 +333,12 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
     function performUpkeep(bytes calldata performData) external override {
         (address target, uint256 pendingOrderIdx, bytes memory txData) = abi
             .decode(performData, (address, uint256, bytes));
-        Order memory order = AllOrders[PendingOrderIds[pendingOrderIdx]];
+        Order memory order = orders[PendingOrderIds[pendingOrderIdx]];
+
+        //ensure that this order can be executed
+        (bool inRange, ) = checkInRange(order);
+        require(inRange, "out of range");
+
         (IERC20 tokenIn, IERC20 tokenOut) = _deducePair(
             order.pairId,
             order.zeroForOne
@@ -372,6 +464,21 @@ contract AutomatedTriggerSwap is Ownable, AutomationCompatibleInterface {
 
         //scale by slippage
         return (fairAmountOut * (MAX_BIPS - slippageBips)) / MAX_BIPS;
+    }
+
+    function checkInRange(
+        Order memory order
+    ) internal view returns (bool inRange, uint256 exchangeRate) {
+        exchangeRate = _getExchangeRate(order.pairId, false);
+        if (order.direction) {
+            if (exchangeRate <= order.strikePrice) {
+                return (true, exchangeRate);
+            }
+        } else {
+            if (exchangeRate >= order.strikePrice) {
+                return (true, exchangeRate);
+            }
+        }
     }
 
     function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) internal view {
