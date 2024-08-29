@@ -4,6 +4,18 @@ pragma solidity ^0.8.19;
 import "../interfaces/openzeppelin/IERC20.sol";
 
 interface IAutomation {
+
+    enum OrderType {
+        LIMIT,
+        STOP_LIMIT
+    }
+
+    struct ORDER {
+        uint256 AllOrderId;//master id
+        uint256 SubOrderId;//sub id
+        OrderType orderType;
+    }
+
     struct Pair {
         IERC20 token0;
         IERC20 token1;

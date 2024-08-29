@@ -2,6 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "./IAutomation.sol";
+import "./AutomationMaster.sol";
 import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "../libraries/ArrayMutation.sol";
 
@@ -23,58 +24,21 @@ import "hardhat/console.sol";
 contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
     using SafeERC20 for IERC20;
 
-    uint88 public MAX_BIPS = 10000;
 
-    uint16 public maxPendingOrders;
+    AutomationMaster public immutable MASTER;
 
-    uint256 public minOrderSize; //152
-
-    uint256 public orderCount;
-    uint256 public pairCount;
+    uint256 public limitOrderCount;
 
     uint256[] public PendingOrderIds;
 
-    mapping(uint256 => Order) public AllOrders;
-    mapping(IERC20 => IOracleRelay) public oracles;
+    mapping(uint256 => Order) public limitOrders;
 
-    mapping(uint256 => Pair) public registeredPairs; //todo offload exchange rate to single oracle contract?
 
-    ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
-    function registerOracle(
-        IERC20[] calldata _tokens,
-        IOracleRelay[] calldata _oracles
-    ) external onlyOwner {
-        require(_tokens.length == _oracles.length, "Array Length Mismatch");
-        for (uint i = 0; i < _tokens.length; i++) {
-            oracles[_tokens[i]] = _oracles[i];
-        }
+    constructor(AutomationMaster _master){
+        MASTER = _master;
     }
 
-    ///@notice set max pending orders, limiting checkUpkeep compute requirement
-    function setMaxPendingOrders(uint16 _max) external onlyOwner {
-        maxPendingOrders = _max;
-    }
-
-    ///@param usdValue must be in 1e8 terms
-    function setMinOrderSize(uint256 usdValue) external onlyOwner {
-        minOrderSize = usdValue;
-    }
-
-    ///@notice admin registers a pair for trading
-    function registerPair(
-        IERC20[] calldata _token0s,
-        IERC20[] calldata _token1s
-    ) external onlyOwner {
-        require(_token0s.length == _token1s.length, "Array Mismatch");
-
-        for (uint i = 0; i < _token0s.length; i++) {
-            registeredPairs[pairCount] = Pair({
-                token0: _token0s[i],
-                token1: _token1s[i]
-            });
-            pairCount += 1;
-        }
-    }
+    
 
     function getPendingOrders()
         external
@@ -84,14 +48,7 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
         return PendingOrderIds;
     }
 
-    ///@notice get all registered pairs as an array @param pairlist
-    function getPairList() external view returns (Pair[] memory pairlist) {
-        pairlist = new Pair[](pairCount);
-
-        for (uint i = 0; i < pairCount; i++) {
-            pairlist[i] = registeredPairs[i];
-        }
-    }
+    
 
     ///@param strikePrice is in terms of exchange rate of tokenIn / tokenOut
     function createOrder(
@@ -102,58 +59,51 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
         uint80 slippageBips,
         bool zeroForOne
     ) external override{
-        (IERC20 tokenIn, IERC20 tokenOut) = _deducePair(pairId, zeroForOne);
-        //verify both oracles exist, as we need both to calc the exchange rate
-        require(
-            address(oracles[tokenIn]) != address(0x0),
-            "tokenIn Oracle !exist"
-        );
-        require(
-            address(oracles[tokenOut]) != address(0x0),
-            "tokenOut Oracle !exist"
-        );
+        //we assume oracles exist if the pair exists
+        (IERC20 tokenIn, IERC20 tokenOut) = MASTER.deducePair(pairId, zeroForOne);
+       
+        require(limitOrderCount < MASTER.maxPendingOrders(), "Max Order Count Reached");
 
-        require(orderCount < maxPendingOrders, "Max Order Count Reached");
-
-        require(slippageBips <= MAX_BIPS, "Invalid Slippage BIPS");
+        require(slippageBips <= MASTER.MAX_BIPS(), "Invalid Slippage BIPS");
 
         //verify order amount is at least the minimum
-        checkMinOrderSize(tokenIn, amountIn);
+        MASTER.checkMinOrderSize(tokenIn, amountIn);
 
-        orderCount++;
-        AllOrders[orderCount] = Order({
-            orderId: orderCount,
+        limitOrderCount++;
+        limitOrders[limitOrderCount] = Order({
+            orderId: limitOrderCount,
             strikePrice: strikePrice,
             amountIn: amountIn,
             slippageBips: slippageBips,
             pairId: pairId,
             recipient: recipient,
             zeroForOne: zeroForOne,
-            direction: _getExchangeRate(pairId, false) > strikePrice //exchangeRate in/out > strikePrice
+            direction: MASTER.getExchangeRate(pairId) > strikePrice //exchangeRate in/out > strikePrice
         });
-        PendingOrderIds.push(orderCount);
+        PendingOrderIds.push(limitOrderCount);
 
         //take asset
         tokenIn.safeTransferFrom(recipient, address(this), amountIn);
 
         //emit
-        emit OrderCreated(orderCount);
-    }
-
-    ///@notice only the order recipient can cancel their order
-    ///@notice only pending orders can be cancelled
-    function cancelOrder(uint256 orderId) external {
-        Order memory order = AllOrders[orderId];
-        require(msg.sender == order.recipient, "Only Order Owner");
-        require(_cancelOrder(orderId), "Order not active");
+        emit OrderCreated(limitOrderCount);
     }
 
     function adminCancelOrder(uint256 orderId) external onlyOwner {
         _cancelOrder(orderId);
     }
 
+    ///@notice only the order recipient can cancel their order
+    ///@notice only pending orders can be cancelled
+    function cancelOrder(uint256 orderId) external {
+        Order memory order = limitOrders[orderId];
+
+        require(msg.sender == order.recipient, "Only Order Owner");
+        require(_cancelOrder(orderId), "Order not active");
+    }
+
     function _cancelOrder(uint256 orderId) internal returns (bool) {
-        Order memory order = AllOrders[orderId];
+        Order memory order = limitOrders[orderId];
         for (uint i = 0; i < PendingOrderIds.length; i++) {
             if (PendingOrderIds[i] == orderId) {
                 //remove from pending array
@@ -163,7 +113,10 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
                 );
 
                 //refund tokens
-                (IERC20 tokenIn, ) = _deducePair(order.pairId, order.zeroForOne);
+                (IERC20 tokenIn, ) = MASTER.deducePair(
+                    order.pairId,
+                    order.zeroForOne
+                );
                 tokenIn.safeTransfer(order.recipient, order.amountIn);
 
                 //emit event
@@ -176,6 +129,8 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
         return false;
     }
 
+    
+
     //check upkeep
     function checkUpkeep(
         bytes calldata /**checkData */
@@ -186,8 +141,8 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
         returns (bool upkeepNeeded, bytes memory performData)
     {
         for (uint i = 0; i < PendingOrderIds.length; i++) {
-            Order memory order = AllOrders[PendingOrderIds[i]];
-            uint256 exchangeRate = _getExchangeRate(order.pairId, false);
+            Order memory order = limitOrders[PendingOrderIds[i]];
+            uint256 exchangeRate = MASTER.getExchangeRate(order.pairId);
             if (order.direction) {
                 if (exchangeRate <= order.strikePrice) {
                     return (
@@ -221,8 +176,8 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
     function performUpkeep(bytes calldata performData) external override {
         (address target, uint256 pendingOrderIdx, bytes memory txData) = abi
             .decode(performData, (address, uint256, bytes));
-        Order memory order = AllOrders[PendingOrderIds[pendingOrderIdx]];
-        (IERC20 tokenIn, IERC20 tokenOut) = _deducePair(
+        Order memory order = limitOrders[PendingOrderIds[pendingOrderIdx]];
+        (IERC20 tokenIn, IERC20 tokenOut) = MASTER.deducePair(
             order.pairId,
             order.zeroForOne
         );
@@ -242,7 +197,7 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
             //and tokenOut balance to increase by at least minAmountReceived
             require(
                 finalTokenOut - initialTokenOut >
-                    getMinAmountReceived(
+                    MASTER.getMinAmountReceived(
                         order.pairId,
                         order.zeroForOne,
                         order.slippageBips,
@@ -286,107 +241,8 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
         }
     }
 
-    ///@notice Direction of swap does not effect exchange rate
-    ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
-    ///@return exchangeRate should always be 1e8
-    function getExchangeRate(
-        uint256 pairId
-    ) external view returns (uint256 exchangeRate) {
-        return _getExchangeRate(pairId, false);
-    }
 
-    function _getExchangeRate(
-        uint256 pairId,
-        bool recip
-    ) internal view returns (uint256 exchangeRate) {
-        Pair memory pair = registeredPairs[pairId];
-        IERC20 token0 = pair.token0;
-        IERC20 token1 = pair.token1;
+    
 
-        //control for direction
-        if (recip) (token0, token1) = (token1, token0);
-
-        //simple exchange rate in 1e8 terms per oracle output
-        exchangeRate = divide(
-            oracles[token0].currentValue(),
-            oracles[token1].currentValue(),
-            8
-        );
-    }
-
-    ///@notice Calculate price using external oracles,
-    ///and apply @param slippageBips to deduce @return minAmountReceived
-    ///@return minAmountReceived is scaled to @param tokenOut decimals
-    function getMinAmountReceived(
-        uint256 pairId,
-        bool zeroForOne,
-        uint80 slippageBips,
-        uint256 amountIn
-    ) public view returns (uint256 minAmountReceived) {
-        (IERC20 tokenIn, IERC20 tokenOut) = _deducePair(pairId, zeroForOne);
-        //er is 0 / 1 => tokenIn / tokenOut
-        //if tokenIn != token 0 then recip
-        bool recip = tokenIn != registeredPairs[pairId].token0;
-        uint256 exchangeRate = _getExchangeRate(pairId, recip);
-
-        //this assumes decimalIn == decimalOut
-        uint256 fairAmountOut = ((amountIn) * exchangeRate) / 1e8;
-
-        uint8 decimalIn = ERC20(address(tokenIn)).decimals();
-        uint8 decimalOut = ERC20(address(tokenOut)).decimals();
-
-        if (decimalIn > decimalOut) {
-            uint256 factor = (10 ** (decimalIn - decimalOut));
-            fairAmountOut = (fairAmountOut / factor);
-        }
-
-        if (decimalIn < decimalOut) {
-            uint256 factor = (10 ** (decimalOut - decimalIn));
-            fairAmountOut = (fairAmountOut * factor);
-        }
-
-        //scale by slippage
-        return (fairAmountOut * (MAX_BIPS - slippageBips)) / MAX_BIPS;
-    }
-
-    function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) internal view {
-        uint256 currentPrice = oracles[tokenIn].currentValue();
-        uint256 usdValue = (currentPrice * amountIn) /
-            (10 ** ERC20(address(tokenIn)).decimals());
-
-        require(usdValue > minOrderSize, "order too small");
-    }
-
-    ///@notice decode pair and direction into @return tokenIn and @return tokenOut
-    function deducePair(
-        uint256 pairId,
-        bool zeroForOne
-    ) external view returns (IERC20 tokenIn, IERC20 tokenOut) {
-        return _deducePair(pairId, zeroForOne);
-    }
-    function _deducePair(
-        uint256 pairId,
-        bool zeroForOne
-    ) internal view returns (IERC20 tokenIn, IERC20 tokenOut) {
-        Pair memory pair = registeredPairs[pairId];
-        if (zeroForOne) {
-            tokenIn = pair.token0;
-            tokenOut = pair.token1;
-        } else {
-            tokenIn = pair.token1;
-            tokenOut = pair.token0;
-        }
-    }
-
-    ///@notice floating point division at @param factor scale
-    function divide(
-        uint256 numerator,
-        uint256 denominator,
-        uint256 factor
-    ) internal pure returns (uint256 result) {
-        uint256 q = (numerator / denominator) * 10 ** factor;
-        uint256 r = ((numerator * 10 ** factor) / denominator) % 10 ** factor;
-
-        return q + r;
-    }
+    
 }
