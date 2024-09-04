@@ -21,16 +21,16 @@ import "hardhat/console.sol";
 ///@notice This contract owns and handles all logic associated with STOP_MARKET orders
 ///@notice STOP_MARKET orders check an external oracle for a pre-determined strike price,
 ///once this price is reached, a market swap occurs
-contract LimitOrder is Ownable, ILimitOrder {
+contract StopLossLimit is Ownable, IStopLossLimit {
     using SafeERC20 for IERC20;
 
     AutomationMaster public immutable MASTER;
 
-    uint256 public limitOrderCount;
+    uint256 public stopLossLimitOrderCount;
 
     uint256[] public PendingOrderIds;
 
-    mapping(uint256 => Order) public limitOrders;
+    mapping(uint256 => Order) public stopLossLimitOrders;
 
     constructor(AutomationMaster _master) {
         MASTER = _master;
@@ -44,16 +44,75 @@ contract LimitOrder is Ownable, ILimitOrder {
         return PendingOrderIds;
     }
 
+    function createOrderWithSwap(
+        SwapParams calldata swapParams,
+        uint256 strikePrice,
+        uint256 stopPrice,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        address recipient,
+        uint32 slippageBipsStrike,
+        uint32 slippageBipsStop
+    ) external override {
+        require(swapParams.swapBips <= MASTER.MAX_BIPS(), "Invalid Slippage BIPS");
+
+        (bool success, , uint256 finalAmountOut) = execute(
+            swapParams.swapTarget,
+            swapParams.txData,
+            swapParams.swapAmountIn,
+            swapParams.swapTokenIn,
+            tokenIn,
+            swapParams.swapBips
+        );
+
+        require(success, "swap failed");
+
+        _createOrder(
+            strikePrice,
+            stopPrice,
+            finalAmountOut,
+            tokenIn,
+            tokenOut,
+            recipient,
+            slippageBipsStrike,
+            slippageBipsStop
+        );
+    }
+
     ///@param strikePrice is in terms of exchange rate of tokenIn / tokenOut,
     /// thus is dependent on direction
     function createOrder(
         uint256 strikePrice,
+        uint256 stopPrice,
         uint256 amountIn,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint88 slippageBips
+        uint32 slippageBipsStrike,
+        uint32 slippageBipsStop
     ) external override {
+        _createOrder(
+            strikePrice,
+            stopPrice,
+            amountIn,
+            tokenIn,
+            tokenOut,
+            recipient,
+            slippageBipsStrike,
+            slippageBipsStop
+        );
+    }
+
+    function _createOrder(
+        uint256 strikePrice,
+        uint256 stopPrice,
+        uint256 amountIn,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        address recipient,
+        uint32 slippageBipsStrike,
+        uint32 slippageBipsStop
+    ) internal {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
             address(MASTER.oracles(tokenIn)) != address(0x0),
@@ -65,43 +124,48 @@ contract LimitOrder is Ownable, ILimitOrder {
         );
 
         require(
-            limitOrderCount < MASTER.maxPendingOrders(),
+            stopLossLimitOrderCount < MASTER.maxPendingOrders(),
             "Max Order Count Reached"
         );
-        require(slippageBips <= MASTER.MAX_BIPS(), "Invalid Slippage BIPS");
+        require(
+            slippageBipsStop <= MASTER.MAX_BIPS() &&
+                slippageBipsStrike <= MASTER.MAX_BIPS(),
+            "Invalid Slippage BIPS"
+        );
 
         //verify order amount is at least the minimum todo check here or only when limit order is created?
         MASTER.checkMinOrderSize(tokenIn, amountIn);
-
-        limitOrderCount++;
-        limitOrders[limitOrderCount] = Order({
-            orderId: limitOrderCount,
+        stopLossLimitOrderCount++;
+        stopLossLimitOrders[stopLossLimitOrderCount] = Order({
+            orderId: stopLossLimitOrderCount,
             strikePrice: strikePrice,
+            stopPrice: stopPrice,
             amountIn: amountIn,
             tokenIn: tokenIn,
             tokenOut: tokenOut,
             recipient: recipient,
-            slippageBips: slippageBips,
+            slippageBipsStrike: slippageBipsStrike,
+            slippageBipsStop: slippageBipsStop,
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) > strikePrice //exchangeRate in/out > strikePrice
         });
-        PendingOrderIds.push(limitOrderCount);
+
+        PendingOrderIds.push(stopLossLimitOrderCount);
 
         //take asset
         tokenIn.safeTransferFrom(recipient, address(this), amountIn);
 
-        //emit
-        emit OrderCreated(limitOrderCount);
+        emit OrderCreated(stopLossLimitOrderCount);
     }
 
     function adminCancelOrder(uint256 orderId) external onlyOwner {
-        Order memory order = limitOrders[orderId];
+        Order memory order = stopLossLimitOrders[orderId];
         require(_cancelOrder(order), "Order not active");
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
     function cancelOrder(uint256 orderId) external {
-        Order memory order = limitOrders[orderId];
+        Order memory order = stopLossLimitOrders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(order), "Order not active");
     }
@@ -138,14 +202,14 @@ contract LimitOrder is Ownable, ILimitOrder {
         returns (bool upkeepNeeded, bytes memory performData)
     {
         for (uint i = 0; i < PendingOrderIds.length; i++) {
-            Order memory order = limitOrders[PendingOrderIds[i]];
-            (bool inRange, uint256 exchangeRate) = checkInRange(order);
+            Order memory order = stopLossLimitOrders[PendingOrderIds[i]];
+            (bool inRange, , uint256 exchangeRate) = checkInRange(order);
             if (inRange) {
                 return (
                     true,
                     abi.encode(
                         MasterUpkeepData({
-                            orderType: OrderType.LIMIT,
+                            orderType: OrderType.STOP_LOSS_LIMIT,
                             target: address(0x0),
                             txData: "0x",
                             pendingOrderIdx: i,
@@ -173,37 +237,41 @@ contract LimitOrder is Ownable, ILimitOrder {
             performData,
             (MasterUpkeepData)
         );
-        Order memory order = limitOrders[PendingOrderIds[data.pendingOrderIdx]];
+        Order memory order = stopLossLimitOrders[
+            PendingOrderIds[data.pendingOrderIdx]
+        ];
 
-        //confirm order is in range to prevent improper fill
-        (bool inRange, ) = checkInRange(order);
+        //deduce if we are filling stop or strike
+        (bool inRange, bool strike, ) = checkInRange(order);
         require(inRange, "order ! in range");
 
-        //update accounting
-        uint256 initialTokenOut = order.tokenOut.balanceOf(address(this));
+        bool success;
+        bytes memory result;
+        uint256 finalAmountOut;
 
-        //approve
-        updateApproval(data.target, order.tokenIn, order.amountIn);
-
-        //perform the call
-        (bool success, bytes memory result) = data.target.call(data.txData);
-
-        if (success) {
-            uint256 finalTokenOut = order.tokenOut.balanceOf(address(this));
-
-            //if success, we expect tokenIn balance to decrease by amountIn
-            //and tokenOut balance to increase by at least minAmountReceived
-            require(
-                finalTokenOut - initialTokenOut >
-                    MASTER.getMinAmountReceived(
-                        order.amountIn,
-                        order.tokenIn,
-                        order.tokenOut,
-                        order.slippageBips
-                    ),
-                "Too Little Received"
+        if (strike) {
+            (success, result, finalAmountOut) = execute(
+                data.target,
+                data.txData,
+                order.amountIn,
+                order.tokenIn,
+                order.tokenOut,
+                order.slippageBipsStrike
             );
+        } else {
+            //stop
+            (success, result, finalAmountOut) = execute(
+                data.target,
+                data.txData,
+                order.amountIn,
+                order.tokenIn,
+                order.tokenOut,
+                order.slippageBipsStop
+            );
+        }
 
+        //handle accounting
+        if (success) {
             //remove from pending array
             PendingOrderIds = ArrayMutation.removeFromArray(
                 data.pendingOrderIdx,
@@ -211,14 +279,52 @@ contract LimitOrder is Ownable, ILimitOrder {
             );
 
             //send tokenOut to recipient
-            order.tokenOut.safeTransfer(
-                order.recipient,
-                finalTokenOut - initialTokenOut
-            );
+            order.tokenOut.safeTransfer(order.recipient, finalAmountOut);
         }
 
         //emit
         emit OrderProcessed(order.orderId, success, result);
+    }
+
+    ///@notice execute swap via @param txData
+    function execute(
+        address target,
+        bytes memory txData,
+        uint256 amountIn,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        uint32 bips
+    )
+        internal
+        returns (bool success, bytes memory result, uint256 finalAmountOut)
+    {
+        //update accounting
+        uint256 initialTokenOut = tokenOut.balanceOf(address(this));
+
+        //approve
+        updateApproval(target, tokenIn, amountIn);
+
+        //perform the call
+        (success, result) = target.call(txData);
+
+        if (success) {
+            uint256 finalTokenOut = tokenOut.balanceOf(address(this));
+
+            //if success, we expect tokenIn balance to decrease by amountIn
+            //and tokenOut balance to increase by at least minAmountReceived
+            require(
+                finalTokenOut - initialTokenOut >
+                    MASTER.getMinAmountReceived(
+                        amountIn,
+                        tokenIn,
+                        tokenOut,
+                        bips
+                    ),
+                "Too Little Received"
+            );
+
+            finalAmountOut = finalTokenOut - initialTokenOut;
+        }
     }
 
     ///@notice if current approval is insufficient, approve max
@@ -241,15 +347,25 @@ contract LimitOrder is Ownable, ILimitOrder {
 
     function checkInRange(
         Order memory order
-    ) internal view returns (bool inRange, uint256 exchangeRate) {
+    ) internal view returns (bool inRange, bool strike, uint256 exchangeRate) {
         exchangeRate = MASTER.getExchangeRate(order.tokenIn, order.tokenOut);
         if (order.direction) {
+            //check for strike price
             if (exchangeRate <= order.strikePrice) {
-                inRange = true;
+                return (true, true, exchangeRate);
+            }
+            //check for stop price
+            if (exchangeRate <= order.stopPrice) {
+                return (true, false, exchangeRate);
             }
         } else {
+            //check for strike price
             if (exchangeRate >= order.strikePrice) {
-                inRange = true;
+                return (true, true, exchangeRate);
+            }
+            //check for stop price
+            if (exchangeRate >= order.stopPrice) {
+                return (true, false, exchangeRate);
             }
         }
     }

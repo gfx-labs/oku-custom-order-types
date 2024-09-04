@@ -31,7 +31,7 @@ contract StopLimit is Ownable, IStopLimit {
 
     uint256[] public PendingOrderIds;
 
-    mapping(uint256 => Order) public stopOrders;
+    mapping(uint256 => Order) public stopLimitOrders;
 
     constructor(AutomationMaster _master, ILimitOrder _limitOrder) {
         MASTER = _master;
@@ -77,7 +77,7 @@ contract StopLimit is Ownable, IStopLimit {
         MASTER.checkMinOrderSize(tokenIn, amountIn);
 
         stopOrderCount++;
-        stopOrders[stopOrderCount] = Order({
+        stopLimitOrders[stopOrderCount] = Order({
             orderId: stopOrderCount,
             stopPrice: stopPrice,
             strikePrice: strikePrice,
@@ -97,20 +97,20 @@ contract StopLimit is Ownable, IStopLimit {
         emit OrderCreated(stopOrderCount);
     }
 
-    ///@notice only the order recipient can cancel their order
-    ///@notice only pending orders can be cancelled
-    function cancelOrder(uint256 orderId) external {
-        Order memory order = stopOrders[orderId];
-        require(msg.sender == order.recipient, "Only Order Owner");
-        require(_cancelOrder(orderId), "Order not active");
-    }
-
     function adminCancelOrder(uint256 orderId) external onlyOwner {
         _cancelOrder(orderId);
     }
 
+    ///@notice only the order recipient can cancel their order
+    ///@notice only pending orders can be cancelled
+    function cancelOrder(uint256 orderId) external {
+        Order memory order = stopLimitOrders[orderId];
+        require(msg.sender == order.recipient, "Only Order Owner");
+        require(_cancelOrder(orderId), "Order not active");
+    }
+
     function _cancelOrder(uint256 orderId) internal returns (bool) {
-        Order memory order = stopOrders[orderId];
+        Order memory order = stopLimitOrders[orderId];
         for (uint i = 0; i < PendingOrderIds.length; i++) {
             if (PendingOrderIds[i] == orderId) {
                 //remove from pending array
@@ -141,8 +141,9 @@ contract StopLimit is Ownable, IStopLimit {
         returns (bool upkeepNeeded, bytes memory performData)
     {
         for (uint256 i = 0; i < PendingOrderIds.length; i++) {
-            Order memory order = stopOrders[PendingOrderIds[i]];
-            if (checkInRange(order)) {
+            Order memory order = stopLimitOrders[PendingOrderIds[i]];
+            (bool inRange, uint256 exchangeRate) = checkInRange(order);
+            if (inRange) {
                 return (
                     true,
                     abi.encode(
@@ -154,7 +155,7 @@ contract StopLimit is Ownable, IStopLimit {
                             tokenIn: order.tokenIn,
                             tokenOut: order.tokenOut,
                             amountIn: order.amountIn,
-                            exchangeRate: 0 //todo include this?
+                            exchangeRate: exchangeRate
                         })
                     )
                 );
@@ -168,10 +169,13 @@ contract StopLimit is Ownable, IStopLimit {
             performData,
             (MasterUpkeepData)
         );
-        Order memory order = stopOrders[PendingOrderIds[data.pendingOrderIdx]];
+        Order memory order = stopLimitOrders[
+            PendingOrderIds[data.pendingOrderIdx]
+        ];
 
         //confirm order is in range to prevent improper fill
-        require(checkInRange(order), "out of range");
+        (bool inRange, ) = checkInRange(order);
+        require(inRange, "order ! in range");
 
         //remove from pending array
         PendingOrderIds = ArrayMutation.removeFromArray(
@@ -194,8 +198,7 @@ contract StopLimit is Ownable, IStopLimit {
             order.recipient,
             order.slippageBips
         );
-
-        emit OrderProcessed(order.orderId);
+        emit StopLimitOrderProcessed(order.orderId);
     }
 
     ///@notice if current approval is insufficient, approve max
@@ -218,18 +221,15 @@ contract StopLimit is Ownable, IStopLimit {
 
     function checkInRange(
         Order memory order
-    ) internal view returns (bool inRange) {
-        uint256 exchangeRate = MASTER.getExchangeRate(
-            order.tokenIn,
-            order.tokenOut
-        );
+    ) internal view returns (bool inRange, uint256 exchangeRate) {
+        exchangeRate = MASTER.getExchangeRate(order.tokenIn, order.tokenOut);
         if (order.direction) {
             if (exchangeRate <= order.stopPrice) {
-                return (true);
+                inRange = true;
             }
         } else {
             if (exchangeRate >= order.stopPrice) {
-                return (true);
+                inRange = true;
             }
         }
     }
