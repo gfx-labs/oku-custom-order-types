@@ -3,7 +3,7 @@ pragma solidity ^0.8.19;
 
 import "./IAutomation.sol";
 import "./AutomationMaster.sol";
-import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
+//import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "../libraries/ArrayMutation.sol";
 
 import "../interfaces/ILimitOrderRegistry.sol";
@@ -21,9 +21,8 @@ import "hardhat/console.sol";
 ///@notice This contract owns and handles all logic associated with STOP_MARKET orders
 ///@notice STOP_MARKET orders check an external oracle for a pre-determined strike price,
 ///once this price is reached, a market swap occurs
-contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
+contract LimitOrder is Ownable, ILimitOrder {
     using SafeERC20 for IERC20;
-
 
     AutomationMaster public immutable MASTER;
 
@@ -33,12 +32,9 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
 
     mapping(uint256 => Order) public limitOrders;
 
-
-    constructor(AutomationMaster _master){
+    constructor(AutomationMaster _master) {
         MASTER = _master;
     }
-
-    
 
     function getPendingOrders()
         external
@@ -48,25 +44,33 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
         return PendingOrderIds;
     }
 
-    
-
-    ///@param strikePrice is in terms of exchange rate of tokenIn / tokenOut
+    ///@param strikePrice is in terms of exchange rate of tokenIn / tokenOut,
+    /// thus is dependent on direction
     function createOrder(
         uint256 strikePrice,
         uint256 amountIn,
-        uint256 pairId,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
         address recipient,
-        uint80 slippageBips,
-        bool zeroForOne
-    ) external override{
-        //we assume oracles exist if the pair exists
-        (IERC20 tokenIn, IERC20 tokenOut) = MASTER.deducePair(pairId, zeroForOne);
-       
-        require(limitOrderCount < MASTER.maxPendingOrders(), "Max Order Count Reached");
+        uint88 slippageBips
+    ) external override {
+        //verify both oracles exist, as we need both to calc the exchange rate
+        require(
+            address(MASTER.oracles(tokenIn)) != address(0x0),
+            "tokenIn Oracle !exist"
+        );
+        require(
+            address(MASTER.oracles(tokenIn)) != address(0x0),
+            "tokenOut Oracle !exist"
+        );
 
+        require(
+            limitOrderCount < MASTER.maxPendingOrders(),
+            "Max Order Count Reached"
+        );
         require(slippageBips <= MASTER.MAX_BIPS(), "Invalid Slippage BIPS");
 
-        //verify order amount is at least the minimum
+        //verify order amount is at least the minimum todo check here or only when limit order is created?
         MASTER.checkMinOrderSize(tokenIn, amountIn);
 
         limitOrderCount++;
@@ -74,11 +78,11 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
             orderId: limitOrderCount,
             strikePrice: strikePrice,
             amountIn: amountIn,
-            slippageBips: slippageBips,
-            pairId: pairId,
+            tokenIn: tokenIn,
+            tokenOut: tokenOut,
             recipient: recipient,
-            zeroForOne: zeroForOne,
-            direction: MASTER.getExchangeRate(pairId) > strikePrice //exchangeRate in/out > strikePrice
+            slippageBips: slippageBips,
+            direction: MASTER.getExchangeRate(tokenIn, tokenOut) > strikePrice //exchangeRate in/out > strikePrice
         });
         PendingOrderIds.push(limitOrderCount);
 
@@ -90,7 +94,8 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
     }
 
     function adminCancelOrder(uint256 orderId) external onlyOwner {
-        _cancelOrder(orderId);
+        Order memory order = limitOrders[orderId];
+        require(_cancelOrder(order), "Order not active");
     }
 
     ///@notice only the order recipient can cancel their order
@@ -99,28 +104,23 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
         Order memory order = limitOrders[orderId];
 
         require(msg.sender == order.recipient, "Only Order Owner");
-        require(_cancelOrder(orderId), "Order not active");
+        require(_cancelOrder(order), "Order not active");
     }
 
-    function _cancelOrder(uint256 orderId) internal returns (bool) {
-        Order memory order = limitOrders[orderId];
+    function _cancelOrder(Order memory order) internal returns (bool) {
         for (uint i = 0; i < PendingOrderIds.length; i++) {
-            if (PendingOrderIds[i] == orderId) {
+            if (PendingOrderIds[i] == order.orderId) {
                 //remove from pending array
                 PendingOrderIds = ArrayMutation.removeFromArray(
                     i,
                     PendingOrderIds
                 );
 
-                //refund tokens
-                (IERC20 tokenIn, ) = MASTER.deducePair(
-                    order.pairId,
-                    order.zeroForOne
-                );
-                tokenIn.safeTransfer(order.recipient, order.amountIn);
+                //refund tokenIn amountIn to recipient
+                order.tokenIn.safeTransfer(order.recipient, order.amountIn);
 
                 //emit event
-                emit OrderCancelled(orderId);
+                emit OrderCancelled(order.orderId);
 
                 //short circuit loop
                 return true;
@@ -128,8 +128,6 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
         }
         return false;
     }
-
-    
 
     //check upkeep
     function checkUpkeep(
@@ -142,13 +140,25 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
     {
         for (uint i = 0; i < PendingOrderIds.length; i++) {
             Order memory order = limitOrders[PendingOrderIds[i]];
-            uint256 exchangeRate = MASTER.getExchangeRate(order.pairId);
-            if (order.direction) {
+            uint256 exchangeRate = MASTER.getExchangeRate(
+                order.tokenIn,
+                order.tokenOut
+            );
+            if (order.direction) {//todo checkInRange
                 if (exchangeRate <= order.strikePrice) {
                     return (
                         true,
                         abi.encode(
-                            UpkeepData({pendingOrderIdx: i, order: order, exchangeRate: exchangeRate})
+                            MasterUpkeepData({
+                                orderType: OrderType.LIMIT,
+                                target: address(0x0),
+                                txData: "0x",
+                                pendingOrderIdx: i,
+                                tokenIn: order.tokenIn,
+                                tokenOut: order.tokenOut,
+                                amountIn: order.amountIn,
+                                exchangeRate: exchangeRate
+                            })
                         )
                     );
                 }
@@ -157,7 +167,16 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
                     return (
                         true,
                         abi.encode(
-                            UpkeepData({pendingOrderIdx: i, order: order, exchangeRate: exchangeRate})
+                             MasterUpkeepData({
+                                orderType: OrderType.LIMIT,
+                                target: address(0x0),
+                                txData: "0x",
+                                pendingOrderIdx: i,
+                                tokenIn: order.tokenIn,
+                                tokenOut: order.tokenOut,
+                                amountIn: order.amountIn,
+                                exchangeRate: exchangeRate
+                            })
                         )
                     );
                 }
@@ -174,46 +193,45 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
     /// pendingOrderIdx is the index of the pending order we are executing,
     ///this pending order is removed from the array via array mutation
     function performUpkeep(bytes calldata performData) external override {
-        (address target, uint256 pendingOrderIdx, bytes memory txData) = abi
-            .decode(performData, (address, uint256, bytes));
-        Order memory order = limitOrders[PendingOrderIds[pendingOrderIdx]];
-        (IERC20 tokenIn, IERC20 tokenOut) = MASTER.deducePair(
-            order.pairId,
-            order.zeroForOne
-        );
+        MasterUpkeepData memory data = abi.decode(performData, (MasterUpkeepData));
+        Order memory order = limitOrders[PendingOrderIds[data.pendingOrderIdx]];
+
+        //todo check order in range
+        require(checkInRange(order), "order ! in range");
+
         //update accounting
-        uint256 initialTokenOut = tokenOut.balanceOf(address(this));
+        uint256 initialTokenOut = order.tokenOut.balanceOf(address(this));
 
         //approve
-        updateApproval(target, tokenIn, order.amountIn);
+        updateApproval(data.target, order.tokenIn, order.amountIn);
 
         //perform the call
-        (bool success, bytes memory result) = target.call(txData);
+        (bool success, bytes memory result) = data.target.call(data.txData);
 
         if (success) {
-            uint256 finalTokenOut = tokenOut.balanceOf(address(this));
+            uint256 finalTokenOut = order.tokenOut.balanceOf(address(this));
 
             //if success, we expect tokenIn balance to decrease by amountIn
             //and tokenOut balance to increase by at least minAmountReceived
             require(
                 finalTokenOut - initialTokenOut >
                     MASTER.getMinAmountReceived(
-                        order.pairId,
-                        order.zeroForOne,
-                        order.slippageBips,
-                        order.amountIn
+                        order.amountIn,
+                        order.tokenIn,
+                        order.tokenOut,
+                        order.slippageBips
                     ),
                 "Too Little Received"
             );
 
             //remove from pending array
             PendingOrderIds = ArrayMutation.removeFromArray(
-                pendingOrderIdx,
+                data.pendingOrderIdx,
                 PendingOrderIds
             );
 
             //send tokenOut to recipient
-            tokenOut.safeTransfer(
+            order.tokenOut.safeTransfer(
                 order.recipient,
                 finalTokenOut - initialTokenOut
             );
@@ -241,8 +259,18 @@ contract LimitOrder is Ownable, ILimitOrder, AutomationCompatibleInterface {
         }
     }
 
-
-    
-
-    
+    function checkInRange(
+        Order memory order
+    ) internal view returns (bool inRange) {
+        uint256 exchangeRate = MASTER.getExchangeRate(order.tokenIn, order.tokenOut);
+        if (order.direction) {
+            if (exchangeRate <= order.strikePrice) {
+                return (true);
+            }
+        } else {
+            if (exchangeRate >= order.strikePrice) {
+                return (true);
+            }
+        }
+    }
 }

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "./IAutomation.sol";
-import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
+//import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "../libraries/ArrayMutation.sol";
 
 import "../interfaces/ILimitOrderRegistry.sol";
@@ -20,46 +20,23 @@ import "hardhat/console.sol";
 ///@notice This contract owns and handles all logic associated with STOP_MARKET orders
 ///@notice STOP_MARKET orders check an external oracle for a pre-determined strike price,
 ///once this price is reached, a market swap occurs
-contract AutomationMaster is
-    IAutomation,
-    Ownable,
-    AutomationCompatibleInterface
-{
+contract AutomationMaster is IAutomation, Ownable {
     using SafeERC20 for IERC20;
 
-    uint88 public MAX_BIPS = 10000;
+    uint88 public constant MAX_BIPS = 10000;
 
     uint16 public maxPendingOrders;
 
-    uint256 public minOrderSize; //152
+    uint256 public minOrderSize;
 
-    uint256 public orderCount;
-
-    uint256 public pairCount;
+    ILimitOrder public immutable LIMIT_ORDER_CONTRACT;
+    IStopLimit public immutable STOP_ORDER_CONTRACT;
 
     mapping(IERC20 => IOracleRelay) public oracles;
 
-    mapping(uint256 => Pair) public registeredPairs; //todo offload exchange rate to single oracle contract?
-
-    mapping(uint256 => ORDER) public AllOrders;
-
-    uint256[] public PendingOrderIds;
-
-    function getPendingOrders()
-        external
-        view
-        returns (uint256[] memory pendingOrderIds)
-    {
-        return PendingOrderIds;
-    }
-
-    ///@notice get all registered pairs as an array @param pairlist
-    function getPairList() external view returns (Pair[] memory pairlist) {
-        pairlist = new Pair[](pairCount);
-
-        for (uint i = 0; i < pairCount; i++) {
-            pairlist[i] = registeredPairs[i];
-        }
+    constructor(ILimitOrder loc, IStopLimit soc) {
+        LIMIT_ORDER_CONTRACT = loc;
+        STOP_ORDER_CONTRACT = soc;
     }
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
@@ -83,48 +60,23 @@ contract AutomationMaster is
         minOrderSize = usdValue;
     }
 
-    ///@notice admin registers a pair for trading
-    function registerPair(
-        IERC20[] calldata _token0s,
-        IERC20[] calldata _token1s
-    ) external onlyOwner {
-        require(_token0s.length == _token1s.length, "Array Mismatch");
-
-        for (uint i = 0; i < _token0s.length; i++) {
-            registeredPairs[pairCount] = Pair({
-                token0: _token0s[i],
-                token1: _token1s[i]
-            });
-            pairCount += 1;
-        }
-    }
-
-    
-
-    ///@notice Direction of swap does not effect exchange rate
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
     ///@return exchangeRate should always be 1e8
     function getExchangeRate(
-        uint256 pairId
+        IERC20 tokenIn,
+        IERC20 tokenOut
     ) external view returns (uint256 exchangeRate) {
-        return _getExchangeRate(pairId, false);
+        return _getExchangeRate(tokenIn, tokenOut);
     }
 
     function _getExchangeRate(
-        uint256 pairId,
-        bool recip
+        IERC20 tokenIn,
+        IERC20 tokenOut
     ) internal view returns (uint256 exchangeRate) {
-        Pair memory pair = registeredPairs[pairId];
-        IERC20 token0 = pair.token0;
-        IERC20 token1 = pair.token1;
-
-        //control for direction
-        if (recip) (token0, token1) = (token1, token0);
-
         //simple exchange rate in 1e8 terms per oracle output
         exchangeRate = divide(
-            oracles[token0].currentValue(),
-            oracles[token1].currentValue(),
+            oracles[tokenIn].currentValue(),
+            oracles[tokenOut].currentValue(),
             8
         );
     }
@@ -133,16 +85,14 @@ contract AutomationMaster is
     ///and apply @param slippageBips to deduce @return minAmountReceived
     ///@return minAmountReceived is scaled to @param tokenOut decimals
     function getMinAmountReceived(
-        uint256 pairId,
-        bool zeroForOne,
-        uint80 slippageBips,
-        uint256 amountIn
-    ) public view returns (uint256 minAmountReceived) {
-        (IERC20 tokenIn, IERC20 tokenOut) = _deducePair(pairId, zeroForOne);
+        uint256 amountIn,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        uint88 slippageBips
+    ) external view returns (uint256 minAmountReceived) {
         //er is 0 / 1 => tokenIn / tokenOut
         //if tokenIn != token 0 then recip
-        bool recip = tokenIn != registeredPairs[pairId].token0;
-        uint256 exchangeRate = _getExchangeRate(pairId, recip);
+        uint256 exchangeRate = _getExchangeRate(tokenIn, tokenOut);
 
         //this assumes decimalIn == decimalOut
         uint256 fairAmountOut = ((amountIn) * exchangeRate) / 1e8;
@@ -170,27 +120,6 @@ contract AutomationMaster is
             (10 ** ERC20(address(tokenIn)).decimals());
 
         require(usdValue > minOrderSize, "order too small");
-
-    }
-    ///@notice decode pair and direction into @return tokenIn and @return tokenOut
-    function deducePair(
-        uint256 pairId,
-        bool zeroForOne
-    ) external view returns (IERC20 tokenIn, IERC20 tokenOut) {
-        return _deducePair(pairId, zeroForOne);
-    }
-    function _deducePair(
-        uint256 pairId,
-        bool zeroForOne
-    ) internal view returns (IERC20 tokenIn, IERC20 tokenOut) {
-        Pair memory pair = registeredPairs[pairId];
-        if (zeroForOne) {
-            tokenIn = pair.token0;
-            tokenOut = pair.token1;
-        } else {
-            tokenIn = pair.token1;
-            tokenOut = pair.token0;
-        }
     }
     ///@notice floating point division at @param factor scale
     function divide(
@@ -206,7 +135,43 @@ contract AutomationMaster is
 
     function checkUpkeep(
         bytes calldata
-    ) external view override returns (bool, bytes memory) {}
+    )
+        external
+        view
+        override
+        returns (bool upkeepNeeded, bytes memory upkeepData)
+    {
+        //todo checkUpkeep on sub keepers
 
-    function performUpkeep(bytes calldata) external override {}
+        //check limit order
+        (upkeepNeeded, upkeepData) = LIMIT_ORDER_CONTRACT.checkUpkeep("0x");
+        if (upkeepNeeded) {
+            return (true, upkeepData);
+        }
+
+        //check stop order
+        (upkeepNeeded, upkeepData) = STOP_ORDER_CONTRACT.checkUpkeep("0x");
+        if (upkeepNeeded) {
+            return (true, upkeepData);
+        }
+    }
+
+    function performUpkeep(bytes calldata performData) external override {
+        //decode into masterUpkeepData
+        MasterUpkeepData memory data = abi.decode(
+            performData,
+            (MasterUpkeepData)
+        );
+
+        //if limit order, we need externally derived txData and target
+        if (data.orderType == OrderType.LIMIT) {
+            //do limit
+            LIMIT_ORDER_CONTRACT.performUpkeep(performData);
+        }
+
+        //if stop order, we directly pass the upkeep data to the stop order contract
+        if (data.orderType == OrderType.STOP_LIMIT) {
+            STOP_ORDER_CONTRACT.performUpkeep(performData);
+        }
+    }
 }

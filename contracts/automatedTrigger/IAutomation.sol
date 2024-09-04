@@ -2,40 +2,44 @@
 pragma solidity ^0.8.19;
 
 import "../interfaces/openzeppelin/IERC20.sol";
+import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 
-interface IAutomation {
+
+interface IAutomation is AutomationCompatibleInterface{
 
     enum OrderType {
         LIMIT,
         STOP_LIMIT
     }
 
-    struct ORDER {
-        uint256 AllOrderId;//master id
-        uint256 SubOrderId;//sub id
+    struct MasterUpkeepData {
         OrderType orderType;
+        address target;//limit order swap target 
+        bytes txData;//limit order swap data
+        uint256 pendingOrderIdx;
+        IERC20 tokenIn;
+        IERC20 tokenOut;
+        uint256 amountIn;
+        uint256 exchangeRate;//todo consider changing size for this as length is always 8 decimals
     }
 
-    struct Pair {
-        IERC20 token0;
-        IERC20 token1;
-    }
+   
 
     event OrderCreated(uint256 orderId);
     event OrderCancelled(uint256 orderId);
 }
 
-interface ILimitOrder is IAutomation {
+interface ILimitOrder is IAutomation{
     event OrderProcessed(uint256 orderId, bool success, bytes result);
 
     struct Order {
         uint256 orderId;
         uint256 strikePrice; //defined by exchange rate of tokenIn / tokenOut
         uint256 amountIn;
-        uint256 pairId;
+        IERC20 tokenIn;
+        IERC20 tokenOut;
         address recipient; //addr to receive swap results
-        uint80 slippageBips;
-        bool zeroForOne;
+        uint88 slippageBips;
         bool direction; //true if initial exchange rate > strike price
     }
 
@@ -47,34 +51,34 @@ interface ILimitOrder is IAutomation {
     function createOrder(
         uint256 strikePrice,
         uint256 amountIn,
-        uint256 pairId,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
         address recipient,
-        uint80 slippageBips,
-        bool zeroForOne
+        uint88 slippageBips
     ) external;
 }
 
-interface IStopLimit is IAutomation {
+interface IStopLimit is IAutomation{
     event OrderProcessed(uint256 orderId);
 
     struct Order {
         uint256 orderId;
         uint256 stopPrice;
-        uint256 strikePrice;
+        uint256 strikePrice; //defined by exchange rate of tokenIn / tokenOut
         uint256 amountIn;
-        uint256 pairId;
+        IERC20 tokenIn;
+        IERC20 tokenOut;
         address recipient; //addr to receive swap results
-        uint80 slippageBips;
-        bool zeroForOne;
-        bool direction; //true if initial exchange rate > strike price
+        uint88 slippageBips;
+        bool direction;
     }
     function createOrder(
         uint256 stopPrice,
         uint256 strikePrice,
         uint256 amountIn,
-        uint256 pairId,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
         address recipient,
-        uint80 slippageBips,
-        bool zeroForOne
+        uint80 slippageBips
     ) external;
 }
