@@ -31,12 +31,14 @@ contract AutomationMaster is IAutomation, Ownable {
 
     ILimitOrder public immutable LIMIT_ORDER_CONTRACT;
     IStopLimit public immutable STOP_ORDER_CONTRACT;
+    IStopLossLimit public immutable STOP_LOSS_LIMIT_CONTRACT;
 
     mapping(IERC20 => IOracleRelay) public oracles;
 
-    constructor(ILimitOrder loc, IStopLimit soc) {
+    constructor(ILimitOrder loc, IStopLimit soc, IStopLossLimit sllc) {
         LIMIT_ORDER_CONTRACT = loc;
         STOP_ORDER_CONTRACT = soc;
+        STOP_LOSS_LIMIT_CONTRACT = sllc;
     }
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
@@ -154,6 +156,12 @@ contract AutomationMaster is IAutomation, Ownable {
         if (upkeepNeeded) {
             return (true, upkeepData);
         }
+
+        //check stop loss limit order
+        (upkeepNeeded, upkeepData) = STOP_LOSS_LIMIT_CONTRACT.checkUpkeep("0x");
+        if (upkeepNeeded) {
+            return (true, upkeepData);
+        }
     }
 
     function performUpkeep(bytes calldata performData) external override {
@@ -172,6 +180,11 @@ contract AutomationMaster is IAutomation, Ownable {
         //if stop order, we directly pass the upkeep data to the stop order contract
         if (data.orderType == OrderType.STOP_LIMIT) {
             STOP_ORDER_CONTRACT.performUpkeep(performData);
+        }
+
+        //if stop order, we directly pass the upkeep data to the stop order contract
+        if (data.orderType == OrderType.STOP_LOSS_LIMIT) {
+            STOP_LOSS_LIMIT_CONTRACT.performUpkeep(performData);
         }
     }
 }
