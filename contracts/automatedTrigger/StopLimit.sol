@@ -20,7 +20,7 @@ import "hardhat/console.sol";
 
 ///@notice This contract owns and handles all logic associated with STOP_MARKET orders
 ///@notice STOP_MARKET orders check an external oracle for a pre-determined strike price,
-///once this price is reached, a market swap occurs
+///once this price is reached, a limit order is made
 contract StopLimit is Ownable, IStopLimit {
     using SafeERC20 for IERC20;
 
@@ -133,7 +133,7 @@ contract StopLimit is Ownable, IStopLimit {
     ///@return upkeepNeeded is true only when there is a stop-limit order to fill
     ///@return performData should be passed unaltered to performUpkeep
     function checkUpkeep(
-        bytes calldata /**checkData */
+        bytes calldata
     )
         external
         view

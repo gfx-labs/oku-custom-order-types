@@ -2,7 +2,6 @@
 pragma solidity ^0.8.19;
 
 import "./IAutomation.sol";
-//import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "../libraries/ArrayMutation.sol";
 
 import "../interfaces/ILimitOrderRegistry.sol";
@@ -29,13 +28,17 @@ contract AutomationMaster is IAutomation, Ownable {
 
     uint256 public minOrderSize;
 
-    ILimitOrder public immutable LIMIT_ORDER_CONTRACT;
-    IStopLimit public immutable STOP_ORDER_CONTRACT;
-    IStopLossLimit public immutable STOP_LOSS_LIMIT_CONTRACT;
+    ILimitOrder public LIMIT_ORDER_CONTRACT;
+    IStopLimit public STOP_ORDER_CONTRACT;
+    IStopLossLimit public STOP_LOSS_LIMIT_CONTRACT;
 
     mapping(IERC20 => IOracleRelay) public oracles;
 
-    constructor(ILimitOrder loc, IStopLimit soc, IStopLossLimit sllc) {
+    function registerSubKeepers(
+        ILimitOrder loc,
+        IStopLimit soc,
+        IStopLossLimit sllc
+    ) external onlyOwner {
         LIMIT_ORDER_CONTRACT = loc;
         STOP_ORDER_CONTRACT = soc;
         STOP_LOSS_LIMIT_CONTRACT = sllc;
@@ -141,26 +144,26 @@ contract AutomationMaster is IAutomation, Ownable {
         external
         view
         override
-        returns (bool upkeepNeeded, bytes memory upkeepData)
+        returns (bool upkeepNeeded, bytes memory performData)
     {
         //todo checkUpkeep on sub keepers
 
         //check limit order
-        (upkeepNeeded, upkeepData) = LIMIT_ORDER_CONTRACT.checkUpkeep("0x");
+        (upkeepNeeded, performData) = LIMIT_ORDER_CONTRACT.checkUpkeep("0x");
         if (upkeepNeeded) {
-            return (true, upkeepData);
+            return (true, performData);
         }
 
         //check stop order
-        (upkeepNeeded, upkeepData) = STOP_ORDER_CONTRACT.checkUpkeep("0x");
+        (upkeepNeeded, performData) = STOP_ORDER_CONTRACT.checkUpkeep("0x");
         if (upkeepNeeded) {
-            return (true, upkeepData);
+            return (true, performData);
         }
 
         //check stop loss limit order
-        (upkeepNeeded, upkeepData) = STOP_LOSS_LIMIT_CONTRACT.checkUpkeep("0x");
+        (upkeepNeeded, performData) = STOP_LOSS_LIMIT_CONTRACT.checkUpkeep("0x");
         if (upkeepNeeded) {
-            return (true, upkeepData);
+            return (true, performData);
         }
     }
 

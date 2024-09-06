@@ -1,5 +1,5 @@
 import { AbiCoder, AddressLike, BigNumberish, BytesLike, EventLog, Signer, Transaction, TransactionReceipt, TransactionResponse } from "ethers";
-import { IERC20, ISwapRouter02, ISwapRouter02__factory, UniswapV3Pool } from "../typechain-types";
+import { IERC20, IERC20__factory, ISwapRouter02, ISwapRouter02__factory, UniswapV3Pool } from "../typechain-types";
 import { ethers } from "hardhat";
 
 const abi = new AbiCoder()
@@ -32,52 +32,117 @@ export const getGas = async (result: TransactionResponse) => {
 
 }
 
-export const decodeUpkeepData = async (data: BytesLike) => {
-
-    //get pending order idx
-    const decoded = abi.decode(
-        ["uint256", "tuple(uint256 orderId, uint256 strikePrice, uint256 amountIn, uint256 pairId, address recipient, uint80 slippageBips, bool zeroForOne, bool direction) order"],
-        data
-    )
-    const pendingOrderIdx = decoded[0]
-    const order: Order = decoded[1]
-
-    return {
-        pendingOrderIdx: pendingOrderIdx,
-        order: order
-    }
-
+export enum OrderType {
+    LIMIT = 0,
+    STOP_LIMIT = 1,
+    STOP_LOSS_LIMIT = 2
+}
+export type MasterUpkeepData = {
+    orderType: OrderType,
+    target: AddressLike,
+    txData: BytesLike,
+    pendingOrderIdx: bigint,
+    tokenIn: IERC20,
+    tokenOut: IERC20,
+    amountIn: bigint,
+    exchangeRate: bigint
 }
 
-export const generateUniTx = async (
-    target: AddressLike,
-    pendingOrderIdx: BigNumberish,
-    router: AddressLike,
-    pool: UniswapV3Pool,
+export const decodeUpkeepData = async (data: BytesLike, signer: Signer): Promise<MasterUpkeepData> => {
+    // Decode the data into a tuple structure
+    const decoded = abi.decode(
+        ["tuple(uint8 orderType, address target, bytes txData, uint256 pendingOrderIdx, address tokenIn, address tokenOut, uint256 amount, uint256 exchangeRate) order"],
+        data
+    )[0]; // Unpack the tuple since it returns an array
+
+    // Map the decoded data to the MasterUpkeepData structure
+    const upkeepData: MasterUpkeepData = {
+        orderType: decoded.orderType as OrderType,
+        target: decoded.target,
+        txData: decoded.txData,
+        pendingOrderIdx: BigInt(decoded.pendingOrderIdx),
+        tokenIn: IERC20__factory.connect(decoded.tokenIn, signer),
+        tokenOut: IERC20__factory.connect(decoded.tokenOut, signer),
+        amountIn: BigInt(decoded.amount),
+        exchangeRate: BigInt(decoded.exchangeRate)
+    };
+
+    return upkeepData;
+}
+
+export const generateUniTxData = async (
     tokenIn: IERC20,
     tokenOut: AddressLike,
-    recipient: AddressLike,
-    amountIn: BigNumberish,
-    amountOutMin: BigNumberish
-) => {
-    const signer = await ethers.getSigner(recipient.toString())
+    amountIn: bigint,
+    router: AddressLike,
+    pool: UniswapV3Pool,
+    automationContract: AddressLike,
+    amountOutMin: bigint
+): Promise<BytesLike> => {
+    const signer = await ethers.getSigner(automationContract.toString())
     const ROUTER = ISwapRouter02__factory.connect(router.toString(), signer)
     const params: ExactInputSingleParams = {
         tokenIn: await tokenIn.getAddress(),
         tokenOut: tokenOut,
         fee: await pool.fee(),
-        recipient: recipient,
+        recipient: automationContract,
         amountIn: amountIn,
         amountOutMinimum: amountOutMin,
         sqrtPriceLimitX96: 0n
     }
 
     const txData = (await ROUTER.exactInputSingle.populateTransaction(params)).data
+    return txData
 
-    const encodedPerformData = abi.encode(["address", "uint256", "bytes"], [target, pendingOrderIdx, txData])
-
-    return encodedPerformData
 }
+
+
+export const generateUniTx = async (
+    router: AddressLike,
+    pool: UniswapV3Pool,
+    automationContract: AddressLike,
+    amountOutMin: bigint,
+    data: MasterUpkeepData
+) => {
+    const signer = await ethers.getSigner(automationContract.toString())
+    const ROUTER = ISwapRouter02__factory.connect(router.toString(), signer)
+    const params: ExactInputSingleParams = {
+        tokenIn: await data.tokenIn.getAddress(),
+        tokenOut: data.tokenOut,
+        fee: await pool.fee(),
+        recipient: automationContract,
+        amountIn: data.amountIn,
+        amountOutMinimum: amountOutMin,
+        sqrtPriceLimitX96: 0n
+    }
+
+    const txData = (await ROUTER.exactInputSingle.populateTransaction(params)).data
+
+    // Encode the MasterUpkeepData struct 
+    const encodedMasterUpkeepData = abi.encode(
+        ["tuple(uint8 orderType, address target, bytes txData, uint256 pendingOrderIdx, address tokenIn, address tokenOut, uint256 amount, uint256 exchangeRate)"],
+        [{
+            orderType: data.orderType,
+            target: router,              // Set the target to router
+            txData: txData,              // Set the txData from the transaction
+            pendingOrderIdx: data.pendingOrderIdx,
+            tokenIn: await data.tokenIn.getAddress(),
+            tokenOut: await data.tokenOut.getAddress(),
+            amount: data.amountIn,
+            exchangeRate: data.exchangeRate
+        }]
+    );
+
+    // Return or log the encoded data
+    return encodedMasterUpkeepData;
+
+}
+
+/**
+//const encodedPerformData = abi.encode(["address", "uint256", "bytes"], [router, pendingOrderIdx, txData])
+
+    //return encodedPerformData
+ */
 
 export const getStrikePrice = async (
     currentPrice: bigint,
@@ -86,14 +151,14 @@ export const getStrikePrice = async (
 ) => {
 
     let formatPrice = Number(ethers.formatUnits(currentPrice, 8))
-    
-    if(recip){
+
+    if (recip) {
         formatPrice = 1 / formatPrice
     }
 
     let strikePrice = formatPrice + delta
 
-    if(recip){
+    if (recip) {
         strikePrice = 1 / strikePrice
     }
 

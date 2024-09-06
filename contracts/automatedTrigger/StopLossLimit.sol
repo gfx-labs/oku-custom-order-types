@@ -19,7 +19,8 @@ import "../oracle/IOracleRelay.sol";
 import "hardhat/console.sol";
 
 ///@notice This contract owns and handles all logic associated with STOP_MARKET orders
-///@notice STOP_MARKET orders check an external oracle for a pre-determined strike price,
+///@notice STOP_LOSS_LIMIT orders check an external oracle for a pre-determined strike price AND/OR
+/// a pre-determined stop price,
 ///once this price is reached, a market swap occurs
 contract StopLossLimit is Ownable, IStopLossLimit {
     using SafeERC20 for IERC20;
@@ -54,7 +55,17 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         uint32 slippageBipsStrike,
         uint32 slippageBipsStop
     ) external override {
-        require(swapParams.swapBips <= MASTER.MAX_BIPS(), "Invalid Slippage BIPS");
+        require(
+            swapParams.swapBips <= MASTER.MAX_BIPS(),
+            "Invalid Slippage BIPS"
+        );
+
+        //take asset
+        swapParams.swapTokenIn.safeTransferFrom(
+            msg.sender,
+            address(this),
+            swapParams.swapAmountIn
+        );
 
         (bool success, , uint256 finalAmountOut) = execute(
             swapParams.swapTarget,
@@ -91,6 +102,9 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         uint32 slippageBipsStrike,
         uint32 slippageBipsStop
     ) external override {
+        //take asset
+        tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
+
         _createOrder(
             strikePrice,
             stopPrice,
@@ -151,9 +165,6 @@ contract StopLossLimit is Ownable, IStopLossLimit {
 
         PendingOrderIds.push(stopLossLimitOrderCount);
 
-        //take asset
-        tokenIn.safeTransferFrom(recipient, address(this), amountIn);
-
         emit OrderCreated(stopLossLimitOrderCount);
     }
 
@@ -194,7 +205,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
 
     //check upkeep
     function checkUpkeep(
-        bytes calldata /**checkData */
+        bytes calldata
     )
         external
         view
@@ -240,35 +251,23 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         Order memory order = stopLossLimitOrders[
             PendingOrderIds[data.pendingOrderIdx]
         ];
-
         //deduce if we are filling stop or strike
         (bool inRange, bool strike, ) = checkInRange(order);
         require(inRange, "order ! in range");
 
-        bool success;
-        bytes memory result;
-        uint256 finalAmountOut;
+        //asing bips
+        uint32 bips;
+        strike ? bips = order.slippageBipsStrike : bips = order
+            .slippageBipsStop;
 
-        if (strike) {
-            (success, result, finalAmountOut) = execute(
-                data.target,
-                data.txData,
-                order.amountIn,
-                order.tokenIn,
-                order.tokenOut,
-                order.slippageBipsStrike
-            );
-        } else {
-            //stop
-            (success, result, finalAmountOut) = execute(
-                data.target,
-                data.txData,
-                order.amountIn,
-                order.tokenIn,
-                order.tokenOut,
-                order.slippageBipsStop
-            );
-        }
+        (bool success, bytes memory result, uint256 finalAmountOut) = execute(
+            data.target,
+            data.txData,
+            order.amountIn,
+            order.tokenIn,
+            order.tokenOut,
+            order.slippageBipsStop
+        );
 
         //handle accounting
         if (success) {
@@ -355,7 +354,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
                 return (true, true, exchangeRate);
             }
             //check for stop price
-            if (exchangeRate <= order.stopPrice) {
+            if (exchangeRate >= order.stopPrice) {
                 return (true, false, exchangeRate);
             }
         } else {
@@ -364,7 +363,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
                 return (true, true, exchangeRate);
             }
             //check for stop price
-            if (exchangeRate >= order.stopPrice) {
+            if (exchangeRate <= order.stopPrice) {
                 return (true, false, exchangeRate);
             }
         }

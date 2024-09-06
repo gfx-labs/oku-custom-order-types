@@ -86,8 +86,9 @@ contract LimitOrder is Ownable, ILimitOrder {
         });
         PendingOrderIds.push(limitOrderCount);
 
-        //take asset
-        tokenIn.safeTransferFrom(recipient, address(this), amountIn);
+        //take asset from msg.sender note not from recipient
+        //this allows us to create orders on behalf of a different addr
+        tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
 
         //emit
         emit OrderCreated(limitOrderCount);
@@ -130,7 +131,7 @@ contract LimitOrder is Ownable, ILimitOrder {
 
     //check upkeep
     function checkUpkeep(
-        bytes calldata /**checkData */
+        bytes calldata
     )
         external
         view
@@ -187,7 +188,6 @@ contract LimitOrder is Ownable, ILimitOrder {
 
         //perform the call
         (bool success, bytes memory result) = data.target.call(data.txData);
-
         if (success) {
             uint256 finalTokenOut = order.tokenOut.balanceOf(address(this));
 
@@ -209,7 +209,6 @@ contract LimitOrder is Ownable, ILimitOrder {
                 data.pendingOrderIdx,
                 PendingOrderIds
             );
-
             //send tokenOut to recipient
             order.tokenOut.safeTransfer(
                 order.recipient,
