@@ -125,6 +125,14 @@ export class ArbAddresses{
 
     //automated trigger
     readonly triggerAddress: string = "0x27F63920D2855853E5aAC290e9fF2406f3c46Dc0"//"0x8fBdE56be121275a80682513292F7831dc951215"
+    
+    //trigger v2 deployments
+    readonly Master: string = "0x8a39E39234Bbb0840484c442Af01584DB04801CE"
+    readonly limit: string = "0xCF2FCd9B87113139E809d5F9Ea6f4D571BB1C12a"
+    readonly stopLimit: string = "0x491397f7eb6f5d9B82B15cEcaBFf835bA31f217F"
+    readonly stopLossLimit: string = "0xEF52F132746a55f750ecfb3853e29CfECBC5f6E5"
+
+    
     readonly wethFeed: string = "0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612"
     readonly usdcFeed: string = "0x50834F3163758fcC1Df9973b6e91f0F0F0434aD3"
     readonly wethOracleAddress: string = "0x384542D720A765aE399CFDDF079CBE515731F044"//usd price in 1e8 terms

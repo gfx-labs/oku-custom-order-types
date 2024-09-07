@@ -16,7 +16,7 @@ import "../oracle/IOracleRelay.sol";
 ///testing
 import "hardhat/console.sol";
 
-///@notice This contract owns and handles all logic associated with STOP_MARKET orders
+///@notice This contract owns and handles all logic asstopLimitContractiated with STOP_MARKET orders
 ///@notice STOP_MARKET orders check an external oracle for a pre-determined strike price,
 ///once this price is reached, a market swap occurs
 contract AutomationMaster is IAutomation, Ownable {
@@ -29,19 +29,19 @@ contract AutomationMaster is IAutomation, Ownable {
     uint256 public minOrderSize;
 
     ILimitOrder public LIMIT_ORDER_CONTRACT;
-    IStopLimit public STOP_ORDER_CONTRACT;
+    IStopLimit public STOP_LIMIT_CONTRACT;
     IStopLossLimit public STOP_LOSS_LIMIT_CONTRACT;
 
     mapping(IERC20 => IOracleRelay) public oracles;
 
     function registerSubKeepers(
-        ILimitOrder loc,
-        IStopLimit soc,
-        IStopLossLimit sllc
+        ILimitOrder limitOrderContract,
+        IStopLimit stopLimitContract,
+        IStopLossLimit stopLossLimitContract
     ) external onlyOwner {
-        LIMIT_ORDER_CONTRACT = loc;
-        STOP_ORDER_CONTRACT = soc;
-        STOP_LOSS_LIMIT_CONTRACT = sllc;
+        LIMIT_ORDER_CONTRACT = limitOrderContract;
+        STOP_ORDER_CONTRACT = stopLimitContract;
+        STOP_LOSS_LIMIT_CONTRACT = stopLossLimitContract;
     }
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
