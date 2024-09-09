@@ -190,10 +190,10 @@ contract LimitOrder is Ownable, ILimitOrder {
         //update accounting
         uint256 initialTokenOut = order.tokenOut.balanceOf(address(this));
 
+        //todo use approval as a mechanism in order to prevent use of unauthorized funds? 
+        //if so, need to reset approval to 0 first and then approve only the order.amountIn - not the most efficient
         //approve
         updateApproval(data.target, order.tokenIn, order.amountIn);
-
-        console.log("AMOUNTI: ", order.amountIn);
 
         //perform the call
         (bool success, bytes memory result) = data.target.call(data.txData);
@@ -212,6 +212,8 @@ contract LimitOrder is Ownable, ILimitOrder {
                     ),
                 "Too Little Received"
             );
+
+            console.log("Amount Received: ", finalTokenOut - initialTokenOut);
 
             //remove from pending array
             PendingOrderIds = ArrayMutation.removeFromArray(

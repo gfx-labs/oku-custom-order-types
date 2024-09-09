@@ -3,7 +3,12 @@ pragma solidity ^0.8.19;
 
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
-
+/**
+BIG PICTURE TODO
+depricate regular limit order in favor of stop-loss-limit? This means updating stop-limit to create a stop-loss-limit order on fill
+-do we want to allow stop-limit to be able to swap on create when it fills? 
+Make sure that swap data on performUpkeep can only actually perform upkeep on the intended order without using user funds its not supposed to
+ */
 interface IAutomation is AutomationCompatibleInterface {
     enum OrderType {
         LIMIT,
