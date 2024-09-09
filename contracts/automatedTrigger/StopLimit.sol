@@ -152,8 +152,10 @@ contract StopLimit is Ownable, IStopLimit {
                             target: address(0x0),
                             txData: "0x",
                             pendingOrderIdx: i,
+                            orderId: order.orderId,
                             tokenIn: order.tokenIn,
                             tokenOut: order.tokenOut,
+                            bips: order.slippageBips,
                             amountIn: order.amountIn,
                             exchangeRate: exchangeRate
                         })

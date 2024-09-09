@@ -23,6 +23,9 @@ export type SwapParams = {
 
 export class TestScope {
 
+
+    signers!: Signer[]
+
     Frank!: Signer
     Andy!: Signer
     Bob!: Signer
@@ -40,6 +43,9 @@ export class TestScope {
     usdcAmount = ethers.parseUnits("5000", 6)
     uniAmount = ethers.parseEther("665")
     arbAmount = ethers.parseEther("6580")
+
+    andyWeth = this.wethAmount * 20n
+
 
     //CL oracles are priced @ 1e8
     initialEthPrice = ethers.parseUnits("3391.95", 8)

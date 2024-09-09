@@ -40,7 +40,7 @@ contract AutomationMaster is IAutomation, Ownable {
         IStopLossLimit stopLossLimitContract
     ) external onlyOwner {
         LIMIT_ORDER_CONTRACT = limitOrderContract;
-        STOP_ORDER_CONTRACT = stopLimitContract;
+        STOP_LIMIT_CONTRACT = stopLimitContract;
         STOP_LOSS_LIMIT_CONTRACT = stopLossLimitContract;
     }
 
@@ -155,7 +155,7 @@ contract AutomationMaster is IAutomation, Ownable {
         }
 
         //check stop order
-        (upkeepNeeded, performData) = STOP_ORDER_CONTRACT.checkUpkeep("0x");
+        (upkeepNeeded, performData) = STOP_LIMIT_CONTRACT.checkUpkeep("0x");
         if (upkeepNeeded) {
             return (true, performData);
         }
@@ -182,7 +182,7 @@ contract AutomationMaster is IAutomation, Ownable {
 
         //if stop order, we directly pass the upkeep data to the stop order contract
         if (data.orderType == OrderType.STOP_LIMIT) {
-            STOP_ORDER_CONTRACT.performUpkeep(performData);
+            STOP_LIMIT_CONTRACT.performUpkeep(performData);
         }
 
         //if stop order, we directly pass the upkeep data to the stop order contract

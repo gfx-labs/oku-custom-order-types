@@ -150,8 +150,10 @@ contract LimitOrder is Ownable, ILimitOrder {
                             target: address(0x0),
                             txData: "0x",
                             pendingOrderIdx: i,
+                            orderId: order.orderId,
                             tokenIn: order.tokenIn,
                             tokenOut: order.tokenOut,
+                            bips: order.slippageBips,
                             amountIn: order.amountIn,
                             exchangeRate: exchangeRate
                         })
@@ -170,10 +172,15 @@ contract LimitOrder is Ownable, ILimitOrder {
     /// pendingOrderIdx is the index of the pending order we are executing,
     ///this pending order is removed from the array via array mutation
     function performUpkeep(bytes calldata performData) external override {
+        console.log("PERFORM");
         MasterUpkeepData memory data = abi.decode(
             performData,
             (MasterUpkeepData)
         );
+
+        //need to make sure we are removing the correct pending order from the array, 
+        //theoreticly, any data can be passed to this function and we shouldn't trust it
+        require(PendingOrderIds[data.pendingOrderIdx] == data.orderId, "Valid order");
         Order memory order = limitOrders[PendingOrderIds[data.pendingOrderIdx]];
 
         //confirm order is in range to prevent improper fill
@@ -185,6 +192,8 @@ contract LimitOrder is Ownable, ILimitOrder {
 
         //approve
         updateApproval(data.target, order.tokenIn, order.amountIn);
+
+        console.log("AMOUNTI: ", order.amountIn);
 
         //perform the call
         (bool success, bytes memory result) = data.target.call(data.txData);
@@ -215,6 +224,7 @@ contract LimitOrder is Ownable, ILimitOrder {
                 finalTokenOut - initialTokenOut
             );
         }
+        console.log("Success: ", success);
 
         //emit
         emit OrderProcessed(order.orderId, success, result);

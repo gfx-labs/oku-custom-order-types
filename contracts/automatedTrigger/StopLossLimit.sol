@@ -214,7 +214,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
     {
         for (uint i = 0; i < PendingOrderIds.length; i++) {
             Order memory order = stopLossLimitOrders[PendingOrderIds[i]];
-            (bool inRange, , uint256 exchangeRate) = checkInRange(order);
+            (bool inRange, bool strike, uint256 exchangeRate) = checkInRange(order);
             if (inRange) {
                 return (
                     true,
@@ -224,8 +224,10 @@ contract StopLossLimit is Ownable, IStopLossLimit {
                             target: address(0x0),
                             txData: "0x",
                             pendingOrderIdx: i,
+                            orderId: order.orderId,
                             tokenIn: order.tokenIn,
                             tokenOut: order.tokenOut,
+                            bips: strike ? order.slippageBipsStrike : order.slippageBipsStop,//bips based on strike or stop fill
                             amountIn: order.amountIn,
                             exchangeRate: exchangeRate
                         })

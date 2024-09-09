@@ -16,8 +16,10 @@ interface IAutomation is AutomationCompatibleInterface {
         address target; //limit order swap target
         bytes txData; //limit order swap data
         uint256 pendingOrderIdx;
+        uint256 orderId;
         IERC20 tokenIn;
         IERC20 tokenOut;
+        uint88 bips;
         uint256 amountIn;
         uint256 exchangeRate; //todo consider changing size for this as length is always 8 decimals
     }

@@ -1,2 +1,2 @@
 export * from "./happyPath"
-//export * from "./failure"
+export * from "./failure"

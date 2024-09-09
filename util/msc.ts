@@ -1,4 +1,4 @@
-import { AbiCoder, AddressLike, BigNumberish, BytesLike, EventLog, Signer, Transaction, TransactionReceipt, TransactionResponse } from "ethers";
+import { AbiCoder, AddressLike, BigNumberish, BytesLike, Contract, ContractEventName, EventLog, Filter, Signer, Transaction, TransactionReceipt, TransactionResponse } from "ethers";
 import { IERC20, IERC20__factory, ISwapRouter02, ISwapRouter02__factory, UniswapV3Pool } from "../typechain-types";
 import { ethers } from "hardhat";
 
@@ -32,6 +32,7 @@ export const getGas = async (result: TransactionResponse) => {
 
 }
 
+
 export enum OrderType {
     LIMIT = 0,
     STOP_LIMIT = 1,
@@ -42,16 +43,20 @@ export type MasterUpkeepData = {
     target: AddressLike,
     txData: BytesLike,
     pendingOrderIdx: bigint,
+    orderId: bigint,
     tokenIn: IERC20,
     tokenOut: IERC20,
+    bips: bigint,
     amountIn: bigint,
     exchangeRate: bigint
 }
+export const MasterUpkeepTuple = "tuple(uint8 orderType, address target, bytes txData, uint256 pendingOrderIdx, uint256 orderId, address tokenIn, address tokenOut, uint88 bips, uint256 amount, uint256 exchangeRate)"
+
 
 export const decodeUpkeepData = async (data: BytesLike, signer: Signer): Promise<MasterUpkeepData> => {
     // Decode the data into a tuple structure
     const decoded = abi.decode(
-        ["tuple(uint8 orderType, address target, bytes txData, uint256 pendingOrderIdx, address tokenIn, address tokenOut, uint256 amount, uint256 exchangeRate) order"],
+        [MasterUpkeepTuple],
         data
     )[0]; // Unpack the tuple since it returns an array
 
@@ -61,8 +66,10 @@ export const decodeUpkeepData = async (data: BytesLike, signer: Signer): Promise
         target: decoded.target,
         txData: decoded.txData,
         pendingOrderIdx: BigInt(decoded.pendingOrderIdx),
+        orderId: BigInt(decoded.orderId),
         tokenIn: IERC20__factory.connect(decoded.tokenIn, signer),
         tokenOut: IERC20__factory.connect(decoded.tokenOut, signer),
+        bips: BigInt(decoded.bips),
         amountIn: BigInt(decoded.amount),
         exchangeRate: BigInt(decoded.exchangeRate)
     };
@@ -120,14 +127,16 @@ export const generateUniTx = async (
 
     // Encode the MasterUpkeepData struct 
     const encodedMasterUpkeepData = abi.encode(
-        ["tuple(uint8 orderType, address target, bytes txData, uint256 pendingOrderIdx, address tokenIn, address tokenOut, uint256 amount, uint256 exchangeRate)"],
+        [MasterUpkeepTuple],
         [{
             orderType: data.orderType,
             target: router,              // Set the target to router
             txData: txData,              // Set the txData from the transaction
             pendingOrderIdx: data.pendingOrderIdx,
+            orderId: data.orderId,
             tokenIn: await data.tokenIn.getAddress(),
             tokenOut: await data.tokenOut.getAddress(),
+            bips: data.bips,
             amount: data.amountIn,
             exchangeRate: data.exchangeRate
         }]

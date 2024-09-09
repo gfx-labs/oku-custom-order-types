@@ -1,28 +1,27 @@
-import { AbiCoder, AddressLike, BigNumberish, Signer } from "ethers"
-import { AutomationMaster__factory, IERC20, IERC20__factory, LimitOrder__factory, PlaceholderOracle, PlaceholderOracle__factory, StopLimit__factory, StopLossLimit__factory, UniswapV3Pool, UniswapV3Pool__factory } from "../../typechain-types"
-import { currentBlock, resetCurrentArb, resetCurrentArbBlock, } from "../../util/block"
-import { ethers } from "hardhat"
+import { AutomationMaster__factory, IERC20__factory, LimitOrder__factory, PlaceholderOracle__factory, StopLimit__factory, StopLossLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
+import { currentBlock, resetCurrentArbBlock } from "../../util/block"
 import { expect } from "chai"
 import { stealMoney } from "../../util/money"
-import { decodeUpkeepData, generateUniTx, generateUniTxData, getGas, MasterUpkeepData, OrderType } from "../../util/msc"
+import { decodeUpkeepData, generateUniTx, generateUniTxData, getGas, MasterUpkeepData } from "../../util/msc"
 import { s, SwapParams } from "./scope"
 import { DeployContract } from "../../util/deploy"
+import { ethers } from "hardhat"
 
-
-///All tests are performed as if on s.Arbitrum
-///Testing is on the s.Arb s.WETH/s.USDC.e pool @ 500
-describe("Automated Trigger Testing on s.Arbitrum", () => {
+///All tests are performed as if on Arbitrum
+///Testing is on the Arb WETH/USDC.e pool @ 500
+describe("Automated Trigger Testing on Arbitrum", () => {
 
     before(async () => {
+        console.log("STARTING")
         await resetCurrentArbBlock(235660173)
         console.log("Testing on ARB @", (await currentBlock())?.number)
 
         //connect to signers
-        const signers = await ethers.getSigners()
-        s.Frank = signers[0]
-        s.Andy = signers[1]
-        s.Bob = signers[2]
-        s.Charles = signers[3]
+        s.signers = await ethers.getSigners()
+        s.Frank = s.signers[0]
+        s.Andy = s.signers[1]
+        s.Bob = s.signers[2]
+        s.Charles = s.signers[3]
 
 
         s.UniPool = UniswapV3Pool__factory.connect(s.pool, s.Frank)
@@ -90,14 +89,10 @@ describe("Automated Trigger Testing on s.Arbitrum", () => {
         const result = await s.Master.checkUpkeep("0x")
         expect(result.upkeepNeeded).to.eq(false)
     })
-
-
 })
 
+
 describe("Execute Limit Order Upkeep", () => {
-    ///stop-market orders simply do a market swap once the strike price is reached
-
-
     const strikeDelta = ethers.parseUnits("100", 8)
     const bips = 1000
 
@@ -117,30 +112,24 @@ describe("Execute Limit Order Upkeep", () => {
         console.log("")
         console.log("Mainly checking that the prices are in the same ballpark and more importantly the scale is correct...")
 
-        /**
-        5317945213
-        5597837000
-         */
+        //5317945213
+        //5597837000
         console.log("Decimal in > Decimal out")
-        console.log("s.WETH => s.USDC: ", await s.Master.getMinAmountReceived(s.wethAmount, await s.WETH.getAddress(), await s.USDC.getAddress(), bips))
+        console.log("WETH => s.USDC: ", await s.Master.getMinAmountReceived(s.wethAmount, await s.WETH.getAddress(), await s.USDC.getAddress(), bips))
         console.log("EXPECTED        : ", Number(ethers.parseUnits("5597.837", 6)))
         console.log("")
 
-        /**
-        1400062500000000000
-        1473750000000000000
-         */
+        //1400062500000000000
+        //1473750000000000000
         console.log("Decimal in < Decimal out")
-        console.log("s.USDC => s.WETH: ", await s.Master.getMinAmountReceived(s.usdcAmount, await s.USDC.getAddress(), await s.WETH.getAddress(), bips,))
+        console.log("USDC => s.WETH: ", await s.Master.getMinAmountReceived(s.usdcAmount, await s.USDC.getAddress(), await s.WETH.getAddress(), bips,))
         console.log("EXPECTED        : ", Number(ethers.parseUnits("1.47375", 18)))
         console.log("")
 
-        /**
-        629333739790000000000
-        661320584000000000000
-         */
+        //629333739790000000000
+        //661320584000000000000
         console.log("Decimal in == Decimal out")
-        console.log("s.ARB => UNI: ", await s.Master.getMinAmountReceived(s.arbAmount, await s.ARB.getAddress(), await s.UNI.getAddress(), bips,))
+        console.log("ARB => UNI: ", await s.Master.getMinAmountReceived(s.arbAmount, await s.ARB.getAddress(), await s.UNI.getAddress(), bips,))
         console.log("EXPECTED    : ", Number(ethers.parseUnits("661.320584", 18)))
         console.log("")
 
@@ -171,7 +160,7 @@ describe("Execute Limit Order Upkeep", () => {
 
         //verify our input token was received
         const balance = await s.WETH.balanceOf(await s.LimitOrder.getAddress())
-        expect(balance).to.eq(s.wethAmount, "s.WETH received")
+        expect(balance).to.eq(s.wethAmount, "WETH received")
 
     })
 
@@ -203,8 +192,9 @@ describe("Execute Limit Order Upkeep", () => {
         const data: MasterUpkeepData = await decodeUpkeepData(result.performData, s.Frank)
         //console.log(OrderType[data.orderType])
 
+
         //get minAmountReceived
-        const minAmountReceived = await s.Master.getMinAmountReceived(s.wethAmount, await s.WETH.getAddress(), await s.USDC.getAddress(), bips,)
+        const minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, data.bips)
 
         //generate encoded masterUpkeepData
         const encodedTxData = await generateUniTx(
@@ -214,14 +204,15 @@ describe("Execute Limit Order Upkeep", () => {
             minAmountReceived,
             data
         )
-
+            
+        console.log("Generated")
         console.log("Gas to performUpkeep: ", await getGas(await s.Master.performUpkeep(encodedTxData)))
     })
 
     it("Verify", async () => {
         //expect user to receive tokens
         const usdcBalance = await s.USDC.balanceOf(await s.Bob.getAddress())
-        expect(usdcBalance).to.be.gt(0n, "s.USDC received")
+        expect(usdcBalance).to.be.gt(0n, "USDC received")
 
         //pending order removed and length == 0
         expect(await s.LimitOrder.PendingOrderIds.length).to.eq(0, "no pending orders left")
@@ -243,6 +234,7 @@ describe("Execute Limit Order Upkeep", () => {
     })
 
 })
+
 
 
 /**
@@ -292,7 +284,7 @@ describe("Execute Stop-Limit Upkeep", () => {
 
         //verify our input token was received
         const balance = await s.WETH.balanceOf(await s.StopLimit.getAddress())
-        expect(balance).to.eq(s.wethAmount, "s.WETH received")
+        expect(balance).to.eq(s.wethAmount, "WETH received")
 
     })
 
@@ -360,7 +352,7 @@ describe("Execute Stop-Limit Upkeep", () => {
 
         //verify our input token was received
         balance = await s.WETH.balanceOf(await s.LimitOrder.getAddress())
-        expect(balance).to.eq(s.wethAmount, "s.WETH received")
+        expect(balance).to.eq(s.wethAmount, "WETH received")
 
         //cancel limit order for future tests
         await s.LimitOrder.connect(s.Bob).cancelOrder(2)
@@ -447,7 +439,7 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
 
         //verify our input token was received
         const balance = await s.WETH.balanceOf(await s.StopLossLimit.getAddress())
-        expect(balance).to.be.closeTo(s.wethAmount, 200000000000000000n, "s.WETH received")
+        expect(balance).to.be.closeTo(s.wethAmount, 200000000000000000n, "WETH received")
 
     })
 
@@ -495,7 +487,7 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
         const data: MasterUpkeepData = await decodeUpkeepData(result.performData, s.Frank)
 
         //get minAmountReceived
-        const minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, await s.WETH.getAddress(), await s.USDC.getAddress(), stopBips)
+        const minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, data.bips)
 
         //generate encoded masterUpkeepData
         const encodedTxData = await generateUniTx(
@@ -512,7 +504,7 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
     it("Verify", async () => {
         //expect user to receive tokens
         const usdcBalance = await s.USDC.balanceOf(await s.Bob.getAddress())
-        expect(usdcBalance).to.be.gt(0n, "s.USDC received")
+        expect(usdcBalance).to.be.gt(0n, "USDC received")
 
         //pending order removed and length == 0
         expect(await s.StopLossLimit.PendingOrderIds.length).to.eq(0, "no pending orders left")
