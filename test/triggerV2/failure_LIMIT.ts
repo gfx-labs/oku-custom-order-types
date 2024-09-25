@@ -189,21 +189,16 @@ describe("Test for failure - LIMIT", () => {
         expect(pendingOrders[Number(data.pendingOrderIdx)]).to.eq(andyOrder, "Andy's order is being filled")
 
         //now that we confirmed we are filling Andy's order,
-
         //how much weth is on the contract, relative to how much we are supposed to be allowed to send (andy's order.amountIn)?
         const totalWeths = await s.WETH.balanceOf(await s.LimitOrder.getAddress())
-        const amountIn = data.amountIn
+        const expectedAmountIn = data.amountIn
+        const expectedRemaining = totalWeths - expectedAmountIn
 
-        console.log("TOTAL: ", ethers.formatEther(totalWeths))
-        console.log("ANDYS: ", ethers.formatEther(amountIn))
-
-        //data.amountIn += ethers.parseEther("0.5")//increase the amount we pass in to encoded data
-
-        console.log("FinalAmountIn: ", ethers.formatEther(data.amountIn))
+        //inject malicious amount into the tx data
+        data.amountIn += ethers.parseEther("5")//increase the amount we pass in to encoded data
 
         //try to fill
         let minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, data.bips)
-
         let encodedTxData = await generateUniTx(
             s.router02,
             s.UniPool,
@@ -211,15 +206,29 @@ describe("Test for failure - LIMIT", () => {
             minAmountReceived,
             data
         )
+        expect(s.Master.performUpkeep(encodedTxData)).to.be.revertedWith("over spend")
 
+        //now try to fill with mismatched amountIn, and receive refund
+        const underFillAmount = ethers.parseEther("0.01")
+
+        let initBalance = await s.WETH.balanceOf(await s.Andy.getAddress())
+
+        data.amountIn = expectedAmountIn - underFillAmount
+        minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, data.bips)
+        encodedTxData = await generateUniTx(
+            s.router02,
+            s.UniPool,
+            await s.LimitOrder.getAddress(),
+            minAmountReceived,
+            data
+        )
         await s.Master.performUpkeep(encodedTxData)
-
-        //weth empty?
-        let balance = await s.WETH.balanceOf(await s.LimitOrder.getAddress())
-        console.log("REMAIN: ", ethers.formatEther(balance))//BIG TODO this is now less than it should be, meaning that Andy used someone else's funds by encoding data dishonestly 
+        const delta = (await s.WETH.balanceOf(await s.Andy.getAddress())) - initBalance
+        expect(delta).to.eq(underFillAmount, "Refund issued")
 
 
     })
 
 })
+
 

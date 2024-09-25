@@ -172,7 +172,6 @@ contract LimitOrder is Ownable, ILimitOrder {
     /// pendingOrderIdx is the index of the pending order we are executing,
     ///this pending order is removed from the array via array mutation
     function performUpkeep(bytes calldata performData) external override {
-        console.log("PERFORM");
         MasterUpkeepData memory data = abi.decode(
             performData,
             (MasterUpkeepData)
@@ -188,6 +187,7 @@ contract LimitOrder is Ownable, ILimitOrder {
         require(inRange, "order ! in range");
 
         //update accounting
+        uint256 initialTokenIn = order.tokenIn.balanceOf(address(this));
         uint256 initialTokenOut = order.tokenOut.balanceOf(address(this));
 
         //todo use approval as a mechanism in order to prevent use of unauthorized funds? 
@@ -198,6 +198,9 @@ contract LimitOrder is Ownable, ILimitOrder {
         //perform the call
         (bool success, bytes memory result) = data.target.call(data.txData);
         if (success) {
+            uint256 finalTokenIn = order.tokenIn.balanceOf(address(this));
+            require(finalTokenIn >= initialTokenIn - order.amountIn, "over spend");
+
             uint256 finalTokenOut = order.tokenOut.balanceOf(address(this));
 
             //if success, we expect tokenIn balance to decrease by amountIn
@@ -213,7 +216,7 @@ contract LimitOrder is Ownable, ILimitOrder {
                 "Too Little Received"
             );
 
-            console.log("Amount Received: ", finalTokenOut - initialTokenOut); //todo by changing the uni tx data, 5599907018 => 7296655519
+            //todo//console.log("Amount Received: ", finalTokenOut - initialTokenOut); //todo by changing the uni tx data, 5599907018 => 7296655519
 
             //remove from pending array
             PendingOrderIds = ArrayMutation.removeFromArray(
@@ -225,9 +228,16 @@ contract LimitOrder is Ownable, ILimitOrder {
                 order.recipient,
                 finalTokenOut - initialTokenOut
             );
-        }
-        console.log("Success: ", success);
 
+            //refund any tokenIn remianing
+            //should generally be 0, exactInput for tokenIn should be used for swaps where possible
+            if(finalTokenIn != initialTokenIn - order.amountIn){
+                order.tokenIn.safeTransfer(
+                    order.recipient,
+                    order.amountIn - (initialTokenIn - finalTokenIn)
+                );
+            }
+        }
         //emit
         emit OrderProcessed(order.orderId, success, result);
     }

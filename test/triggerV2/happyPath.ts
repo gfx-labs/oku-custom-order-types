@@ -22,6 +22,7 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         s.Andy = s.signers[1]
         s.Bob = s.signers[2]
         s.Charles = s.signers[3]
+        s.Steve = s.signers[4]
 
 
         s.UniPool = UniswapV3Pool__factory.connect(s.pool, s.Frank)

@@ -27,11 +27,11 @@ contract StopLossLimit is Ownable, IStopLossLimit {
 
     AutomationMaster public immutable MASTER;
 
-    uint256 public stopLossLimitOrderCount;
+    uint256 public orderCount;
 
     uint256[] public PendingOrderIds;
 
-    mapping(uint256 => Order) public stopLossLimitOrders;
+    mapping(uint256 => Order) public orders;
 
     constructor(AutomationMaster _master) {
         MASTER = _master;
@@ -67,14 +67,19 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             swapParams.swapAmountIn
         );
 
-        (bool success, , uint256 finalAmountOut) = execute(
-            swapParams.swapTarget,
-            swapParams.txData,
-            swapParams.swapAmountIn,
-            swapParams.swapTokenIn,
-            tokenIn,
-            swapParams.swapBips
-        );
+        (
+            bool success,
+            ,
+            uint256 finalAmountOut,
+            uint256 tokenInRefund
+        ) = execute(
+                swapParams.swapTarget,
+                swapParams.txData,
+                swapParams.swapAmountIn,
+                swapParams.swapTokenIn,
+                tokenIn,
+                swapParams.swapBips
+            );
 
         require(success, "swap failed");
 
@@ -88,6 +93,10 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             slippageBipsStrike,
             slippageBipsStop
         );
+
+        if (tokenInRefund != 0) {
+            swapParams.swapTokenIn.safeTransfer(recipient, tokenInRefund);
+        }
     }
 
     ///@param strikePrice is in terms of exchange rate of tokenIn / tokenOut,
@@ -138,7 +147,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         );
 
         require(
-            stopLossLimitOrderCount < MASTER.maxPendingOrders(),
+            orderCount < MASTER.maxPendingOrders(),
             "Max Order Count Reached"
         );
         require(
@@ -149,9 +158,9 @@ contract StopLossLimit is Ownable, IStopLossLimit {
 
         //verify order amount is at least the minimum todo check here or only when limit order is created?
         MASTER.checkMinOrderSize(tokenIn, amountIn);
-        stopLossLimitOrderCount++;
-        stopLossLimitOrders[stopLossLimitOrderCount] = Order({
-            orderId: stopLossLimitOrderCount,
+        orderCount++;
+        orders[orderCount] = Order({
+            orderId: orderCount,
             strikePrice: strikePrice,
             stopPrice: stopPrice,
             amountIn: amountIn,
@@ -163,20 +172,20 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) > strikePrice //exchangeRate in/out > strikePrice
         });
 
-        PendingOrderIds.push(stopLossLimitOrderCount);
+        PendingOrderIds.push(orderCount);
 
-        emit OrderCreated(stopLossLimitOrderCount);
+        emit OrderCreated(orderCount);
     }
 
     function adminCancelOrder(uint256 orderId) external onlyOwner {
-        Order memory order = stopLossLimitOrders[orderId];
+        Order memory order = orders[orderId];
         require(_cancelOrder(order), "Order not active");
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
     function cancelOrder(uint256 orderId) external {
-        Order memory order = stopLossLimitOrders[orderId];
+        Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(order), "Order not active");
     }
@@ -213,8 +222,10 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         returns (bool upkeepNeeded, bytes memory performData)
     {
         for (uint i = 0; i < PendingOrderIds.length; i++) {
-            Order memory order = stopLossLimitOrders[PendingOrderIds[i]];
-            (bool inRange, bool strike, uint256 exchangeRate) = checkInRange(order);
+            Order memory order = orders[PendingOrderIds[i]];
+            (bool inRange, bool strike, uint256 exchangeRate) = checkInRange(
+                order
+            );
             if (inRange) {
                 return (
                     true,
@@ -227,7 +238,9 @@ contract StopLossLimit is Ownable, IStopLossLimit {
                             orderId: order.orderId,
                             tokenIn: order.tokenIn,
                             tokenOut: order.tokenOut,
-                            bips: strike ? order.slippageBipsStrike : order.slippageBipsStop,//bips based on strike or stop fill
+                            bips: strike
+                                ? order.slippageBipsStrike
+                                : order.slippageBipsStop, //bips based on strike or stop fill
                             amountIn: order.amountIn,
                             exchangeRate: exchangeRate
                         })
@@ -250,7 +263,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             performData,
             (MasterUpkeepData)
         );
-        Order memory order = stopLossLimitOrders[
+        Order memory order = orders[
             PendingOrderIds[data.pendingOrderIdx]
         ];
         //deduce if we are filling stop or strike
@@ -262,14 +275,19 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         strike ? bips = order.slippageBipsStrike : bips = order
             .slippageBipsStop;
 
-        (bool success, bytes memory result, uint256 finalAmountOut) = execute(
-            data.target,
-            data.txData,
-            order.amountIn,
-            order.tokenIn,
-            order.tokenOut,
-            order.slippageBipsStop
-        );
+        (
+            bool success,
+            bytes memory result,
+            uint256 finalAmountOut,
+            uint256 tokenInRefund
+        ) = execute(
+                data.target,
+                data.txData,
+                order.amountIn,
+                order.tokenIn,
+                order.tokenOut,
+                order.slippageBipsStop
+            );
 
         //handle accounting
         if (success) {
@@ -281,6 +299,10 @@ contract StopLossLimit is Ownable, IStopLossLimit {
 
             //send tokenOut to recipient
             order.tokenOut.safeTransfer(order.recipient, finalAmountOut);
+
+            if (tokenInRefund != 0) {
+                order.tokenIn.safeTransfer(order.recipient, tokenInRefund);
+            }
         }
 
         //emit
@@ -297,9 +319,15 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         uint32 bips
     )
         internal
-        returns (bool success, bytes memory result, uint256 finalAmountOut)
+        returns (
+            bool success,
+            bytes memory result,
+            uint256 finalAmountOut,
+            uint256 tokenInRefund
+        )
     {
         //update accounting
+        uint256 initialTokenIn = tokenIn.balanceOf(address(this));
         uint256 initialTokenOut = tokenOut.balanceOf(address(this));
 
         //approve
@@ -309,6 +337,8 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         (success, result) = target.call(txData);
 
         if (success) {
+            uint256 finalTokenIn = tokenIn.balanceOf(address(this));
+            require(finalTokenIn >= initialTokenIn - amountIn, "over spend");
             uint256 finalTokenOut = tokenOut.balanceOf(address(this));
 
             //if success, we expect tokenIn balance to decrease by amountIn
@@ -325,6 +355,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             );
 
             finalAmountOut = finalTokenOut - initialTokenOut;
+            tokenInRefund = amountIn - (initialTokenIn - finalTokenIn);
         }
     }
 

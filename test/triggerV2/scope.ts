@@ -27,7 +27,8 @@ export class TestScope {
     signers!: Signer[]
 
     Frank!: Signer
-    Andy!: Signer
+    Andy!: Signer //tests for failure on LIMIT
+    Steve!: Signer //tests for failure on STOP_LOSS_LIMIT
     Bob!: Signer
     Charles!: Signer
 
@@ -45,7 +46,7 @@ export class TestScope {
     arbAmount = ethers.parseEther("6580")
 
     andyWeth = this.wethAmount * 20n
-
+    steveWeth = this.andyWeth
 
     //CL oracles are priced @ 1e8
     initialEthPrice = ethers.parseUnits("3391.95", 8)
