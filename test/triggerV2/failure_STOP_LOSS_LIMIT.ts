@@ -1,4 +1,4 @@
-import { AutomationMaster__factory, IERC20__factory, LimitOrder__factory, PlaceholderOracle__factory, StopLimit__factory, StopLossLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
+import { AutomationMaster__factory, IERC20__factory, PlaceholderOracle__factory, StopLimit__factory, StopLossLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
 import { currentBlock, resetCurrentArbBlock } from "../../util/block"
 import { expect } from "chai"
 import { stealMoney } from "../../util/money"

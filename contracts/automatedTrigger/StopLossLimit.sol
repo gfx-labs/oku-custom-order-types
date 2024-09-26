@@ -29,7 +29,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
 
     uint256 public orderCount;
 
-    uint256[] public PendingOrderIds;
+    uint256[] public pendingOrderIds;
 
     mapping(uint256 => Order) public orders;
 
@@ -37,12 +37,8 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         MASTER = _master;
     }
 
-    function getPendingOrders()
-        external
-        view
-        returns (uint256[] memory pendingOrderIds)
-    {
-        return PendingOrderIds;
+    function getPendingOrders() external view returns (uint256[] memory) {
+        return pendingOrderIds;
     }
 
     function createOrderWithSwap(
@@ -172,7 +168,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) > strikePrice //exchangeRate in/out > strikePrice
         });
 
-        PendingOrderIds.push(orderCount);
+        pendingOrderIds.push(orderCount);
 
         emit OrderCreated(orderCount);
     }
@@ -191,12 +187,12 @@ contract StopLossLimit is Ownable, IStopLossLimit {
     }
 
     function _cancelOrder(Order memory order) internal returns (bool) {
-        for (uint i = 0; i < PendingOrderIds.length; i++) {
-            if (PendingOrderIds[i] == order.orderId) {
+        for (uint i = 0; i < pendingOrderIds.length; i++) {
+            if (pendingOrderIds[i] == order.orderId) {
                 //remove from pending array
-                PendingOrderIds = ArrayMutation.removeFromArray(
+                pendingOrderIds = ArrayMutation.removeFromArray(
                     i,
-                    PendingOrderIds
+                    pendingOrderIds
                 );
 
                 //refund tokenIn amountIn to recipient
@@ -221,8 +217,8 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        for (uint i = 0; i < PendingOrderIds.length; i++) {
-            Order memory order = orders[PendingOrderIds[i]];
+        for (uint i = 0; i < pendingOrderIds.length; i++) {
+            Order memory order = orders[pendingOrderIds[i]];
             (bool inRange, bool strike, uint256 exchangeRate) = checkInRange(
                 order
             );
@@ -263,9 +259,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             performData,
             (MasterUpkeepData)
         );
-        Order memory order = orders[
-            PendingOrderIds[data.pendingOrderIdx]
-        ];
+        Order memory order = orders[pendingOrderIds[data.pendingOrderIdx]];
         //deduce if we are filling stop or strike
         (bool inRange, bool strike, ) = checkInRange(order);
         require(inRange, "order ! in range");
@@ -292,9 +286,9 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         //handle accounting
         if (success) {
             //remove from pending array
-            PendingOrderIds = ArrayMutation.removeFromArray(
+            pendingOrderIds = ArrayMutation.removeFromArray(
                 data.pendingOrderIdx,
-                PendingOrderIds
+                pendingOrderIds
             );
 
             //send tokenOut to recipient

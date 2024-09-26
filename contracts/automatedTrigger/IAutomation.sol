@@ -11,7 +11,6 @@ Make sure that swap data on performUpkeep can only actually perform upkeep on th
  */
 interface IAutomation is AutomationCompatibleInterface {
     enum OrderType {
-        LIMIT,
         STOP_LIMIT,
         STOP_LOSS_LIMIT
     }
@@ -29,7 +28,7 @@ interface IAutomation is AutomationCompatibleInterface {
         uint256 exchangeRate; //todo consider changing size for this as length is always 8 decimals
     }
 
-    event OrderProcessed(uint256 orderId, bool success, bytes result);//todo include finalAmountOut?
+    event OrderProcessed(uint256 orderId, bool success, bytes result); //todo include finalAmountOut?
     event OrderCreated(uint256 orderId);
     event OrderCancelled(uint256 orderId);
 }
@@ -61,23 +60,29 @@ interface IStopLimit is IAutomation {
 
     struct Order {
         uint256 orderId;
+        uint256 stopLimitPrice;
         uint256 stopPrice;
-        uint256 strikePrice; //defined by exchange rate of tokenIn / tokenOut
+        uint256 strikePrice; 
         uint256 amountIn;
         IERC20 tokenIn;
         IERC20 tokenOut;
-        address recipient; //addr to receive swap results
-        uint88 slippageBips;
+        address recipient;
+        uint32 strikeSlippage;
+        uint32 stopSlippage;
         bool direction;
     }
+
+    ///@notice if no stop loss is desired, set to 0
     function createOrder(
-        uint256 stopPrice,
+        uint256 stopLimitPrice,
         uint256 strikePrice,
+        uint256 stopPrice,
         uint256 amountIn,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint80 slippageBips
+        uint32 strikeSlipapge,
+        uint32 stopSlippage
     ) external;
 }
 

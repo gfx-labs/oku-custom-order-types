@@ -1,4 +1,4 @@
-import { AutomationMaster__factory, IERC20__factory, LimitOrder__factory, PlaceholderOracle__factory, StopLimit__factory, StopLossLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
+import { AutomationMaster__factory, IERC20__factory, PlaceholderOracle__factory, StopLimit__factory, StopLossLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
 import { currentBlock, resetCurrentArbBlock } from "../../util/block"
 import { expect } from "chai"
 import { stealMoney } from "../../util/money"
@@ -37,20 +37,17 @@ describe("Automated Trigger Testing on Arbitrum", () => {
     it("Deploy", async () => {
         //deploy master
         s.Master = await DeployContract(new AutomationMaster__factory(s.Frank), s.Frank)
-
-        //Deploy limit order
-        s.LimitOrder = await DeployContract(new LimitOrder__factory(s.Frank), s.Frank, await s.Master.getAddress())
+        //deploy stop loss limit
+        s.StopLossLimit = await DeployContract(new StopLossLimit__factory(s.Frank), s.Frank, await s.Master.getAddress())
 
         //deploy stop limit
         s.StopLimit = await DeployContract(
             new StopLimit__factory(s.Frank),
             s.Frank,
             await s.Master.getAddress(),
-            await s.LimitOrder.getAddress()
+            await s.StopLossLimit.getAddress()
         )
 
-        //deploy stop loss limit
-        s.StopLossLimit = await DeployContract(new StopLossLimit__factory(s.Frank), s.Frank, await s.Master.getAddress())
 
         //deploy test oracles
         s.wethOracle = await new PlaceholderOracle__factory(s.Frank).deploy(await s.WETH.getAddress())
@@ -66,7 +63,6 @@ describe("Automated Trigger Testing on Arbitrum", () => {
 
         //register sup keepers
         await s.Master.connect(s.Frank).registerSubKeepers(
-            await s.LimitOrder.getAddress(),
             await s.StopLimit.getAddress(),
             await s.StopLossLimit.getAddress()
         )
@@ -91,152 +87,6 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         expect(result.upkeepNeeded).to.eq(false)
     })
 })
-
-
-describe("Execute Limit Order Upkeep", () => {
-    const strikeDelta = ethers.parseUnits("100", 8)
-    const bips = 1000
-
-    //setup
-    before(async () => {
-        //steal money for s.Bob
-        await stealMoney(s.wethWhale, await s.Bob.getAddress(), await s.WETH.getAddress(), s.wethAmount)
-        //set test oracle price
-        await s.wethOracle.setPrice(s.initialEthPrice)
-        await s.usdcOracle.setPrice(s.initialUsdcPrice)
-        await s.uniOracle.setPrice(s.initialUniPrice)
-        await s.arbOracle.setPrice(s.initialArbPrice)
-
-    })
-
-    it("Verify exchange rate and minAmountReceived logic", async () => {
-        console.log("")
-        console.log("Mainly checking that the prices are in the same ballpark and more importantly the scale is correct...")
-
-        //5317945213
-        //5597837000
-        console.log("Decimal in > Decimal out")
-        console.log("WETH => s.USDC: ", await s.Master.getMinAmountReceived(s.wethAmount, await s.WETH.getAddress(), await s.USDC.getAddress(), bips))
-        console.log("EXPECTED        : ", Number(ethers.parseUnits("5597.837", 6)))
-        console.log("")
-
-        //1400062500000000000
-        //1473750000000000000
-        console.log("Decimal in < Decimal out")
-        console.log("USDC => s.WETH: ", await s.Master.getMinAmountReceived(s.usdcAmount, await s.USDC.getAddress(), await s.WETH.getAddress(), bips,))
-        console.log("EXPECTED        : ", Number(ethers.parseUnits("1.47375", 18)))
-        console.log("")
-
-        //629333739790000000000
-        //661320584000000000000
-        console.log("Decimal in == Decimal out")
-        console.log("ARB => UNI: ", await s.Master.getMinAmountReceived(s.arbAmount, await s.ARB.getAddress(), await s.UNI.getAddress(), bips,))
-        console.log("EXPECTED    : ", Number(ethers.parseUnits("661.320584", 18)))
-        console.log("")
-
-
-    })
-
-
-    it("Create stop-market order WETH => USDC", async () => {
-        const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
-        await s.WETH.connect(s.Bob).approve(await s.LimitOrder.getAddress(), s.wethAmount)
-        await s.LimitOrder.connect(s.Bob).createOrder(
-            currentPrice - strikeDelta,
-            s.wethAmount,
-            await s.WETH.getAddress(),
-            await s.USDC.getAddress(),
-            await s.Bob.getAddress(),
-            bips
-        )
-
-        const filter = s.LimitOrder.filters.OrderCreated
-        const events = await s.LimitOrder.queryFilter(filter, -1)
-        const event = events[0].args
-        expect(Number(event[0])).to.eq(1, "First order Id")
-
-        //verify pending order exists
-        const list = await s.LimitOrder.getPendingOrders()
-        expect(list.length).to.eq(1, "1 pending order")
-
-        //verify our input token was received
-        const balance = await s.WETH.balanceOf(await s.LimitOrder.getAddress())
-        expect(balance).to.eq(s.wethAmount, "WETH received")
-
-    })
-
-
-    it("Check upkeep", async () => {
-
-        //should be no upkeep needed yet
-        let initial = await s.Master.checkUpkeep("0x")
-        expect(initial.upkeepNeeded).to.eq(false)
-        initial = await s.LimitOrder.checkUpkeep("0x")
-        expect(initial.upkeepNeeded).to.eq(false)
-
-        //reduce price to strike price
-        await s.wethOracle.setPrice(s.initialEthPrice - (strikeDelta))
-
-        //check upkeep
-        let result = await s.Master.checkUpkeep("0x")
-        expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
-        result = await s.LimitOrder.checkUpkeep("0x")
-        expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
-
-    })
-
-    it("Perform Upkeep", async () => {
-        //check upkeep
-        const result = await s.Master.checkUpkeep("0x")
-
-        //get returned upkeep data
-        const data: MasterUpkeepData = await decodeUpkeepData(result.performData, s.Frank)
-        //console.log(OrderType[data.orderType])
-
-
-        //get minAmountReceived
-        const minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, data.bips)
-
-        //generate encoded masterUpkeepData
-        const encodedTxData = await generateUniTx(
-            s.router02,
-            s.UniPool,
-            await s.LimitOrder.getAddress(),
-            minAmountReceived,
-            data
-        )
-            
-        console.log("Generated")
-        console.log("Gas to performUpkeep: ", await getGas(await s.Master.performUpkeep(encodedTxData)))
-    })
-
-    it("Verify", async () => {
-        //expect user to receive tokens
-        const usdcBalance = await s.USDC.balanceOf(await s.Bob.getAddress())
-        expect(usdcBalance).to.be.gt(0n, "USDC received")
-
-        //pending order removed and length == 0
-        expect(await s.LimitOrder.PendingOrderIds.length).to.eq(0, "no pending orders left")
-
-        //event
-        const filter = s.LimitOrder.filters.OrderProcessed
-        const events = await s.LimitOrder.queryFilter(filter, -1)
-        const event = events[0].args
-        expect(event.orderId).to.eq(1, "Order Id 1")
-        expect(event.success).to.eq(true, "Swap succeeded")
-
-        //no tokens left on contract
-        expect(await s.WETH.balanceOf(await s.LimitOrder.getAddress())).to.eq(0n, "0 s.WETH left on contract")
-        expect(await s.USDC.balanceOf(await s.LimitOrder.getAddress())).to.eq(0n, "0 s.USDC left on contract")
-
-        //check upkeep
-        const check = await s.Master.checkUpkeep("0x")
-        expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
-    })
-
-})
-
-
 
 /**
  * stop-limit orders create a limit order once strike price is reached
@@ -267,11 +117,13 @@ describe("Execute Stop-Limit Upkeep", () => {
         await s.StopLimit.connect(s.Bob).createOrder(
             currentPrice - stopDelta,
             (currentPrice - stopDelta) + strikeDelta,
+            0n,//no stop loss
             s.wethAmount,
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Bob.getAddress(),
-            strikeBips
+            strikeBips,
+            0//no stop loss bips
         )
 
         const filter = s.StopLimit.filters.OrderCreated
@@ -308,6 +160,7 @@ describe("Execute Stop-Limit Upkeep", () => {
 
     })
 
+
     it("Perform Upkeep", async () => {
         //check upkeep
         const result = await s.Master.checkUpkeep("0x")
@@ -324,14 +177,13 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(balance).to.be.eq(0n, "WETH removed from stopLimit")
 
         //pending order removed and length == 0
-        expect(await s.StopLimit.PendingOrderIds.length).to.eq(0, "no pending orders left")
+        expect(await s.StopLimit.pendingOrderIds.length).to.eq(0, "no pending orders left")
 
         //stop-limit order filled event
         const opFilter = s.StopLimit.filters.StopLimitOrderProcessed
         const opEvents = await s.StopLimit.queryFilter(opFilter, -1)
         const opEvent = opEvents[0].args
         expect(opEvent.orderId).to.eq(1, "Order Id 1")
-
 
         //no tokens left on contract
         expect(await s.WETH.balanceOf(await s.StopLimit.getAddress())).to.eq(0n, "0 WETH left on contract")
@@ -342,26 +194,22 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
 
 
-        const filter = s.LimitOrder.filters.OrderCreated
-        const events = await s.LimitOrder.queryFilter(filter, -1)
+        const filter = s.StopLossLimit.filters.OrderCreated
+        const events = await s.StopLossLimit.queryFilter(filter, -1)
         const event = events[0].args
-        expect(Number(event[0])).to.eq(2, "Second order Id")
+        expect(Number(event[0])).to.eq(1, "First order Id")
 
         //verify pending order exists
-        const list = await s.LimitOrder.getPendingOrders()
+        const list = await s.StopLossLimit.getPendingOrders()
         expect(list.length).to.eq(1, "1 pending order")
 
         //verify our input token was received
-        balance = await s.WETH.balanceOf(await s.LimitOrder.getAddress())
+        balance = await s.WETH.balanceOf(await s.StopLossLimit.getAddress())
         expect(balance).to.eq(s.wethAmount, "WETH received")
 
         //cancel limit order for future tests
-        await s.LimitOrder.connect(s.Bob).cancelOrder(2)
-
-
+        await s.StopLossLimit.connect(s.Bob).cancelOrder(1)
     })
-
-
 })
 
 
@@ -432,7 +280,7 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
         const filter = s.StopLossLimit.filters.OrderCreated
         const events = await s.StopLossLimit.queryFilter(filter, -1)
         const event = events[0].args
-        expect(Number(event[0])).to.eq(1, "First order Id")
+        expect(Number(event[0])).to.eq(2, "Second order Id")
 
         //verify pending order exists
         const list = await s.StopLossLimit.getPendingOrders()
@@ -508,13 +356,13 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
         expect(usdcBalance).to.be.gt(0n, "USDC received")
 
         //pending order removed and length == 0
-        expect(await s.StopLossLimit.PendingOrderIds.length).to.eq(0, "no pending orders left")
+        expect(await s.StopLossLimit.pendingOrderIds.length).to.eq(0, "no pending orders left")
 
         //event
         const filter = s.StopLossLimit.filters.OrderProcessed
         const events = await s.StopLossLimit.queryFilter(filter, -1)
         const event = events[0].args
-        expect(event.orderId).to.eq(1, "Order Id 1")
+        expect(event.orderId).to.eq(2, "Order Id 2")
         expect(event.success).to.eq(true, "Swap succeeded")
 
         //no tokens left on contract

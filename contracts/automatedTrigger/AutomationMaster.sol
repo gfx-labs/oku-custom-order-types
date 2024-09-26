@@ -28,18 +28,15 @@ contract AutomationMaster is IAutomation, Ownable {
 
     uint256 public minOrderSize;
 
-    ILimitOrder public LIMIT_ORDER_CONTRACT;
     IStopLimit public STOP_LIMIT_CONTRACT;
     IStopLossLimit public STOP_LOSS_LIMIT_CONTRACT;
 
     mapping(IERC20 => IOracleRelay) public oracles;
 
     function registerSubKeepers(
-        ILimitOrder limitOrderContract,
         IStopLimit stopLimitContract,
         IStopLossLimit stopLossLimitContract
     ) external onlyOwner {
-        LIMIT_ORDER_CONTRACT = limitOrderContract;
         STOP_LIMIT_CONTRACT = stopLimitContract;
         STOP_LOSS_LIMIT_CONTRACT = stopLossLimitContract;
     }
@@ -146,14 +143,6 @@ contract AutomationMaster is IAutomation, Ownable {
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        //todo checkUpkeep on sub keepers
-
-        //check limit order
-        (upkeepNeeded, performData) = LIMIT_ORDER_CONTRACT.checkUpkeep("0x");
-        if (upkeepNeeded) {
-            return (true, performData);
-        }
-
         //check stop order
         (upkeepNeeded, performData) = STOP_LIMIT_CONTRACT.checkUpkeep("0x");
         if (upkeepNeeded) {
@@ -173,12 +162,6 @@ contract AutomationMaster is IAutomation, Ownable {
             performData,
             (MasterUpkeepData)
         );
-
-        //if limit order, we need externally derived txData and target
-        if (data.orderType == OrderType.LIMIT) {
-            //do limit
-            LIMIT_ORDER_CONTRACT.performUpkeep(performData);
-        }
 
         //if stop order, we directly pass the upkeep data to the stop order contract
         if (data.orderType == OrderType.STOP_LIMIT) {

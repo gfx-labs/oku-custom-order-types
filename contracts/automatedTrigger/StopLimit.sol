@@ -3,7 +3,6 @@ pragma solidity ^0.8.19;
 
 import "./IAutomation.sol";
 import "./AutomationMaster.sol";
-//import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "../libraries/ArrayMutation.sol";
 
 import "../interfaces/ILimitOrderRegistry.sol";
@@ -18,44 +17,45 @@ import "../oracle/IOracleRelay.sol";
 ///testing
 import "hardhat/console.sol";
 
-///@notice This contract owns and handles all logic associated with STOP_MARKET orders
-///@notice STOP_MARKET orders check an external oracle for a pre-determined strike price,
-///once this price is reached, a limit order is made
+///@notice This contract owns and handles all logic associated with STOP_LIMIT orders
+///STOP_LIMIT orders create a new limit order order once filled
 contract StopLimit is Ownable, IStopLimit {
     using SafeERC20 for IERC20;
 
     AutomationMaster public immutable MASTER;
-    ILimitOrder public immutable LIMIT_ORDER_CONTRACT;
+    IStopLossLimit public immutable SLL_CONTRACT;
 
-    uint256 public stopOrderCount;
+    uint256 public orderCount;
 
-    uint256[] public PendingOrderIds;
+    uint256[] public pendingOrderIds;
 
-    mapping(uint256 => Order) public stopLimitOrders;
+    mapping(uint256 => Order) public orders;
 
-    constructor(AutomationMaster _master, ILimitOrder _limitOrder) {
+    constructor(AutomationMaster _master, IStopLossLimit _sll) {
         MASTER = _master;
-        LIMIT_ORDER_CONTRACT = _limitOrder;
+        SLL_CONTRACT = _sll;
     }
 
     function getPendingOrders()
         external
         view
-        returns (uint256[] memory pendingOrderIds)
+        returns (uint256[] memory)
     {
-        return PendingOrderIds;
+        return pendingOrderIds;
     }
 
-    ///@param stopPrice price at which the limit order is created
-    ///@param strikePrice price at which the limit order is closed
+    ///@param stopLimitPrice price at which the limit order is created
+    ///@param strikePrice or @param stopPrice is the price at which the limit order is closed
     function createOrder(
-        uint256 stopPrice,
+        uint256 stopLimitPrice,
         uint256 strikePrice,
+        uint256 stopPrice,
         uint256 amountIn,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint80 slippageBips
+        uint32 strikeSlipapge,
+        uint32 stopSlippage
     ) external override {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
@@ -68,33 +68,35 @@ contract StopLimit is Ownable, IStopLimit {
         );
 
         require(
-            stopOrderCount < MASTER.maxPendingOrders(),
+            orderCount < MASTER.maxPendingOrders(),
             "Max Order Count Reached"
         );
-        require(slippageBips <= MASTER.MAX_BIPS(), "Invalid Slippage BIPS");
+        require(strikeSlipapge <= MASTER.MAX_BIPS() && stopSlippage <= MASTER.MAX_BIPS(), "invalid slippage");
 
         //verify order amount is at least the minimum todo check here or only when limit order is created?
         MASTER.checkMinOrderSize(tokenIn, amountIn);
 
-        stopOrderCount++;
-        stopLimitOrders[stopOrderCount] = Order({
-            orderId: stopOrderCount,
+        orderCount++;
+        orders[orderCount] = Order({
+            orderId: orderCount,
+            stopLimitPrice: stopLimitPrice,
             stopPrice: stopPrice,
             strikePrice: strikePrice,
             amountIn: amountIn,
             tokenIn: tokenIn,
             tokenOut: tokenOut,
-            slippageBips: slippageBips,
+            strikeSlippage: strikeSlipapge,
+            stopSlippage: stopSlippage,
             recipient: recipient,
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) > stopPrice //compare to stop price for this order's direction
         });
-        PendingOrderIds.push(stopOrderCount);
+        pendingOrderIds.push(orderCount);
 
         //take asset
         tokenIn.safeTransferFrom(recipient, address(this), amountIn);
 
         //emit
-        emit OrderCreated(stopOrderCount);
+        emit OrderCreated(orderCount);
     }
 
     function adminCancelOrder(uint256 orderId) external onlyOwner {
@@ -104,19 +106,19 @@ contract StopLimit is Ownable, IStopLimit {
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
     function cancelOrder(uint256 orderId) external {
-        Order memory order = stopLimitOrders[orderId];
+        Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(orderId), "Order not active");
     }
 
     function _cancelOrder(uint256 orderId) internal returns (bool) {
-        Order memory order = stopLimitOrders[orderId];
-        for (uint i = 0; i < PendingOrderIds.length; i++) {
-            if (PendingOrderIds[i] == orderId) {
+        Order memory order = orders[orderId];
+        for (uint i = 0; i < pendingOrderIds.length; i++) {
+            if (pendingOrderIds[i] == orderId) {
                 //remove from pending array
-                PendingOrderIds = ArrayMutation.removeFromArray(
+                pendingOrderIds = ArrayMutation.removeFromArray(
                     i,
-                    PendingOrderIds
+                    pendingOrderIds
                 );
                 order.tokenIn.safeTransfer(order.recipient, order.amountIn);
 
@@ -140,8 +142,8 @@ contract StopLimit is Ownable, IStopLimit {
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        for (uint256 i = 0; i < PendingOrderIds.length; i++) {
-            Order memory order = stopLimitOrders[PendingOrderIds[i]];
+        for (uint256 i = 0; i < pendingOrderIds.length; i++) {
+            Order memory order = orders[pendingOrderIds[i]];
             (bool inRange, uint256 exchangeRate) = checkInRange(order);
             if (inRange) {
                 return (
@@ -149,13 +151,13 @@ contract StopLimit is Ownable, IStopLimit {
                     abi.encode(
                         MasterUpkeepData({
                             orderType: OrderType.STOP_LIMIT,
-                            target: address(0x0),
-                            txData: "0x",
+                            target: address(0x0),//N/A
+                            txData: "0x",//N/A
                             pendingOrderIdx: i,
                             orderId: order.orderId,
                             tokenIn: order.tokenIn,
                             tokenOut: order.tokenOut,
-                            bips: order.slippageBips,
+                            bips: 0,//N/A
                             amountIn: order.amountIn,
                             exchangeRate: exchangeRate
                         })
@@ -171,8 +173,8 @@ contract StopLimit is Ownable, IStopLimit {
             performData,
             (MasterUpkeepData)
         );
-        Order memory order = stopLimitOrders[
-            PendingOrderIds[data.pendingOrderIdx]
+        Order memory order = orders[
+            pendingOrderIds[data.pendingOrderIdx]
         ];
 
         //confirm order is in range to prevent improper fill
@@ -180,25 +182,27 @@ contract StopLimit is Ownable, IStopLimit {
         require(inRange, "order ! in range");
 
         //remove from pending array
-        PendingOrderIds = ArrayMutation.removeFromArray(
+        pendingOrderIds = ArrayMutation.removeFromArray(
             data.pendingOrderIdx,
-            PendingOrderIds
+            pendingOrderIds
         );
 
         //approve
         updateApproval(
-            address(LIMIT_ORDER_CONTRACT),
+            address(SLL_CONTRACT),
             order.tokenIn,
             order.amountIn
         );
 
-        LIMIT_ORDER_CONTRACT.createOrder(
+        SLL_CONTRACT.createOrder(
             order.strikePrice,
+            order.stopPrice,
             order.amountIn,
             order.tokenIn,
             order.tokenOut,
             order.recipient,
-            order.slippageBips
+            order.strikeSlippage,
+            order.stopSlippage
         );
         emit StopLimitOrderProcessed(order.orderId);
     }
@@ -226,11 +230,11 @@ contract StopLimit is Ownable, IStopLimit {
     ) internal view returns (bool inRange, uint256 exchangeRate) {
         exchangeRate = MASTER.getExchangeRate(order.tokenIn, order.tokenOut);
         if (order.direction) {
-            if (exchangeRate <= order.stopPrice) {
+            if (exchangeRate <= order.stopLimitPrice) {
                 inRange = true;
             }
         } else {
-            if (exchangeRate >= order.stopPrice) {
+            if (exchangeRate >= order.stopLimitPrice) {
                 inRange = true;
             }
         }
