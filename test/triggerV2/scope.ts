@@ -30,7 +30,8 @@ export class TestScope {
     Andy!: Signer //tests for failure on LIMIT
     Steve!: Signer //tests for failure on STOP_LOSS_LIMIT
     Bob!: Signer
-    Charles!: Signer
+    Charles!: Signer//test swap-on-fill
+    Ian!: Signer //isolated testing
 
     abi = new AbiCoder()
 

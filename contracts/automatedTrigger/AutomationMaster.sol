@@ -92,8 +92,7 @@ contract AutomationMaster is IAutomation, Ownable {
         IERC20 tokenOut,
         uint88 slippageBips
     ) external view returns (uint256 minAmountReceived) {
-        //er is 0 / 1 => tokenIn / tokenOut
-        //if tokenIn != token 0 then recip
+  
         uint256 exchangeRate = _getExchangeRate(tokenIn, tokenOut);
 
         //this assumes decimalIn == decimalOut
@@ -150,7 +149,9 @@ contract AutomationMaster is IAutomation, Ownable {
         }
 
         //check stop loss limit order
-        (upkeepNeeded, performData) = STOP_LOSS_LIMIT_CONTRACT.checkUpkeep("0x");
+        (upkeepNeeded, performData) = STOP_LOSS_LIMIT_CONTRACT.checkUpkeep(
+            "0x"
+        );
         if (upkeepNeeded) {
             return (true, performData);
         }

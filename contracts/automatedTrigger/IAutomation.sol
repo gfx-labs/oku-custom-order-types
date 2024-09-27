@@ -15,6 +15,27 @@ interface IAutomation is AutomationCompatibleInterface {
         STOP_LOSS_LIMIT
     }
 
+    /**
+        weth => usdc
+
+        I have USDC, I swap to WETH on order create
+        when order is filled by strike or stop, I swap back to USDC and close
+
+        So USDC is tokenOut and swapTokenIn
+        and WETH is tokenIn
+
+        If I had some other token I wanted to swap for eth, and then sell for USDC, this token would be swapTokenIn instead of USDC
+
+     */
+    ///@param swapTokenIn may or may not be the same as @param tokenOut
+    struct SwapParams {
+        IERC20 swapTokenIn;
+        uint256 swapAmountIn;
+        address swapTarget;
+        uint32 swapBips;
+        bytes txData;
+    }
+
     struct MasterUpkeepData {
         OrderType orderType;
         address target; //limit order swap target
@@ -69,10 +90,18 @@ interface IStopLimit is IAutomation {
         address recipient;
         uint32 strikeSlippage;
         uint32 stopSlippage;
+        uint32 swapSlippage;
         bool direction;
+        bool swapOnFill;
     }
 
     ///@notice if no stop loss is desired, set to 0
+    ///@param tokenIn asset to provide
+    ///@param tokenOut asset to receive after resulting limit order is filled
+    ///@param stopLimitPrice execution price for stop limit order
+    ///@param strikePrice execution 'take profit' price for resulting limit order 
+    ///@param stopPrice execution 'stop loss' price for resulting limit order
+    ///@param swapSlippage slippage for optional swap, only used if @param swapOnFill is true
     function createOrder(
         uint256 stopLimitPrice,
         uint256 strikePrice,
@@ -82,7 +111,9 @@ interface IStopLimit is IAutomation {
         IERC20 tokenOut,
         address recipient,
         uint32 strikeSlipapge,
-        uint32 stopSlippage
+        uint32 stopSlippage,
+        uint32 swapSlippage,
+        bool swapOnFill
     ) external;
 }
 
@@ -111,26 +142,7 @@ interface IStopLossLimit is IAutomation {
         uint32 slippageBipsStop
     ) external;
 
-    /**
-        weth => usdc
-
-        I have USDC, I swap to WETH on order create
-        when order is filled by strike or stop, I swap back to USDC and close
-
-        So USDC is tokenOut and swapTokenIn
-        and WETH is tokenIn
-
-        If I had some other token I wanted to swap for eth, and then sell for USDC, this token would be swapTokenIn instead of USDC
-
-     */
-    ///@param swapTokenIn may or may not be the same as @param tokenOut
-    struct SwapParams {
-        IERC20 swapTokenIn;
-        uint256 swapAmountIn;
-        address swapTarget;
-        uint32 swapBips;
-        bytes txData;
-    }
+    
     ///@notice this will perform a swap when order is created
     ///Initial swap tokenOut will always be @param tokenIn, which will be the resulting order tokenIn
     function createOrderWithSwap(

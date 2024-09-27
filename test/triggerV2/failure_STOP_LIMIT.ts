@@ -52,7 +52,9 @@ describe("Test for failure - STOP LIMIT", () => {
             await s.USDC.getAddress(),
             await s.Steve.getAddress(),
             smallSlippage,
-            smallSlippage
+            smallSlippage,
+            0,
+            false
         )).to.be.revertedWith("ERC20: transfer amount exceeds balance")
 
     })

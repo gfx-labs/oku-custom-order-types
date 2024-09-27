@@ -36,11 +36,7 @@ contract StopLimit is Ownable, IStopLimit {
         SLL_CONTRACT = _sll;
     }
 
-    function getPendingOrders()
-        external
-        view
-        returns (uint256[] memory)
-    {
+    function getPendingOrders() external view returns (uint256[] memory) {
         return pendingOrderIds;
     }
 
@@ -55,7 +51,9 @@ contract StopLimit is Ownable, IStopLimit {
         IERC20 tokenOut,
         address recipient,
         uint32 strikeSlipapge,
-        uint32 stopSlippage
+        uint32 stopSlippage,
+        uint32 swapSlippage,
+        bool swapOnFill
     ) external override {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
@@ -71,7 +69,11 @@ contract StopLimit is Ownable, IStopLimit {
             orderCount < MASTER.maxPendingOrders(),
             "Max Order Count Reached"
         );
-        require(strikeSlipapge <= MASTER.MAX_BIPS() && stopSlippage <= MASTER.MAX_BIPS(), "invalid slippage");
+        require(
+            strikeSlipapge <= MASTER.MAX_BIPS() &&
+                stopSlippage <= MASTER.MAX_BIPS(),
+            "invalid slippage"
+        );
 
         //verify order amount is at least the minimum todo check here or only when limit order is created?
         MASTER.checkMinOrderSize(tokenIn, amountIn);
@@ -87,8 +89,10 @@ contract StopLimit is Ownable, IStopLimit {
             tokenOut: tokenOut,
             strikeSlippage: strikeSlipapge,
             stopSlippage: stopSlippage,
+            swapSlippage: swapSlippage,
             recipient: recipient,
-            direction: MASTER.getExchangeRate(tokenIn, tokenOut) > stopPrice //compare to stop price for this order's direction
+            direction: MASTER.getExchangeRate(tokenIn, tokenOut) > stopPrice, //compare to stop price for this order's direction
+            swapOnFill: swapOnFill
         });
         pendingOrderIds.push(orderCount);
 
@@ -151,13 +155,13 @@ contract StopLimit is Ownable, IStopLimit {
                     abi.encode(
                         MasterUpkeepData({
                             orderType: OrderType.STOP_LIMIT,
-                            target: address(0x0),//N/A
-                            txData: "0x",//N/A
+                            target: address(0x0), //N/A
+                            txData: "0x", //N/A
                             pendingOrderIdx: i,
                             orderId: order.orderId,
                             tokenIn: order.tokenIn,
                             tokenOut: order.tokenOut,
-                            bips: 0,//N/A
+                            bips: order.swapSlippage,
                             amountIn: order.amountIn,
                             exchangeRate: exchangeRate
                         })
@@ -173,9 +177,7 @@ contract StopLimit is Ownable, IStopLimit {
             performData,
             (MasterUpkeepData)
         );
-        Order memory order = orders[
-            pendingOrderIds[data.pendingOrderIdx]
-        ];
+        Order memory order = orders[pendingOrderIds[data.pendingOrderIdx]];
 
         //confirm order is in range to prevent improper fill
         (bool inRange, ) = checkInRange(order);
@@ -188,22 +190,42 @@ contract StopLimit is Ownable, IStopLimit {
         );
 
         //approve
-        updateApproval(
-            address(SLL_CONTRACT),
-            order.tokenIn,
-            order.amountIn
-        );
+        updateApproval(address(SLL_CONTRACT), order.tokenIn, order.amountIn);
 
-        SLL_CONTRACT.createOrder(
-            order.strikePrice,
-            order.stopPrice,
-            order.amountIn,
-            order.tokenIn,
-            order.tokenOut,
-            order.recipient,
-            order.strikeSlippage,
-            order.stopSlippage
-        );
+        if (order.swapOnFill) {
+            //for swap on fill, we expect to be paid out in the same asset we provided
+            //so the resulting order tokenIn and tokenOut are inverted relative to our original swap limit order
+            SwapParams memory params = SwapParams({
+                swapTokenIn: order.tokenIn,//asset provided
+                swapAmountIn: order.amountIn,
+                swapTarget: data.target,
+                swapBips: order.swapSlippage,
+                txData: data.txData
+            });
+            SLL_CONTRACT.createOrderWithSwap(
+                params,
+                order.strikePrice,
+                order.stopPrice,
+                order.tokenOut,//invert tokenIn 
+                order.tokenIn,//invert tokenOut
+                order.recipient,
+                order.strikeSlippage,
+                order.stopSlippage
+            );
+
+        } else {
+            SLL_CONTRACT.createOrder(
+                order.strikePrice,
+                order.stopPrice,
+                order.amountIn,
+                order.tokenIn,
+                order.tokenOut,
+                order.recipient,
+                order.strikeSlippage,
+                order.stopSlippage
+            );
+        }
+
         emit StopLimitOrderProcessed(order.orderId);
     }
 

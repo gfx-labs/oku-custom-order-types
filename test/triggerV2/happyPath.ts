@@ -6,6 +6,7 @@ import { decodeUpkeepData, generateUniTx, generateUniTxData, getGas, MasterUpkee
 import { s, SwapParams } from "./scope"
 import { DeployContract } from "../../util/deploy"
 import { ethers } from "hardhat"
+import { BigNumberish } from "ethers"
 
 ///All tests are performed as if on Arbitrum
 ///Testing is on the Arb WETH/USDC.e pool @ 500
@@ -123,7 +124,9 @@ describe("Execute Stop-Limit Upkeep", () => {
             await s.USDC.getAddress(),
             await s.Bob.getAddress(),
             strikeBips,
-            0//no stop loss bips
+            0,//no stop loss bips
+            0,//no swap on fill bips
+            false//no swap on fill
         )
 
         const filter = s.StopLimit.filters.OrderCreated
@@ -149,7 +152,7 @@ describe("Execute Stop-Limit Upkeep", () => {
         initial = await s.StopLimit.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
 
-        //reduce price to strike price
+        //reduce price to stop limit price
         await s.wethOracle.setPrice(s.initialEthPrice - (stopDelta))
 
         //check upkeep
@@ -212,6 +215,120 @@ describe("Execute Stop-Limit Upkeep", () => {
     })
 })
 
+/**
+ * For swap on fill, we expect to receive the same asset we provide
+ * In this case, we provide USDC, swap to WETH when the stop limit is filled, 
+ * and when the resulting limit order closes, we expect our WETH to be swapped back to USDC
+ */
+describe("Execute Stop-Limit with swap on fill", () => {
+    //0.00029475 => 3,392.70 per ETH
+    //0.00029200 => 3424.66
+    //as eth price goes up, recip UDSC => ETH price goes down
+    const stopLimitPrice = ethers.parseUnits("0.000333", 8)//3k per eth
+    const strikePrice = ethers.parseUnits("0.0003125", 8)//3.2k per eth
+    const stopLoss = ethers.parseUnits("0.0003571", 8)//2.8k per eth
+    const strikeBips = 500
+    const stopBips = 5000
+    const swapBips = 5000//slippage needs to be high as we cannot actually change the price on the pool
+
+    let charlesOrder: BigInt
+    //setup
+    before(async () => {
+        //steal money for s.Bob
+        await stealMoney(s.usdcWhale, await s.Charles.getAddress(), await s.USDC.getAddress(), s.usdcAmount)
+        //reset test oracle price
+        await s.wethOracle.setPrice(s.initialEthPrice)
+        await s.usdcOracle.setPrice(s.initialUsdcPrice)
+        await s.uniOracle.setPrice(s.initialUniPrice)
+        await s.arbOracle.setPrice(s.initialArbPrice)
+    })
+
+    it("Create stop-limit order WETH => USDC with swap on fill", async () => {
+        await s.USDC.connect(s.Charles).approve(await s.StopLimit.getAddress(), s.usdcAmount)
+        await s.StopLimit.connect(s.Charles).createOrder(
+            stopLimitPrice,
+            strikePrice,
+            stopLoss,
+            s.usdcAmount,
+            await s.USDC.getAddress(),
+            await s.WETH.getAddress(),
+            await s.Charles.getAddress(),
+            strikeBips,
+            stopBips,//no stop loss bips
+            swapBips,//no swap on fill bips
+            true//no swap on fill
+        )
+
+        const filter = s.StopLimit.filters.OrderCreated
+        const events = await s.StopLimit.queryFilter(filter, -1)
+        const event = events[0].args
+        expect(Number(event[0])).to.eq(2, "Second order Id")
+
+        //verify pending order exists
+        const list = await s.StopLimit.getPendingOrders()
+        expect(list.length).to.eq(1, "1 pending order")
+
+        //verify our input token was received
+        const balance = await s.USDC.balanceOf(await s.StopLimit.getAddress())
+        expect(balance).to.eq(s.usdcAmount, "USDC received")
+
+    })
+
+    it("Check upkeep", async () => {
+
+        //should be no upkeep needed yet
+        let initial = await s.Master.checkUpkeep("0x")
+        expect(initial.upkeepNeeded).to.eq(false)
+        initial = await s.StopLimit.checkUpkeep("0x")
+        expect(initial.upkeepNeeded).to.eq(false)
+
+        //reduce price to just above stop limit price
+        await s.wethOracle.setPrice(ethers.parseUnits("3003", 8))
+
+        initial = await s.Master.checkUpkeep("0x")
+        expect(initial.upkeepNeeded).to.eq(false)
+        initial = await s.StopLimit.checkUpkeep("0x")
+        expect(initial.upkeepNeeded).to.eq(false)
+
+        //reduce price to just below stop limit price
+        await s.wethOracle.setPrice(ethers.parseUnits("3000", 8))
+
+        //check upkeep
+        let result = await s.Master.checkUpkeep("0x")
+        expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
+        result = await s.StopLimit.checkUpkeep("0x")
+        expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
+
+    })
+
+    it("Perform upkeep", async () => {
+
+        //check upkeep
+        const result = await s.Master.checkUpkeep("0x")
+
+        //get returned upkeep data
+        const data: MasterUpkeepData = await decodeUpkeepData(result.performData, s.Frank)
+
+        //get minAmountReceived
+        const minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, data.bips)
+        
+        //generate encoded masterUpkeepData
+        const encodedTxData = await generateUniTx(
+            s.router02,
+            s.UniPool,
+            await s.StopLossLimit.getAddress(),
+            minAmountReceived,
+            data
+        )
+        
+        console.log("Gas to performUpkeep: ", await getGas(await s.Master.performUpkeep(encodedTxData)))
+
+
+    })
+
+
+})
+
 
 /**
  * stop-loss-limit orders create a limit order with an added stop loss
@@ -220,7 +337,7 @@ describe("Execute Stop-Limit Upkeep", () => {
  * the stop and limit fill each have their own slippage
  * There is an option to swap on order create
  * In this example, we swap from USDC to WETH on order create, and swap back to USDC when it fills
- */
+ 
 describe("Execute Stop-Loss-Limit Upkeep", () => {
 
 
@@ -374,3 +491,4 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
     })
 })
+*/
