@@ -75,7 +75,6 @@ contract StopLimit is Ownable, IStopLimit {
             "invalid slippage"
         );
 
-        //verify order amount is at least the minimum todo check here or only when limit order is created?
         MASTER.checkMinOrderSize(tokenIn, amountIn);
 
         orderCount++;

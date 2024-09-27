@@ -225,8 +225,10 @@ describe("Execute Stop-Limit with swap on fill", () => {
     //0.00029200 => 3424.66
     //as eth price goes up, recip UDSC => ETH price goes down
     const stopLimitPrice = ethers.parseUnits("0.000333", 8)//3k per eth
-    const strikePrice = ethers.parseUnits("0.0003125", 8)//3.2k per eth
-    const stopLoss = ethers.parseUnits("0.0003571", 8)//2.8k per eth
+
+    //stop and strike price are in eth => usdc terms since we are doing swap on fill
+    const strikePrice = ethers.parseUnits("3200", 8)//3.2k per eth
+    const stopLoss = ethers.parseUnits("2800", 8)//2.8k per eth
     const strikeBips = 500
     const stopBips = 5000
     const swapBips = 5000//slippage needs to be high as we cannot actually change the price on the pool
@@ -298,7 +300,6 @@ describe("Execute Stop-Limit with swap on fill", () => {
         expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
         result = await s.StopLimit.checkUpkeep("0x")
         expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
-
     })
 
     it("Perform upkeep", async () => {
@@ -311,7 +312,7 @@ describe("Execute Stop-Limit with swap on fill", () => {
 
         //get minAmountReceived
         const minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, data.bips)
-        
+
         //generate encoded masterUpkeepData
         const encodedTxData = await generateUniTx(
             s.router02,
@@ -320,13 +321,86 @@ describe("Execute Stop-Limit with swap on fill", () => {
             minAmountReceived,
             data
         )
-        
+
+        const initOrders = await s.StopLossLimit.orderCount()
+
         console.log("Gas to performUpkeep: ", await getGas(await s.Master.performUpkeep(encodedTxData)))
+
+        const filter = s.StopLossLimit.filters.OrderCreated
+        const events = await s.StopLossLimit.queryFilter(filter, -1)
+        const event = events[0].args
+        expect(Number(event[0])).to.eq(2, "Second order Id")
+
+        expect(await s.StopLossLimit.orderCount()).to.eq(initOrders + 1n, "New Order Created")
+        charlesOrder = await s.StopLossLimit.orderCount()
+    })
+
+    it("Verify", async () => {
+
+        //stop limit pending order removed
+        expect((await s.StopLimit.getPendingOrders()).length).to.eq(0, "no pending orders left")
+
+        //stop loss limit order created
+        expect((await s.StopLossLimit.getPendingOrders()).length).to.eq(1, "new pending order")
+        expect(await s.StopLossLimit.pendingOrderIds(0)).to.eq(charlesOrder, "Charles's order is pending")
+    })
+
+    it("Check Upkeep", async () => {
+        //no upkeep needed yet
+        let check = await s.Master.checkUpkeep("0x")
+        expect(check.upkeepNeeded).to.eq(false)
+
+        //reduce price to below stop price
+        await s.wethOracle.connect(s.Frank).setPrice(stopLoss - 60000000n)
+        check = await s.Master.checkUpkeep("0x")
+        expect(check.upkeepNeeded).to.eq(true)
+
+        //return to in range
+        await s.wethOracle.connect(s.Frank).setPrice(ethers.parseUnits("3000", 8))
+        check = await s.Master.checkUpkeep("0x")
+        expect(check.upkeepNeeded).to.eq(false)
+
+        //set price to fill price 
+        console.log("FINAL")
+        await s.wethOracle.connect(s.Frank).setPrice(strikePrice)
+        check = await s.Master.checkUpkeep("0x")
+        expect(check.upkeepNeeded).to.eq(true)
+    })
+
+    it("Perform Upkeep", async () => {
+        //check upkeep
+        const result = await s.Master.checkUpkeep("0x")
+
+        //get returned upkeep data
+        const data: MasterUpkeepData = await decodeUpkeepData(result.performData, s.Frank)
+
+        //get minAmountReceived
+        const minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, data.bips)
+
+        //generate encoded masterUpkeepData
+        const encodedTxData = await generateUniTx(
+            s.router02,
+            s.UniPool,
+            await s.StopLossLimit.getAddress(),
+            minAmountReceived,
+            data
+        )
+
+        console.log("Gas to performUpkeep: ", await getGas(await s.Master.performUpkeep(encodedTxData)))
+    })
+
+    it("Verify", async () => {
+
+        expect((await s.StopLossLimit.getPendingOrders()).length).to.eq(0, "no pending orders")
+
+        //USDC received is not perfect as we do not attempt to manipulate the true uni pool price
+        let balance = await s.USDC.balanceOf(await s.Charles.getAddress())
+        //expect(Number(ethers.formatUnits(balance, 6))).to.be.closeTo(Number(ethers.formatUnits(s.usdcAmount)), 10, "USDC received")
+        console.log("todo")
+
 
 
     })
-
-
 })
 
 
@@ -337,7 +411,7 @@ describe("Execute Stop-Limit with swap on fill", () => {
  * the stop and limit fill each have their own slippage
  * There is an option to swap on order create
  * In this example, we swap from USDC to WETH on order create, and swap back to USDC when it fills
- 
+ */
 describe("Execute Stop-Loss-Limit Upkeep", () => {
 
 
@@ -397,7 +471,7 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
         const filter = s.StopLossLimit.filters.OrderCreated
         const events = await s.StopLossLimit.queryFilter(filter, -1)
         const event = events[0].args
-        expect(Number(event[0])).to.eq(2, "Second order Id")
+        expect(Number(event[0])).to.eq(3, "Third order Id")
 
         //verify pending order exists
         const list = await s.StopLossLimit.getPendingOrders()
@@ -479,7 +553,7 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
         const filter = s.StopLossLimit.filters.OrderProcessed
         const events = await s.StopLossLimit.queryFilter(filter, -1)
         const event = events[0].args
-        expect(event.orderId).to.eq(2, "Order Id 2")
+        expect(event.orderId).to.eq(3, "Order Id 3")
         expect(event.success).to.eq(true, "Swap succeeded")
 
         //no tokens left on contract
@@ -491,4 +565,3 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
     })
 })
-*/

@@ -62,7 +62,6 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             address(this),
             swapParams.swapAmountIn
         );
-
         (
             bool success,
             ,
@@ -78,7 +77,6 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             );
 
         require(success, "swap failed");
-
         _createOrder(
             strikePrice,
             stopPrice,
@@ -151,9 +149,9 @@ contract StopLossLimit is Ownable, IStopLossLimit {
                 slippageBipsStrike <= MASTER.MAX_BIPS(),
             "Invalid Slippage BIPS"
         );
-
-        //verify order amount is at least the minimum todo check here or only when limit order is created?
+        
         MASTER.checkMinOrderSize(tokenIn, amountIn);
+
         orderCount++;
         orders[orderCount] = Order({
             orderId: orderCount,
@@ -246,7 +244,6 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         }
     }
 
-    //perform upkeep - todo onlyOwner or verify sender?
     ///@notice recipient of swap should be this contract,
     ///as we need to account for tokens received.
     ///This contract will then forward the tokens to the user
@@ -370,7 +367,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             );
         }
     }
-
+    //todo check for inverted order change in price
     function checkInRange(
         Order memory order
     ) internal view returns (bool inRange, bool strike, uint256 exchangeRate) {
