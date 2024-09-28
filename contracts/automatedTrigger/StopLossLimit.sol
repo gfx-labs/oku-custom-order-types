@@ -27,9 +27,9 @@ contract StopLossLimit is Ownable, IStopLossLimit {
 
     AutomationMaster public immutable MASTER;
 
-    uint256 public orderCount;
+    uint96 public orderCount;
 
-    uint256[] public pendingOrderIds;
+    uint16[] public pendingOrderIds;
 
     mapping(uint256 => Order) public orders;
 
@@ -37,7 +37,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         MASTER = _master;
     }
 
-    function getPendingOrders() external view returns (uint256[] memory) {
+    function getPendingOrders() external view returns (uint16[] memory) {
         return pendingOrderIds;
     }
 
@@ -87,7 +87,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             slippageBipsStrike,
             slippageBipsStop
         );
-
+        //if exact input is not used, refund any remaining tokenIn
         if (tokenInRefund != 0) {
             swapParams.swapTokenIn.safeTransfer(recipient, tokenInRefund);
         }
@@ -132,14 +132,10 @@ contract StopLossLimit is Ownable, IStopLossLimit {
     ) internal {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
-            address(MASTER.oracles(tokenIn)) != address(0x0),
-            "tokenIn Oracle !exist"
+            address(MASTER.oracles(tokenIn)) != address(0x0) &&
+                address(MASTER.oracles(tokenIn)) != address(0x0),
+            "Oracle !exist"
         );
-        require(
-            address(MASTER.oracles(tokenIn)) != address(0x0),
-            "tokenOut Oracle !exist"
-        );
-
         require(
             orderCount < MASTER.maxPendingOrders(),
             "Max Order Count Reached"
@@ -149,7 +145,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
                 slippageBipsStrike <= MASTER.MAX_BIPS(),
             "Invalid Slippage BIPS"
         );
-        
+
         MASTER.checkMinOrderSize(tokenIn, amountIn);
 
         orderCount++;
@@ -166,7 +162,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) > strikePrice //exchangeRate in/out > strikePrice
         });
 
-        pendingOrderIds.push(orderCount);
+        pendingOrderIds.push(uint16(orderCount));
 
         emit OrderCreated(orderCount);
     }
@@ -185,7 +181,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
     }
 
     function _cancelOrder(Order memory order) internal returns (bool) {
-        for (uint i = 0; i < pendingOrderIds.length; i++) {
+        for (uint16 i = 0; i < pendingOrderIds.length; i++) {
             if (pendingOrderIds[i] == order.orderId) {
                 //remove from pending array
                 pendingOrderIds = ArrayMutation.removeFromArray(
@@ -215,7 +211,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        for (uint i = 0; i < pendingOrderIds.length; i++) {
+        for (uint16 i = 0; i < pendingOrderIds.length; i++) {
             Order memory order = orders[pendingOrderIds[i]];
             (bool inRange, bool strike, uint256 exchangeRate) = checkInRange(
                 order

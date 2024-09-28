@@ -4,18 +4,13 @@ pragma solidity ^0.8.19;
 import "./IAutomation.sol";
 import "./AutomationMaster.sol";
 import "../libraries/ArrayMutation.sol";
-
 import "../interfaces/ILimitOrderRegistry.sol";
 import "../interfaces/uniswapV3/UniswapV3Pool.sol";
 import "../interfaces/uniswapV3/ISwapRouter02.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
-
 import "../oracle/IOracleRelay.sol";
-
-///testing
-import "hardhat/console.sol";
 
 ///@notice This contract owns and handles all logic associated with STOP_LIMIT orders
 ///STOP_LIMIT orders create a new limit order order once filled
@@ -25,9 +20,9 @@ contract StopLimit is Ownable, IStopLimit {
     AutomationMaster public immutable MASTER;
     IStopLossLimit public immutable SLL_CONTRACT;
 
-    uint256 public orderCount;
+    uint96 public orderCount;
 
-    uint256[] public pendingOrderIds;
+    uint16[] public pendingOrderIds;
 
     mapping(uint256 => Order) public orders;
 
@@ -36,7 +31,7 @@ contract StopLimit is Ownable, IStopLimit {
         SLL_CONTRACT = _sll;
     }
 
-    function getPendingOrders() external view returns (uint256[] memory) {
+    function getPendingOrders() external view returns (uint16[] memory) {
         return pendingOrderIds;
     }
 
@@ -50,21 +45,16 @@ contract StopLimit is Ownable, IStopLimit {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint32 strikeSlipapge,
-        uint32 stopSlippage,
-        uint32 swapSlippage,
+        uint16 strikeSlipapge,
+        uint16 stopSlippage,
+        uint16 swapSlippage,
         bool swapOnFill
     ) external override {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
-            address(MASTER.oracles(tokenIn)) != address(0x0),
-            "tokenIn Oracle !exist"
+            address(MASTER.oracles(tokenIn)) != address(0x0) && address(MASTER.oracles(tokenIn)) != address(0x0),
+            "Oracle !exist"
         );
-        require(
-            address(MASTER.oracles(tokenIn)) != address(0x0),
-            "tokenOut Oracle !exist"
-        );
-
         require(
             orderCount < MASTER.maxPendingOrders(),
             "Max Order Count Reached"
@@ -93,7 +83,7 @@ contract StopLimit is Ownable, IStopLimit {
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) > stopPrice, //compare to stop price for this order's direction
             swapOnFill: swapOnFill
         });
-        pendingOrderIds.push(orderCount);
+        pendingOrderIds.push(uint16(orderCount));
 
         //take asset
         tokenIn.safeTransferFrom(recipient, address(this), amountIn);
@@ -102,6 +92,7 @@ contract StopLimit is Ownable, IStopLimit {
         emit OrderCreated(orderCount);
     }
 
+    ///@notice contract owner can cancel any order
     function adminCancelOrder(uint256 orderId) external onlyOwner {
         _cancelOrder(orderId);
     }
@@ -116,8 +107,9 @@ contract StopLimit is Ownable, IStopLimit {
 
     function _cancelOrder(uint256 orderId) internal returns (bool) {
         Order memory order = orders[orderId];
-        for (uint i = 0; i < pendingOrderIds.length; i++) {
+        for (uint16 i = 0; i < pendingOrderIds.length; i++) {
             if (pendingOrderIds[i] == orderId) {
+
                 //remove from pending array
                 pendingOrderIds = ArrayMutation.removeFromArray(
                     i,
@@ -145,7 +137,7 @@ contract StopLimit is Ownable, IStopLimit {
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        for (uint256 i = 0; i < pendingOrderIds.length; i++) {
+        for (uint16 i = 0; i < pendingOrderIds.length; i++) {
             Order memory order = orders[pendingOrderIds[i]];
             (bool inRange, uint256 exchangeRate) = checkInRange(order);
             if (inRange) {
@@ -213,6 +205,7 @@ contract StopLimit is Ownable, IStopLimit {
             );
 
         } else {
+            //create standard order without swap on fill
             SLL_CONTRACT.createOrder(
                 order.strikePrice,
                 order.stopPrice,
