@@ -127,10 +127,10 @@ export class ArbAddresses{
     readonly triggerAddress: string = "0x27F63920D2855853E5aAC290e9fF2406f3c46Dc0"//"0x8fBdE56be121275a80682513292F7831dc951215"
     
     //trigger v2 deployments
-    readonly Master: string = "0x8a39E39234Bbb0840484c442Af01584DB04801CE"
+    readonly Master: string = "0xbb5578c08bC08c15AcE5cd09c6683CcCcB2A9148"//"0x8a39E39234Bbb0840484c442Af01584DB04801CE"
     readonly limit: string = "0xCF2FCd9B87113139E809d5F9Ea6f4D571BB1C12a"
-    readonly stopLimit: string = "0x491397f7eb6f5d9B82B15cEcaBFf835bA31f217F"
-    readonly stopLossLimit: string = "0xEF52F132746a55f750ecfb3853e29CfECBC5f6E5"
+    readonly stopLimit: string = "0xB582e81DC37ea249ae8Ea1F355c659Ad37bD2fc2"//"0x491397f7eb6f5d9B82B15cEcaBFf835bA31f217F"
+    readonly stopLossLimit: string = "0x756497dDb1D6564b26aeD303E118F9f226EdC3c7"//"0xEF52F132746a55f750ecfb3853e29CfECBC5f6E5"
 
     
     readonly wethFeed: string = "0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612"

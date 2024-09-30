@@ -3,20 +3,14 @@ pragma solidity ^0.8.19;
 
 import "./IAutomation.sol";
 import "./AutomationMaster.sol";
-//import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "../libraries/ArrayMutation.sol";
-
 import "../interfaces/ILimitOrderRegistry.sol";
 import "../interfaces/uniswapV3/UniswapV3Pool.sol";
 import "../interfaces/uniswapV3/ISwapRouter02.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
-
 import "../oracle/IOracleRelay.sol";
-
-///testing
-import "hardhat/console.sol";
 
 ///@notice This contract owns and handles all logic associated with STOP_MARKET orders
 ///@notice STOP_LOSS_LIMIT orders check an external oracle for a pre-determined strike price AND/OR
@@ -48,8 +42,8 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint32 slippageBipsStrike,
-        uint32 slippageBipsStop
+        uint32 strikeSlippage,
+        uint32 stopSlippage
     ) external override {
         require(
             swapParams.swapBips <= MASTER.MAX_BIPS(),
@@ -84,8 +78,8 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             tokenIn,
             tokenOut,
             recipient,
-            slippageBipsStrike,
-            slippageBipsStop
+            strikeSlippage,
+            stopSlippage
         );
         //if exact input is not used, refund any remaining tokenIn
         if (tokenInRefund != 0) {
@@ -102,8 +96,8 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint32 slippageBipsStrike,
-        uint32 slippageBipsStop
+        uint32 strikeSlippage,
+        uint32 stopSlippage
     ) external override {
         //take asset
         tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
@@ -115,8 +109,8 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             tokenIn,
             tokenOut,
             recipient,
-            slippageBipsStrike,
-            slippageBipsStop
+            strikeSlippage,
+            stopSlippage
         );
     }
 
@@ -127,8 +121,8 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint32 slippageBipsStrike,
-        uint32 slippageBipsStop
+        uint32 strikeSlippage,
+        uint32 stopSlippage
     ) internal {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
@@ -141,8 +135,8 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             "Max Order Count Reached"
         );
         require(
-            slippageBipsStop <= MASTER.MAX_BIPS() &&
-                slippageBipsStrike <= MASTER.MAX_BIPS(),
+            stopSlippage <= MASTER.MAX_BIPS() &&
+                strikeSlippage <= MASTER.MAX_BIPS(),
             "Invalid Slippage BIPS"
         );
 
@@ -157,8 +151,8 @@ contract StopLossLimit is Ownable, IStopLossLimit {
             tokenIn: tokenIn,
             tokenOut: tokenOut,
             recipient: recipient,
-            slippageBipsStrike: slippageBipsStrike,
-            slippageBipsStop: slippageBipsStop,
+            strikeSlippage: strikeSlippage,
+            stopSlippage: stopSlippage,
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) > strikePrice //exchangeRate in/out > strikePrice
         });
 
@@ -229,8 +223,8 @@ contract StopLossLimit is Ownable, IStopLossLimit {
                             tokenIn: order.tokenIn,
                             tokenOut: order.tokenOut,
                             bips: strike
-                                ? order.slippageBipsStrike
-                                : order.slippageBipsStop, //bips based on strike or stop fill
+                                ? order.strikeSlippage
+                                : order.stopSlippage, //bips based on strike or stop fill
                             amountIn: order.amountIn,
                             exchangeRate: exchangeRate
                         })
@@ -259,8 +253,8 @@ contract StopLossLimit is Ownable, IStopLossLimit {
 
         //asing bips
         uint32 bips;
-        strike ? bips = order.slippageBipsStrike : bips = order
-            .slippageBipsStop;
+        strike ? bips = order.strikeSlippage : bips = order
+            .stopSlippage;
 
         (
             bool success,
@@ -273,7 +267,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
                 order.amountIn,
                 order.tokenIn,
                 order.tokenOut,
-                order.slippageBipsStop
+                order.stopSlippage
             );
 
         //handle accounting

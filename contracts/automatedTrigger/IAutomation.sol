@@ -88,8 +88,8 @@ interface IStopLossLimit is IAutomation {
         IERC20 tokenIn;
         IERC20 tokenOut;
         address recipient; //addr to receive swap results
-        uint32 slippageBipsStrike; //slippage if order is filled
-        uint32 slippageBipsStop; //slippage of stop price is reached
+        uint32 strikeSlippage; //slippage if order is filled
+        uint32 stopSlippage; //slippage of stop price is reached
         bool direction; //true if initial exchange rate > strike price
     }
 
@@ -100,8 +100,8 @@ interface IStopLossLimit is IAutomation {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint32 slippageBipsStrike,
-        uint32 slippageBipsStop
+        uint32 strikeSlippage,
+        uint32 stopSlippage
     ) external;
 
     ///@notice this will perform a swap when order is created
@@ -113,7 +113,7 @@ interface IStopLossLimit is IAutomation {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint32 slippageBipsStrike,
-        uint32 slippageBipsStop
+        uint32 strikeSlippage,
+        uint32 stopSlippage
     ) external;
 }

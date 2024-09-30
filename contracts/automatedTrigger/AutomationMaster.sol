@@ -3,18 +3,13 @@ pragma solidity ^0.8.19;
 
 import "./IAutomation.sol";
 import "../libraries/ArrayMutation.sol";
-
 import "../interfaces/ILimitOrderRegistry.sol";
 import "../interfaces/uniswapV3/UniswapV3Pool.sol";
 import "../interfaces/uniswapV3/ISwapRouter02.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
-
 import "../oracle/IOracleRelay.sol";
-
-///testing
-import "hardhat/console.sol";
 
 ///@notice This contract owns and handles all logic asstopLimitContractiated with STOP_MARKET orders
 ///@notice STOP_MARKET orders check an external oracle for a pre-determined strike price,

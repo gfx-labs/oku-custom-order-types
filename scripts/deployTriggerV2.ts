@@ -1,12 +1,12 @@
 import hre, { network } from "hardhat";
 import { DeployContract } from "../util/deploy";
 import { currentBlock, resetCurrent, resetCurrentArb, resetCurrentBase, resetCurrentBsc, resetCurrentOP, resetCurrentOPblock, resetCurrentPoly, resetCurrentZksync } from "../util/block";
-import { AutomationMaster, AutomationMaster__factory, IERC20__factory, IOracleRelay, LimitOrder, LimitOrder__factory, MasterKeeper, MasterKeeper__factory, OracleRelay__factory, StopLimit, StopLimit__factory, StopLossLimit, StopLossLimit__factory, UniswapV3Pool__factory } from "../typechain-types";
+import { AutomationMaster, AutomationMaster__factory, IERC20__factory, IOracleRelay, MasterKeeper, MasterKeeper__factory, OracleRelay__factory, StopLimit, StopLimit__factory, StopLossLimit, StopLossLimit__factory, UniswapV3Pool__factory } from "../typechain-types";
 import { limitOrderData } from "./limitOrderData";
 import { Signer } from "ethers";
 import { ceaseImpersonation, impersonateAccount } from "../util/impersonator";
 import { setBalance } from "@nomicfoundation/hardhat-network-helpers";
-import { decodeUpkeepData, generateUniTx, getStrikePrice } from "../util/msc";
+import { decodeUpkeepData, generateUniTx } from "../util/msc";
 import { a, o } from "../util/addresser";
 
 const { ethers } = require("hardhat");
@@ -31,7 +31,6 @@ let usdcFeedAddr: string
 
 let mainnet = true
 let Master!: AutomationMaster
-let limitOrder!: LimitOrder
 let stopLimit!: StopLimit
 let stopLossLimit!: StopLossLimit
 
@@ -81,7 +80,8 @@ async function main() {
     }
 
     masterAddr = a.Master
-
+    stopLimitAddr = a.stopLimit
+    stopLossLimitAddr = a.stopLossLimit
     wethOracleAddress = a.wethOracleAddress
     usdcOracleAddress = a.usdcOracleAddress
     router02 = a.uniRouter
@@ -98,7 +98,6 @@ async function main() {
   //await deploy(user)
   //await deployOracles(user)
   await register(user)
-  //await setup(user)
   //await createOrder(user)
   //await createInvertedOrder(user)
   //await checkUpkeep(user)
@@ -124,19 +123,6 @@ const deploy = async (signer: Signer) => {
   await Master.deploymentTransaction()
   await new Promise(f => setTimeout(f, 10000));
 
-  limitOrder = await DeployContract(new LimitOrder__factory(signer), signer, masterAddr)
-  limitAddr = await limitOrder.getAddress()
-  console.log("DEPLOYED LIMIT: ", await limitOrder.getAddress())
-  await limitOrder.deploymentTransaction()
-  await new Promise(f => setTimeout(f, 10000));
-
-  //stop limit
-  stopLimit = await DeployContract(new StopLimit__factory(signer), signer, masterAddr, limitAddr)
-  stopLimitAddr = await stopLimit.getAddress()
-  console.log("DEPLOYED STOP_LIMIT: ", await stopLimit.getAddress())
-  await stopLimit.deploymentTransaction()
-  await new Promise(f => setTimeout(f, 10000));
-
   //stop loss limit
   stopLossLimit = await DeployContract(new StopLossLimit__factory(signer), signer, masterAddr)
   stopLossLimitAddr = await stopLossLimit.getAddress()
@@ -144,40 +130,38 @@ const deploy = async (signer: Signer) => {
   await stopLossLimit.deploymentTransaction()
   await new Promise(f => setTimeout(f, 10000));
 
+  //stop limit
+  stopLimit = await DeployContract(new StopLimit__factory(signer), signer, masterAddr, stopLossLimitAddr)
+  stopLimitAddr = await stopLimit.getAddress()
+  console.log("DEPLOYED STOP_LIMIT: ", await stopLimit.getAddress())
+  await stopLimit.deploymentTransaction()
+  await new Promise(f => setTimeout(f, 10000));
+
+
+
   if (mainnet) {
     console.log("Verifying MASTER...")
-    await hre.run("verify:verify", {
+    hre.run("verify:verify", {
       address: await Master.getAddress()
     })
-    console.log("verified")
-
-    console.log("Verifying LIMIT...")
-    await hre.run("verify:verify", {
-      address: await limitOrder.getAddress(),
-      constructorArguments: [
-        masterAddr
-      ]
-    })
-    console.log("verified")
 
     console.log("Verifying STOP_LIMIT...")
-    await hre.run("verify:verify", {
+    hre.run("verify:verify", {
       address: await stopLimit.getAddress(),
       constructorArguments: [
         masterAddr,
         limitAddr
       ]
     })
-    console.log("verified")
 
     console.log("Verifying STOP_LOSS_LIMIT...")
-    await hre.run("verify:verify", {
+    hre.run("verify:verify", {
       address: await stopLossLimit.getAddress(),
       constructorArguments: [
         masterAddr
       ]
     })
-    console.log("verified")
+    console.log("verifications sent")
   }
 
 }
@@ -244,6 +228,12 @@ const register = async (signer: Signer) => {
   console.log("DEPLOYED USDT ORACLE: ", await usdtOracle.getAddress())
   console.log("USDT: ", ethers.formatUnits((await usdtOracle.currentValue()).toString(), 8))
 
+  //register sub keepers
+  await Master.connect(signer).registerSubKeepers(
+    stopLimitAddr,
+    stopLossLimitAddr
+  )
+
    */
 
   const wbtcOracleAddress = "0x17B7bD832666Ac28A6Ad35a93d4efF4eB9A07a17"
@@ -259,6 +249,8 @@ const register = async (signer: Signer) => {
     await impersonateAccount(await signer.getAddress())
 
   }
+
+
 
   //register tokens => oracles
   const tokens = [wethAddress, usdcAddress, wbtcAddress, arbAddress, usdtAddress]
@@ -406,6 +398,6 @@ main()
   })
 
 /**
-hh verify --network arbitrum 0xEF52F132746a55f750ecfb3853e29CfECBC5f6E5 "0x8a39E39234Bbb0840484c442Af01584DB04801CE"
+hh verify --network arbitrum 0xB582e81DC37ea249ae8Ea1F355c659Ad37bD2fc2 "0xbb5578c08bC08c15AcE5cd09c6683CcCcB2A9148" "0x756497dDb1D6564b26aeD303E118F9f226EdC3c7"
  */
 
