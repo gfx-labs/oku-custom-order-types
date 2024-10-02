@@ -70,44 +70,53 @@ contract AutomationMaster is IAutomation, Ownable {
         IERC20 tokenIn,
         IERC20 tokenOut
     ) internal view returns (uint256 exchangeRate) {
-        //simple exchange rate in 1e8 terms per oracle output
-        exchangeRate = divide(
-            oracles[tokenIn].currentValue(),
-            oracles[tokenOut].currentValue(),
-            8
-        );
+        // Retrieve USD prices from oracles, scaled to 1e8
+        uint256 priceIn = oracles[tokenIn].currentValue();
+        uint256 priceOut = oracles[tokenOut].currentValue();
+
+        // Return the exchange rate in 1e8 terms
+        return (priceIn * 1e8) / priceOut;
     }
 
-    ///@notice Calculate price using external oracles,
-    ///and apply @param slippageBips to deduce @return minAmountReceived
-    ///@return minAmountReceived is scaled to @param tokenOut decimals
     function getMinAmountReceived(
         uint256 amountIn,
         IERC20 tokenIn,
         IERC20 tokenOut,
         uint88 slippageBips
     ) external view returns (uint256 minAmountReceived) {
-  
         uint256 exchangeRate = _getExchangeRate(tokenIn, tokenOut);
 
-        //this assumes decimalIn == decimalOut
-        uint256 fairAmountOut = ((amountIn) * exchangeRate) / 1e8;
+        // Adjust for decimal differences between tokens
+        uint256 adjustedAmountIn = adjustForDecimals(
+            amountIn,
+            tokenIn,
+            tokenOut
+        );
 
+        // Calculate the fair amount out without slippage
+        uint256 fairAmountOut = (adjustedAmountIn * exchangeRate) / 1e8;
+
+        // Apply slippage (MAX_BIPS is 10000, representing 100%)
+        return (fairAmountOut * (MAX_BIPS - slippageBips)) / MAX_BIPS;
+    }
+
+    function adjustForDecimals(
+        uint256 amountIn,
+        IERC20 tokenIn,
+        IERC20 tokenOut
+    ) internal view returns (uint256 adjustedAmountIn) {
         uint8 decimalIn = ERC20(address(tokenIn)).decimals();
         uint8 decimalOut = ERC20(address(tokenOut)).decimals();
 
         if (decimalIn > decimalOut) {
-            uint256 factor = (10 ** (decimalIn - decimalOut));
-            fairAmountOut = (fairAmountOut / factor);
+            // Reduce amountIn to match the lower decimals of tokenOut
+            return amountIn / (10 ** (decimalIn - decimalOut));
+        } else if (decimalIn < decimalOut) {
+            // Increase amountIn to match the higher decimals of tokenOut
+            return amountIn * (10 ** (decimalOut - decimalIn));
         }
-
-        if (decimalIn < decimalOut) {
-            uint256 factor = (10 ** (decimalOut - decimalIn));
-            fairAmountOut = (fairAmountOut * factor);
-        }
-
-        //scale by slippage
-        return (fairAmountOut * (MAX_BIPS - slippageBips)) / MAX_BIPS;
+        // If decimals are the same, no adjustment needed
+        return amountIn;
     }
 
     function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) public view {

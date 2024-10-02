@@ -37,7 +37,7 @@ let stopLossLimit!: StopLossLimit
 //SET THIS FOR TESTING
 const testingNetwork = "arbitrum"
 
-let masterKeeper: MasterKeeper
+let masterKeeper: AutomationMaster
 async function main() {
   console.log("STARTING")
   let networkName = hre.network.name
@@ -96,8 +96,9 @@ async function main() {
 
 
   //await deploy(user)
+  await updateSubKeeper(user)
   //await deployOracles(user)
-  await register(user)
+  //await register(user)
   //await createOrder(user)
   //await createInvertedOrder(user)
   //await checkUpkeep(user)
@@ -163,6 +164,38 @@ const deploy = async (signer: Signer) => {
     })
     console.log("verifications sent")
   }
+
+}
+
+const updateSubKeeper = async (signer: Signer) => {
+  if (!mainnet) {
+    signer = await ethers.getSigner("0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89")
+
+    //testing does not scale tx cost correctly 
+    await setBalance(await signer.getAddress(), ethers.parseEther("1"))
+    await impersonateAccount(await signer.getAddress())
+
+  }
+
+  const newStopLimit = await DeployContract(
+    new StopLimit__factory(signer),
+    signer,
+    a.Master,
+    a.stopLossLimit
+  )
+  await newStopLimit.deploymentTransaction()
+  await new Promise(f => setTimeout(f, 5000));
+  console.log("Stop Limit Deployed: ", await newStopLimit.getAddress())
+
+  masterKeeper = AutomationMaster__factory.connect(a.Master, signer)
+
+  await masterKeeper.registerSubKeepers(
+    await newStopLimit.getAddress(),
+    a.stopLossLimit
+  )
+  console.log("Registered Sub Keepers on Master: ", await masterKeeper.getAddress())
+
+
 
 }
 
@@ -398,6 +431,6 @@ main()
   })
 
 /**
-hh verify --network arbitrum 0xB582e81DC37ea249ae8Ea1F355c659Ad37bD2fc2 "0xbb5578c08bC08c15AcE5cd09c6683CcCcB2A9148" "0x756497dDb1D6564b26aeD303E118F9f226EdC3c7"
+hh verify --network arbitrum 0x9518bC8aDfBE6A630162b58794435A87BE5Ea2B7 "0xbb5578c08bC08c15AcE5cd09c6683CcCcB2A9148" "0x756497dDb1D6564b26aeD303E118F9f226EdC3c7"
  */
 

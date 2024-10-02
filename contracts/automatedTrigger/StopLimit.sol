@@ -52,7 +52,7 @@ contract StopLimit is Ownable, IStopLimit {
     ) external override {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
-            address(MASTER.oracles(tokenIn)) != address(0x0) && address(MASTER.oracles(tokenIn)) != address(0x0),
+            address(MASTER.oracles(tokenIn)) != address(0x0) && address(MASTER.oracles(tokenOut)) != address(0x0),
             "Oracle !exist"
         );
         require(
@@ -147,7 +147,7 @@ contract StopLimit is Ownable, IStopLimit {
                         MasterUpkeepData({
                             orderType: OrderType.STOP_LIMIT,
                             target: address(0x0), //N/A
-                            txData: "0x", //N/A
+                            txData: order.swapOnFill ? bytes("0x01") : bytes("0x00"),//specify if swapOnFill is true
                             pendingOrderIdx: i,
                             orderId: order.orderId,
                             tokenIn: order.tokenIn,
