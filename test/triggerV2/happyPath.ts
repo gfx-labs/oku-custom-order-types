@@ -1,4 +1,4 @@
-import { AutomationMaster__factory, IERC20__factory, PlaceholderOracle__factory, StopLimit__factory, StopLossLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
+import { AutomationMaster__factory, Bracket__factory, IERC20__factory, IPermit2__factory, PlaceholderOracle__factory, StopLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
 import { currentBlock, resetCurrentArbBlock } from "../../util/block"
 import { expect } from "chai"
 import { stealMoney } from "../../util/money"
@@ -6,7 +6,10 @@ import { decodeUpkeepData, generateUniTx, generateUniTxData, getGas, MasterUpkee
 import { s, SwapParams } from "./scope"
 import { DeployContract } from "../../util/deploy"
 import { ethers } from "hardhat"
-import { BigNumberish } from "ethers"
+import { a } from "../../util/addresser"
+import { AllowanceTransfer } from "@uniswap/permit2-sdk"
+import { TypedDataDomain } from "ethers"
+
 
 ///All tests are performed as if on Arbitrum
 ///Testing is on the Arb WETH/USDC.e pool @ 500
@@ -31,6 +34,7 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         s.USDC = IERC20__factory.connect(await s.UniPool.token1(), s.Frank)
         s.ARB = IERC20__factory.connect("0x912CE59144191C1204E64559FE8253a0e49E6548", s.Frank)
         s.UNI = IERC20__factory.connect("0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0", s.Frank)
+        console.log("USDC: ", await s.USDC.getAddress())
 
 
     })
@@ -39,14 +43,15 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         //deploy master
         s.Master = await DeployContract(new AutomationMaster__factory(s.Frank), s.Frank)
         //deploy stop loss limit
-        s.StopLossLimit = await DeployContract(new StopLossLimit__factory(s.Frank), s.Frank, await s.Master.getAddress())
+        s.Bracket = await DeployContract(new Bracket__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2)
 
         //deploy stop limit
         s.StopLimit = await DeployContract(
             new StopLimit__factory(s.Frank),
             s.Frank,
             await s.Master.getAddress(),
-            await s.StopLossLimit.getAddress()
+            await s.Bracket.getAddress(),
+            a.permit2
         )
 
 
@@ -65,7 +70,7 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         //register sup keepers
         await s.Master.connect(s.Frank).registerSubKeepers(
             await s.StopLimit.getAddress(),
-            await s.StopLossLimit.getAddress()
+            await s.Bracket.getAddress()
         )
 
         //register oracles
@@ -197,24 +202,338 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
 
 
-        const filter = s.StopLossLimit.filters.OrderCreated
-        const events = await s.StopLossLimit.queryFilter(filter, -1)
+        const filter = s.Bracket.filters.OrderCreated
+        const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         expect(Number(event[0])).to.eq(1, "First order Id")
 
         //verify pending order exists
-        const list = await s.StopLossLimit.getPendingOrders()
+        const list = await s.Bracket.getPendingOrders()
         expect(list.length).to.eq(1, "1 pending order")
 
         //verify our input token was received
-        balance = await s.WETH.balanceOf(await s.StopLossLimit.getAddress())
+        balance = await s.WETH.balanceOf(await s.Bracket.getAddress())
         expect(balance).to.eq(s.wethAmount, "WETH received")
 
         //cancel limit order for future tests
-        await s.StopLossLimit.connect(s.Bob).cancelOrder(1)
+        await s.Bracket.connect(s.Bob).cancelOrder(1)
+    })
+
+    it("scratchpad", async () => {
+        /**
+        const PERMIT_DETAILS = [
+            { name: 'token', type: 'address' },
+            { name: 'amount', type: 'uint160' },
+            { name: 'expiration', type: 'uint48' },
+            { name: 'nonce', type: 'uint48' },
+        ] as const
+
+        const PERMIT_TYPES = {
+            PermitSingle: [
+                { name: 'details', type: 'PermitDetails' },
+                { name: 'spender', type: 'address' },
+                { name: 'sigDeadline', type: 'uint256' },
+            ],
+            PermitDetails: PERMIT_DETAILS,
+        } as const
+
+        const domain = {
+            name: 'Permit2',
+            chainId,
+            verifyingContract: a.permit2,
+        }
+
+        const details: PermitDetails = {
+            token: a.wethAddress,
+            amount: s.wethAmount.toString(),
+            expiration: expiration.toString(),
+            nonce: nonce.toString()
+        }
+
+        const permit:PermitSingle = {
+            details: details,
+            spender: await s.StopLimit.getAddress(),
+            sigDeadline: (expiration * 30).toString()
+        }
+
+        const permitData = {
+            account,
+            domain,
+            types: PERMIT_TYPES,
+            message: {
+                details: {
+                    token: permit.details.token as `0x{string}`,
+                    amount: BigInt(BigInt(2) ** BigInt(160) - BigInt(1)),
+                    expiration: expiration != undefined ? expiration : Number(permit.details.expiration),
+                    nonce: Number(permit.details.nonce),
+                },
+                spender: permit.spender as `0x${string}`,
+                sigDeadline: BigInt(permit.sigDeadline),
+            },
+            primaryType: 'PermitSingle' as keyof typeof PERMIT_TYPES,
+        }
+         */
+
+
+
+
+
+
+        /**
+        const provider = new ethers.JsonRpcProvider()
+        const network = await provider.getNetwork()
+
+        const PERMIT_EXPIRATION = 2592000 //30d
+        const PERMIT_SIG_EXPIRATION = 1800 //30m
+
+        const permitSingle: PermitSingle = {
+            details: {
+                token: await s.WETH.getAddress(),
+                amount: s.wethAmount,
+                // You may set your own deadline - we use 30 days.
+                expiration: toDeadline(PERMIT_EXPIRATION),
+                nonce: await s.Bob.getNonce(),
+            },
+            spender: await s.Bob.getAddress(),
+            // You may set your own deadline - we use 30 minutes.
+            sigDeadline: toDeadline(PERMIT_SIG_EXPIRATION),
+        }
+
+        const { domain, types, values } = AllowanceTransfer.getPermitData(permitSingle, a.permit2, Number(network.chainId))
+        //const sig = await s.Bob.signTypedData(domain, types, values)
+         */
+
+
+        /**
+        //permitTransferFrom
+         // Define permit and transfer details
+        // Example parameters
+        const tokenAddress = await s.WETH.getAddress();
+        const spender = await s.StopLimit.getAddress();
+        const owner = await s.Bob.getAddress();  // Address of the token holder
+        const permit2Address = a.permit2; // Address of Permit2 contract
+        const deadline = Math.floor(Date.now() / 1000) + 3600; // 1-hour deadline
+        const signer = s.Bob
+        const amount = s.wethAmount
+
+        // Define permit and transfer details
+        const permit = {
+            permitted: {
+                token: tokenAddress,
+                amount: amount, // Replace with correct amount and decimals
+            },
+            nonce: nonce,
+            deadline: deadline,
+        };
+
+        const transferDetails = {
+            to: spender,
+            requestedAmount: amount, // Replace with correct amount
+        };
+
+        // Create a signature off-chain using EIP-712 format
+        const domain = {
+            name: "Permit2",
+            version: "1",
+            chainId: 42161,
+            verifyingContract: permit2Address,
+        };
+
+
+        const types = {
+            PermitTransferFrom: [
+                { name: "permitted", type: "TokenPermissions" },
+                { name: "nonce", type: "uint256" },
+                { name: "deadline", type: "uint256" },
+            ],
+            TokenPermissions: [
+                { name: "token", type: "address" },
+                { name: "amount", type: "uint256" },
+            ],
+        };
+
+        const value = {
+            permitted: {
+                token: permit.permitted.token,
+                amount: permit.permitted.amount,
+            },
+            nonce: permit.nonce,
+            deadline: permit.deadline,
+        };
+
+
+        const signature = await signer.signTypedData(domain, types, value);
+
+        console.log("GOT SIG: ", signature)
+
+        await s.StopLimit.connect(s.Bob).createOrderWithPermit(
+            currentPrice - stopDelta,
+            (currentPrice - stopDelta) + strikeDelta,
+            0n,//no stop loss
+            s.wethAmount,
+            await s.WETH.getAddress(),
+            await s.USDC.getAddress(),
+            await s.Bob.getAddress(),
+            strikeBips,
+            0,//no stop loss bips
+            0,//no swap on fill bips
+            false,//no swap on 
+            permit,
+            transferDetails,
+            signature
+        )
+        console.log("IT WORKED")
+
+
+         */
+
+        /**
+        // Construct PermitDetails
+        const permitDetails = {
+            token: a.wethAddress,
+            amount: s.wethAmount,
+            expiration: expiration,
+            nonce: nonce
+        };
+
+        // Construct PermitSingle
+        const permit = {
+            details: permitDetails,
+            spender: await s.StopLimit.getAddress(),
+            sigDeadline: expiration * 24
+        };
+
+        const domain = {
+            name: "Permit2",  // Name of the contract (as defined in its domain)
+            version: "1",
+            chainId: chainId,
+            verifyingContract: a.permit2
+        };
+
+        const types = {
+            PermitDetails: [
+                { name: "token", type: "address" },
+                { name: "amount", type: "uint160" },
+                { name: "expiration", type: "uint48" },
+                { name: "nonce", type: "uint48" },
+            ],
+            PermitSingle: [
+                { name: "details", type: "PermitDetails" },
+                { name: "spender", type: "address" },
+                { name: "sigDeadline", type: "uint256" }
+            ]
+        };
+
+        // Sign permit data
+        const signature = await s.Bob.signTypedData(domain, types, permit);
+
+        const PERMIT = IPermit2__factory.connect(a.permit2, s.Bob)
+        console.log("permit: ", a.permit2)
+
+        await s.StopLimit.connect(s.Bob).createOrderWithPermit(
+            currentPrice - stopDelta,
+            (currentPrice - stopDelta) + strikeDelta,
+            0n,//no stop loss
+            s.wethAmount,
+            await s.WETH.getAddress(),
+            await s.USDC.getAddress(),
+            await s.Bob.getAddress(),
+            strikeBips,
+            0,//no stop loss bips
+            0,//no swap on fill bips
+            false,//no swap on 
+            permit,
+            signature
+        )
+        //1728513427
+        //1721850057
+
+         */
+    })
+
+    it("Check permit2", async () => {
+        const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
+
+
+
+
+        /**
+         // Create a signature off-chain using EIP-712 format
+        const domain2 = {
+            name: "Permit2",
+            version: "1",
+            chainId: chainId,
+            verifyingContract: a.permit2,
+        };
+
+        const types = {
+            PermitDetails: [
+                { name: "token", type: "address" },
+                { name: "amount", type: "uint160" },
+                { name: "expiration", type: "uint48" },
+                { name: "nonce", type: "uint48" },
+            ],
+            PermitSingle: [
+                { name: "details", type: "PermitDetails" },
+                { name: "spender", type: "address" },
+                { name: "sigDeadline", type: "uint256" }
+            ]
+        };
+         */
+
+        expect(await s.WETH.balanceOf(await s.Bob.getAddress())).to.eq(s.wethAmount, "Bob has enough weth")
+
+        //approve permit 2
+        const PERMIT = IPermit2__factory.connect(a.permit2, s.Frank)
+
+        const approval = await s.WETH.connect(s.Bob).approve(await PERMIT.getAddress(), BigInt(2) ** BigInt(159) - BigInt(1))
+        console.log("approved")
+        console.log("Traditional Allowance: ", await s.WETH.allowance(await s.Bob.getAddress(), await PERMIT.getAddress()))
+
+        const chainId = 42161
+        const expiration = 1728603016 //1 hour
+        const nonce = 0
+        type PermitDetails = {
+            token: string
+            amount: string
+            expiration: string
+            nonce: string
+        }
+
+        type PermitSingle = {
+            details: PermitDetails
+            spender: string
+            sigDeadline: string
+        }
+
+        // Construct PermitDetails
+        const permitDetails: PermitDetails = {
+            token: a.wethAddress,
+            amount: s.wethAmount.toString(),
+            expiration: expiration.toString(),
+            nonce: nonce.toString()
+        };
+
+        // Construct PermitSingle
+        const permitSingle: PermitSingle = {
+            details: permitDetails,
+            spender: await s.StopLimit.getAddress(),
+            sigDeadline: (expiration + 86400).toString()
+        };
+
+        const { domain, types, values } = AllowanceTransfer.getPermitData(permitSingle, a.permit2, chainId)
+
+        console.log("Bob: ", await s.Bob.getAddress())
+        console.log("WETH: ", await s.WETH.getAddress())
+        console.log("StopLimit: ", await s.StopLimit.getAddress())
+        console.log("Permit2: ", a.permit2)
+
+        const signature = await s.Bob.signTypedData(domain as TypedDataDomain, types, values);
+
+        await s.StopLimit.connect(s.Bob).signatureTest(permitSingle, signature)
+
     })
 })
-
 /**
  * For swap on fill, we expect to receive the same asset we provide
  * In this case, we provide USDC, swap to WETH when the stop limit is filled, 
@@ -317,22 +636,22 @@ describe("Execute Stop-Limit with swap on fill", () => {
         const encodedTxData = await generateUniTx(
             s.router02,
             s.UniPool,
-            await s.StopLossLimit.getAddress(),
+            await s.Bracket.getAddress(),
             minAmountReceived,
             data
         )
 
-        const initOrders = await s.StopLossLimit.orderCount()
+        const initOrders = await s.Bracket.orderCount()
 
         console.log("Gas to performUpkeep: ", await getGas(await s.Master.performUpkeep(encodedTxData)))
 
-        const filter = s.StopLossLimit.filters.OrderCreated
-        const events = await s.StopLossLimit.queryFilter(filter, -1)
+        const filter = s.Bracket.filters.OrderCreated
+        const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         expect(Number(event[0])).to.eq(2, "Second order Id")
 
-        expect(await s.StopLossLimit.orderCount()).to.eq(initOrders + 1n, "New Order Created")
-        charlesOrder = await s.StopLossLimit.orderCount()
+        expect(await s.Bracket.orderCount()).to.eq(initOrders + 1n, "New Order Created")
+        charlesOrder = await s.Bracket.orderCount()
     })
 
     it("Verify", async () => {
@@ -341,8 +660,8 @@ describe("Execute Stop-Limit with swap on fill", () => {
         expect((await s.StopLimit.getPendingOrders()).length).to.eq(0, "no pending orders left")
 
         //stop loss limit order created
-        expect((await s.StopLossLimit.getPendingOrders()).length).to.eq(1, "new pending order")
-        expect(await s.StopLossLimit.pendingOrderIds(0)).to.eq(charlesOrder, "Charles's order is pending")
+        expect((await s.Bracket.getPendingOrders()).length).to.eq(1, "new pending order")
+        expect(await s.Bracket.pendingOrderIds(0)).to.eq(charlesOrder, "Charles's order is pending")
     })
 
     it("Check Upkeep", async () => {
@@ -381,7 +700,7 @@ describe("Execute Stop-Limit with swap on fill", () => {
         const encodedTxData = await generateUniTx(
             s.router02,
             s.UniPool,
-            await s.StopLossLimit.getAddress(),
+            await s.Bracket.getAddress(),
             minAmountReceived,
             data
         )
@@ -391,7 +710,7 @@ describe("Execute Stop-Limit with swap on fill", () => {
 
     it("Verify", async () => {
 
-        expect((await s.StopLossLimit.getPendingOrders()).length).to.eq(0, "no pending orders")
+        expect((await s.Bracket.getPendingOrders()).length).to.eq(0, "no pending orders")
 
         //USDC received is not perfect as we do not attempt to manipulate the true uni pool price
         let balance = await s.USDC.balanceOf(await s.Charles.getAddress())
@@ -437,14 +756,14 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
 
     it("Create stop-loss-limit order with swap USDC => WETH => USDC", async () => {
         const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
-        await s.USDC.connect(s.Bob).approve(await s.StopLossLimit.getAddress(), s.usdcAmount)
+        await s.USDC.connect(s.Bob).approve(await s.Bracket.getAddress(), s.usdcAmount)
         const swapInData = await generateUniTxData(
             s.USDC,
             await s.WETH.getAddress(),
             s.usdcAmount,
             s.router02,
             s.UniPool,
-            await s.StopLossLimit.getAddress(),
+            await s.Bracket.getAddress(),
             await s.Master.getMinAmountReceived(s.usdcAmount, await s.USDC.getAddress(), await s.WETH.getAddress(), swapInBips)
         )
 
@@ -457,7 +776,7 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
             txData: swapInData
         }
 
-        await s.StopLossLimit.connect(s.Bob).createOrderWithSwap(
+        await s.Bracket.connect(s.Bob).createOrderWithSwap(
             swapParams,
             currentPrice + strikeDelta,
             currentPrice - stopDelta,
@@ -468,17 +787,17 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
             stopBips
         )
 
-        const filter = s.StopLossLimit.filters.OrderCreated
-        const events = await s.StopLossLimit.queryFilter(filter, -1)
+        const filter = s.Bracket.filters.OrderCreated
+        const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         expect(Number(event[0])).to.eq(3, "Third order Id")
 
         //verify pending order exists
-        const list = await s.StopLossLimit.getPendingOrders()
+        const list = await s.Bracket.getPendingOrders()
         expect(list.length).to.eq(1, "1 pending order")
 
         //verify our input token was received
-        const balance = await s.WETH.balanceOf(await s.StopLossLimit.getAddress())
+        const balance = await s.WETH.balanceOf(await s.Bracket.getAddress())
         expect(balance).to.be.closeTo(s.wethAmount, 200000000000000000n, "WETH received")
 
     })
@@ -488,7 +807,7 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
         //should be no upkeep needed yet
         let initial = await s.Master.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
-        initial = await s.StopLossLimit.checkUpkeep("0x")
+        initial = await s.Bracket.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
 
         //increase price to strike price
@@ -497,7 +816,7 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
         //check upkeep
         let result = await s.Master.checkUpkeep("0x")
         expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
-        result = await s.StopLossLimit.checkUpkeep("0x")
+        result = await s.Bracket.checkUpkeep("0x")
         expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
 
         //reset price
@@ -506,7 +825,7 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
         //upkeep no longer needed
         result = await s.Master.checkUpkeep("0x")
         expect(result.upkeepNeeded).to.eq(false)
-        result = await s.StopLossLimit.checkUpkeep("0x")
+        result = await s.Bracket.checkUpkeep("0x")
         expect(result.upkeepNeeded).to.eq(false)
 
         //decrease price to stop price
@@ -515,7 +834,7 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
         //upkeep needed again
         result = await s.Master.checkUpkeep("0x")
         expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
-        result = await s.StopLossLimit.checkUpkeep("0x")
+        result = await s.Bracket.checkUpkeep("0x")
         expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
     })
 
@@ -533,7 +852,7 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
         const encodedTxData = await generateUniTx(
             s.router02,
             s.UniPool,
-            await s.StopLossLimit.getAddress(),
+            await s.Bracket.getAddress(),
             minAmountReceived,
             data
         )
@@ -547,18 +866,18 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
         expect(usdcBalance).to.be.gt(0n, "USDC received")
 
         //pending order removed and length == 0
-        expect(await s.StopLossLimit.pendingOrderIds.length).to.eq(0, "no pending orders left")
+        expect(await s.Bracket.pendingOrderIds.length).to.eq(0, "no pending orders left")
 
         //event
-        const filter = s.StopLossLimit.filters.OrderProcessed
-        const events = await s.StopLossLimit.queryFilter(filter, -1)
+        const filter = s.Bracket.filters.OrderProcessed
+        const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         expect(event.orderId).to.eq(3, "Order Id 3")
         expect(event.success).to.eq(true, "Swap succeeded")
 
         //no tokens left on contract
-        expect(await s.WETH.balanceOf(await s.StopLossLimit.getAddress())).to.eq(0n, "0 s.WETH left on contract")
-        expect(await s.USDC.balanceOf(await s.StopLossLimit.getAddress())).to.eq(0n, "0 s.USDC left on contract")
+        expect(await s.WETH.balanceOf(await s.Bracket.getAddress())).to.eq(0n, "0 s.WETH left on contract")
+        expect(await s.USDC.balanceOf(await s.Bracket.getAddress())).to.eq(0n, "0 s.USDC left on contract")
 
         //check upkeep
         const check = await s.Master.checkUpkeep("0x")

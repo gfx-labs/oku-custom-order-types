@@ -16,10 +16,11 @@ import "../oracle/IOracleRelay.sol";
 ///@notice STOP_LOSS_LIMIT orders check an external oracle for a pre-determined strike price AND/OR
 /// a pre-determined stop price,
 ///once this price is reached, a market swap occurs
-contract StopLossLimit is Ownable, IStopLossLimit {
+contract Bracket is Ownable, IBracket {
     using SafeERC20 for IERC20;
 
     AutomationMaster public immutable MASTER;
+    IPermit2 public immutable permit2;
 
     uint96 public orderCount;
 
@@ -27,8 +28,9 @@ contract StopLossLimit is Ownable, IStopLossLimit {
 
     mapping(uint256 => Order) public orders;
 
-    constructor(AutomationMaster _master) {
+    constructor(AutomationMaster _master, IPermit2 _permit2) {
         MASTER = _master;
+        permit2 = _permit2;
     }
 
     function getPendingOrders() external view returns (uint16[] memory) {
@@ -45,16 +47,71 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         uint32 strikeSlippage,
         uint32 stopSlippage
     ) external override {
-        require(
-            swapParams.swapBips <= MASTER.MAX_BIPS(),
-            "Invalid Slippage BIPS"
-        );
-
-        //take asset
+        //take asset, assume approved
         swapParams.swapTokenIn.safeTransferFrom(
             msg.sender,
             address(this),
             swapParams.swapAmountIn
+        );
+
+        _createOrderWithSwap(
+            swapParams,
+            strikePrice,
+            stopPrice,
+            tokenIn,
+            tokenOut,
+            recipient,
+            strikeSlippage,
+            stopSlippage
+        );
+    }
+
+    function createOrderWithSwapAndPermit(
+        SwapParams calldata swapParams,
+        uint256 strikePrice,
+        uint256 stopPrice,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        address recipient,
+        uint32 strikeSlippage,
+        uint32 stopSlippage,
+        IPermit2.PermitTransferFrom memory permit, // Add permit struct for approval-less transfer
+        IPermit2.SignatureTransferDetails memory transferDetails,
+        bytes calldata signature
+    ) external {
+        // Use Permit2 to approve and transfer tokens on behalf of the user
+        permit2.permitTransferFrom(
+            permit,
+            transferDetails,
+            address(this),
+            signature
+        );
+
+        _createOrderWithSwap(
+            swapParams,
+            strikePrice,
+            stopPrice,
+            tokenIn,
+            tokenOut,
+            recipient,
+            strikeSlippage,
+            stopSlippage
+        );
+    }
+
+    function _createOrderWithSwap(
+        SwapParams calldata swapParams,
+        uint256 strikePrice,
+        uint256 stopPrice,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        address recipient,
+        uint32 strikeSlippage,
+        uint32 stopSlippage
+    ) internal {
+        require(
+            swapParams.swapBips <= MASTER.MAX_BIPS(),
+            "Invalid Slippage BIPS"
         );
         (
             bool success,
@@ -85,6 +142,38 @@ contract StopLossLimit is Ownable, IStopLossLimit {
         if (tokenInRefund != 0) {
             swapParams.swapTokenIn.safeTransfer(recipient, tokenInRefund);
         }
+    }
+
+    function createOrderWithPermit(
+        uint256 strikePrice,
+        uint256 stopPrice,
+        uint256 amountIn,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        address recipient,
+        uint32 strikeSlippage,
+        uint32 stopSlippage,
+        IPermit2.PermitTransferFrom memory permit, // Add permit struct for approval-less transfer
+        IPermit2.SignatureTransferDetails memory transferDetails,
+        bytes calldata signature
+    ) external {
+        // Use Permit2 to approve and transfer tokens on behalf of the user
+        permit2.permitTransferFrom(
+            permit,
+            transferDetails,
+            address(this),
+            signature
+        );
+        _createOrder(
+            strikePrice,
+            stopPrice,
+            amountIn,
+            tokenIn,
+            tokenOut,
+            recipient,
+            strikeSlippage,
+            stopSlippage
+        );
     }
 
     ///@param strikePrice is in terms of exchange rate of tokenIn / tokenOut,
@@ -216,7 +305,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
                     abi.encode(
                         MasterUpkeepData({
                             orderType: OrderType.STOP_LOSS_LIMIT,
-                            target: address(0x0),
+                            target: address(this),
                             txData: "0x",
                             pendingOrderIdx: i,
                             orderId: order.orderId,
@@ -253,8 +342,7 @@ contract StopLossLimit is Ownable, IStopLossLimit {
 
         //asing bips
         uint32 bips;
-        strike ? bips = order.strikeSlippage : bips = order
-            .stopSlippage;
+        strike ? bips = order.strikeSlippage : bips = order.stopSlippage;
 
         (
             bool success,

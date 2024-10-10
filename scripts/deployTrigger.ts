@@ -1,12 +1,12 @@
 import hre, { network } from "hardhat";
 import { DeployContract } from "../util/deploy";
 import { currentBlock, resetCurrent, resetCurrentArb, resetCurrentBase, resetCurrentBsc, resetCurrentOP, resetCurrentOPblock, resetCurrentPoly, resetCurrentZksync } from "../util/block";
-import { AutomatedTriggerSwap, AutomatedTriggerSwap__factory, IERC20__factory, IOracleRelay, MasterKeeper, MasterKeeper__factory, OracleRelay__factory, UniswapV3Pool__factory } from "../typechain-types";
+import {  IERC20__factory, IOracleRelay, MasterKeeper, MasterKeeper__factory, OracleRelay__factory, UniswapV3Pool__factory } from "../typechain-types";
 import { limitOrderData } from "./limitOrderData";
 import { Signer } from "ethers";
 import { ceaseImpersonation, impersonateAccount } from "../util/impersonator";
 import { setBalance } from "@nomicfoundation/hardhat-network-helpers";
-import { decodeUpkeepData, generateUniTx, getStrikePrice } from "../util/msc";
+import { decodeUpkeepData, generateUniTx } from "../util/msc";
 import { a, o } from "../util/addresser";
 
 const { ethers } = require("hardhat");

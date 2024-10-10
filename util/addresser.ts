@@ -129,7 +129,7 @@ export class ArbAddresses{
     //trigger v2 deployments
     readonly Master: string = "0xbb5578c08bC08c15AcE5cd09c6683CcCcB2A9148"//"0x8a39E39234Bbb0840484c442Af01584DB04801CE"
     readonly limit: string = "0xCF2FCd9B87113139E809d5F9Ea6f4D571BB1C12a"
-    readonly stopLimit: string = "0x9518bC8aDfBE6A630162b58794435A87BE5Ea2B7"//"0x491397f7eb6f5d9B82B15cEcaBFf835bA31f217F"
+    readonly stopLimit: string = "0xd40decC59AAD75bbe50B91134472e2f2245be4D0"//"0x491397f7eb6f5d9B82B15cEcaBFf835bA31f217F"
     readonly stopLossLimit: string = "0x756497dDb1D6564b26aeD303E118F9f226EdC3c7"//"0xEF52F132746a55f750ecfb3853e29CfECBC5f6E5"
 
     
@@ -139,6 +139,11 @@ export class ArbAddresses{
     readonly usdcOracleAddress: string = "0x9BDb5575E24EEb2DCA7Ba6CE367d609Bdeb38246"//usd price in 1e8 terms
     readonly wethUsdcPoolAddress: string = "0xC6962004f452bE9203591991D15f6b388e09E8D0"//fee 500
     readonly nativeUsdcAddress: string = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+    readonly bridgedUsdcAddress: string = "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8"
+
+    readonly bridgedUsdcPool: string = "0xC6962004f452bE9203591991D15f6b388e09E8D0"//500
+
+    readonly permit2: string = "0x000000000022D473030F116dDEE9F6B43aC78BA3"
 
 }
 

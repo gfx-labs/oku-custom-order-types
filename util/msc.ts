@@ -1,6 +1,9 @@
 import { AbiCoder, AddressLike, BigNumberish, BytesLike, Signer, TransactionResponse } from "ethers"
-import { IERC20, IERC20__factory, ISwapRouter02__factory, UniswapV3Pool } from "../typechain-types"
+import { IERC20, IERC20__factory, IPermit2, ISwapRouter02__factory, UniswapV3Pool } from "../typechain-types"
 import { ethers } from "hardhat"
+import { keccak256 } from "@ethersproject/keccak256";
+import { toUtf8Bytes } from "@ethersproject/strings";
+import { arrayify } from "@ethersproject/bytes";
 
 const abi = new AbiCoder()
 
@@ -15,14 +18,14 @@ export type ExactInputSingleParams = {
 }
 
 export type Order = {
-    orderId: bigint, 
+    orderId: bigint,
     strikePrice: bigint,
     amountIn: bigint,
     tokenIn: AddressLike,
     tokenOut: AddressLike,
     recipient: AddressLike,
     slippageBips: bigint,
-    direction: boolean 
+    direction: boolean
 }
 
 export const getGas = async (result: TransactionResponse) => {
@@ -67,7 +70,7 @@ export const decodeUpkeepData = async (data: BytesLike, signer: Signer): Promise
         bips: BigInt(decoded.bips),
         amountIn: BigInt(decoded.amountIn),
         exchangeRate: BigInt(decoded.exchangeRate),
-        txData: decoded.txData 
+        txData: decoded.txData
     }
 
     return upkeepData
@@ -108,8 +111,8 @@ export const generateUniTx = async (
     const signer = await ethers.getSigner(automationContract.toString())
     const ROUTER = ISwapRouter02__factory.connect(router.toString(), signer)
     const params: ExactInputSingleParams = {
-        tokenIn: await data.tokenIn.getAddress(), 
-        tokenOut: await data.tokenOut.getAddress(), 
+        tokenIn: await data.tokenIn.getAddress(),
+        tokenOut: await data.tokenOut.getAddress(),
         fee: await pool.fee(),
         recipient: automationContract,
         amountIn: data.amountIn,
@@ -124,7 +127,7 @@ export const generateUniTx = async (
         [MasterUpkeepTuple],
         [{
             orderType: data.orderType,
-            target: router, 
+            target: router,
             tokenIn: await data.tokenIn.getAddress(),
             tokenOut: await data.tokenOut.getAddress(),
             orderId: data.orderId,
@@ -132,9 +135,96 @@ export const generateUniTx = async (
             bips: data.bips,
             amountIn: data.amountIn,
             exchangeRate: data.exchangeRate,
-            txData: txData 
+            txData: txData
         }]
     )
 
     return encodedMasterUpkeepData
+}
+
+
+/**
+* Converts an expiration (in milliseconds) to a deadline (in seconds) suitable for the EVM.
+* Permit2 expresses expirations as deadlines, but JavaScript usually uses milliseconds,
+* so this is provided as a convenience function.
+*/
+export function toDeadline(expiration: number): number {
+    return Math.floor((Date.now() + expiration) / 1000)
+}
+
+// Function to get EIP-712 domain separator
+export function getDomainSeparator(permit2Address: string, chainId: number): string {
+    return keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
+            [
+                "bytes32", // Domain type hash
+                "bytes32", // Name hash
+                "bytes32", // Version hash
+                "uint256", // Chain ID
+                "address"  // Verifying contract address
+            ],
+            [
+                keccak256(toUtf8Bytes("Permit2")),  // Domain type name
+                keccak256(toUtf8Bytes("1")),        // Version of the protocol
+                chainId,
+                permit2Address                      // Address of Permit2 contract
+            ]
+        )
+    );
+}
+
+// Function to build permit signature using EIP-712
+export async function buildPermitSignature(
+    signer: ethers.Signer,
+    domainSeparator: string,
+    permit: IPermit2.PermitTransferFromStruct,
+    transferDetails: IPermit2.SignatureTransferDetailsStruct
+): Promise<string> {
+    // Create the permit struct hash (encode according to EIP-712)
+    const PERMIT_TYPEHASH = keccak256(toUtf8Bytes(
+        "PermitTransferFrom(TokenPermissions permitted,uint256 nonce,uint256 deadline)"
+    ));
+    const TOKEN_PERMISSIONS_TYPEHASH = keccak256(toUtf8Bytes(
+        "TokenPermissions(address token,uint256 amount)"
+    ));
+
+    // Hash the TokenPermissions
+    const tokenPermissionsHash = keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
+            ["bytes32", "address", "uint256"],
+            [
+                TOKEN_PERMISSIONS_TYPEHASH,
+                permit.permitted.token,
+                permit.permitted.amount
+            ]
+        )
+    );
+
+    // Hash the full permit struct
+    const permitHash = keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
+            ["bytes32", "bytes32", "uint256", "uint256"],
+            [
+                PERMIT_TYPEHASH,
+                tokenPermissionsHash,
+                permit.nonce,
+                permit.deadline
+            ]
+        )
+    );
+
+    // EIP-712 message encoding
+    const messageHash = keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
+            ["bytes32", "bytes32"],
+            [
+                domainSeparator,  // Domain separator
+                permitHash        // The hashed permit struct
+            ]
+        )
+    );
+
+    // Get the signature from the signer
+    const signature = await signer.signMessage(arrayify(messageHash));
+    return signature;
 }

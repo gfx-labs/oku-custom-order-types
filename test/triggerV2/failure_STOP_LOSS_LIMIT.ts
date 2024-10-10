@@ -1,4 +1,4 @@
-import { AutomationMaster__factory, IERC20__factory, PlaceholderOracle__factory, StopLimit__factory, StopLossLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
+import { AutomationMaster__factory, IERC20__factory, PlaceholderOracle__factory, StopLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
 import { currentBlock, resetCurrentArbBlock } from "../../util/block"
 import { expect } from "chai"
 import { stealMoney } from "../../util/money"
@@ -41,8 +41,8 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
     })
 
     it("Swap fails due to slippage", async () => {
-        await s.WETH.connect(s.Steve).approve(await s.StopLossLimit.getAddress(), s.steveWeth)
-        await s.StopLossLimit.connect(s.Steve).createOrder(
+        await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), s.steveWeth)
+        await s.Bracket.connect(s.Steve).createOrder(
             currentPrice + steveStrikeDelta,
             currentPrice - steveStrikeDelta,
             s.wethAmount,
@@ -53,12 +53,12 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             smallSlippage
         )
 
-        steveOrder = Number(await s.StopLossLimit.orderCount())
-        const order = await s.StopLossLimit.orders(steveOrder)
+        steveOrder = Number(await s.Bracket.orderCount())
+        const order = await s.Bracket.orders(steveOrder)
         expect(order.recipient).to.eq(await s.Steve.getAddress(), "steve's order")
 
-        const filter = s.StopLossLimit.filters.OrderCreated
-        const events = await s.StopLossLimit.queryFilter(filter, -1)
+        const filter = s.Bracket.filters.OrderCreated
+        const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         expect(Number(event.orderId)).to.eq(steveOrder, "First order Id")
 
@@ -75,7 +75,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
 
         //confirm pending order to be executed is steve's order
         const data: MasterUpkeepData = await decodeUpkeepData(check.performData, s.Steve)
-        const pendingOrders = await s.StopLossLimit.getPendingOrders()
+        const pendingOrders = await s.Bracket.getPendingOrders()
         expect(pendingOrders[Number(data.pendingOrderIdx)]).to.eq(steveOrder, "steve's order is being filled")
 
         //try to fill, fail - slippage too low
@@ -84,7 +84,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         let encodedTxData = await generateUniTx(
             s.router02,
             s.UniPool,
-            await s.StopLossLimit.getAddress(),
+            await s.Bracket.getAddress(),
             minAmountReceived,
             data
         )
@@ -92,14 +92,14 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         expect(s.Master.performUpkeep(encodedTxData)).to.be.revertedWith("Too Little Received")
 
         //try to cancel order that isn't yours
-        expect(s.StopLossLimit.connect(s.Bob).cancelOrder(steveOrder)).to.be.revertedWith("Only Order Owner")
+        expect(s.Bracket.connect(s.Bob).cancelOrder(steveOrder)).to.be.revertedWith("Only Order Owner")
 
         minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, data.bips)//actual bips are 0% slippage
 
         encodedTxData = await generateUniTx(
             s.router02,
             s.UniPool,
-            await s.StopLossLimit.getAddress(),
+            await s.Bracket.getAddress(),
             minAmountReceived,
             data
         )
@@ -107,22 +107,22 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         //tx succeeds if we try to fill with 0% slippage, but swap fails
         expect(await s.Master.performUpkeep(encodedTxData)).to.not.be.reverted
 
-        const orderProcessedFilter = s.StopLossLimit.filters.OrderProcessed
-        const opEvents = await s.StopLossLimit.queryFilter(orderProcessedFilter, -1)
+        const orderProcessedFilter = s.Bracket.filters.OrderProcessed
+        const opEvents = await s.Bracket.queryFilter(orderProcessedFilter, -1)
         const opEvent = opEvents[0].args
         expect(Number(opEvent.orderId)).to.eq(steveOrder, "steve's order processed")
         expect(opEvent.success).to.eq(false, "swap failed")
 
 
         //cancel order for future tests
-        await s.StopLossLimit.connect(s.Steve).cancelOrder(steveOrder)
+        await s.Bracket.connect(s.Steve).cancelOrder(steveOrder)
 
     })
 
 
     it("Order creation fails due to insufficient balance", async () => {
-        await s.WETH.connect(s.Steve).approve(await s.StopLossLimit.getAddress(), veryLargeWethAmount)
-        expect(s.StopLossLimit.connect(s.Steve).createOrder(
+        await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), veryLargeWethAmount)
+        expect(s.Bracket.connect(s.Steve).createOrder(
             currentPrice + steveStrikeDelta,
             currentPrice - steveStrikeDelta,
             veryLargeWethAmount,
@@ -139,8 +139,8 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
     it("Spend pending balances", async () => {
 
         //create order
-        await s.WETH.connect(s.Steve).approve(await s.StopLossLimit.getAddress(), s.wethAmount)
-        await s.StopLossLimit.connect(s.Steve).createOrder(
+        await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), s.wethAmount)
+        await s.Bracket.connect(s.Steve).createOrder(
             currentPrice + steveStrikeDelta,
             currentPrice - steveStrikeDelta,
             s.wethAmount,
@@ -160,16 +160,16 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
 
 
         //confirm pending order to be executed is steve's order
-        steveOrder = Number(await s.StopLossLimit.orderCount())
-        const order = await s.StopLossLimit.orders(steveOrder)
+        steveOrder = Number(await s.Bracket.orderCount())
+        const order = await s.Bracket.orders(steveOrder)
         expect(order.recipient).to.eq(await s.Steve.getAddress(), "steve's order")
         const data: MasterUpkeepData = await decodeUpkeepData(check.performData, s.Steve)
-        const pendingOrders = await s.StopLossLimit.getPendingOrders()
+        const pendingOrders = await s.Bracket.getPendingOrders()
         expect(pendingOrders[Number(data.pendingOrderIdx)]).to.eq(steveOrder, "steve's order is being filled")
 
         //now that we confirmed we are filling steve's order,
         //how much weth is on the contract, relative to how much we are supposed to be allowed to send (steve's order.amountIn)?
-        const totalWeths = await s.WETH.balanceOf(await s.StopLossLimit.getAddress())
+        const totalWeths = await s.WETH.balanceOf(await s.Bracket.getAddress())
         const expectedAmountIn = data.amountIn
         const expectedRemaining = totalWeths - expectedAmountIn
 
@@ -181,7 +181,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         let encodedTxData = await generateUniTx(
             s.router02,
             s.UniPool,
-            await s.StopLossLimit.getAddress(),
+            await s.Bracket.getAddress(),
             minAmountReceived,
             data
         )
@@ -197,7 +197,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         encodedTxData = await generateUniTx(
             s.router02,
             s.UniPool,
-            await s.StopLossLimit.getAddress(),
+            await s.Bracket.getAddress(),
             minAmountReceived,
             data
         )

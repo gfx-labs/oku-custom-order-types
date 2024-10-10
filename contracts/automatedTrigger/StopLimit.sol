@@ -12,13 +12,16 @@ import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../oracle/IOracleRelay.sol";
 
+import "hardhat/console.sol";
+
 ///@notice This contract owns and handles all logic associated with STOP_LIMIT orders
 ///STOP_LIMIT orders create a new limit order order once filled
 contract StopLimit is Ownable, IStopLimit {
     using SafeERC20 for IERC20;
 
     AutomationMaster public immutable MASTER;
-    IStopLossLimit public immutable SLL_CONTRACT;
+    IBracket public immutable BRACKET_CONTRACT;
+    IPermit2 public immutable permit2;
 
     uint96 public orderCount;
 
@@ -26,15 +29,154 @@ contract StopLimit is Ownable, IStopLimit {
 
     mapping(uint256 => Order) public orders;
 
-    constructor(AutomationMaster _master, IStopLossLimit _sll) {
+    constructor(
+        AutomationMaster _master,
+        IBracket _bracket,
+        IPermit2 _permit2
+    ) {
         MASTER = _master;
-        SLL_CONTRACT = _sll;
+        BRACKET_CONTRACT = _bracket;
+        permit2 = _permit2;
     }
 
     function getPendingOrders() external view returns (uint16[] memory) {
         return pendingOrderIds;
     }
 
+    function signatureTest(
+        IPermit2.PermitSingle memory permitSingle, 
+        bytes calldata signature
+    ) external {
+        bytes32 _PERMIT_DETAILS_TYPEHASH = keccak256(
+            "PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
+        );
+
+        bytes32 _PERMIT_SINGLE_TYPEHASH = keccak256(
+            "PermitSingle(PermitDetails details,address spender,uint256 sigDeadline)PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
+        );
+
+        bytes32 permitHash = keccak256(
+            abi.encode(_PERMIT_DETAILS_TYPEHASH, permitSingle.details)
+        );
+
+        bytes32 hash = keccak256(
+            abi.encode(
+                _PERMIT_SINGLE_TYPEHASH,
+                permitHash,
+                permitSingle.spender,
+                permitSingle.sigDeadline
+            )
+        );
+
+        console.log("Sig Length: ", signature.length);
+        (bytes32 r, bytes32 s) = abi.decode(signature, (bytes32, bytes32));
+        uint8 v = uint8(signature[64]);
+
+        address signer = ecrecover(hash, v, r, s);
+        console.log("signer: ", signer);
+        console.log("Sender: ", msg.sender);
+
+        permit2.permit(msg.sender, permitSingle, signature);
+    }
+
+    //todo non reentrant
+    function createOrderWithPermit(
+        uint256 stopLimitPrice,
+        uint256 strikePrice,
+        uint256 stopPrice,
+        uint256 amountIn,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        address recipient,
+        uint16 strikeSlipapge,
+        uint16 stopSlippage,
+        uint16 swapSlippage,
+        bool swapOnFill,
+        IPermit2.PermitTransferFrom memory permit, // Add permit struct for approval-less transfer
+        IPermit2.SignatureTransferDetails memory transferDetails,
+        bytes calldata signature
+    ) external {
+        permit2.permitTransferFrom(
+            permit,
+            transferDetails,
+            msg.sender,
+            signature
+        );
+
+        /**
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+
+        if (signature.length == 65) {
+            (r, s) = abi.decode(signature, (bytes32, bytes32));
+            v = uint8(signature[64]);
+        } else if (signature.length == 64) {
+            // EIP-2098
+            bytes32 vs;
+            (r, vs) = abi.decode(signature, (bytes32, bytes32));
+            s =
+                vs &
+                0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+            v = uint8(uint256(vs >> 255)) + 27;
+        }
+
+        bytes32 _PERMIT_DETAILS_TYPEHASH = keccak256(
+            "PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
+        );
+
+        bytes32 _PERMIT_SINGLE_TYPEHASH = keccak256(
+            "PermitSingle(PermitDetails details,address spender,uint256 sigDeadline)PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
+        );
+
+        bytes32 permitHash = keccak256(
+            abi.encode(_PERMIT_DETAILS_TYPEHASH, permit.details)
+        );
+
+        bytes32 hashh = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                bytes32(0x8a6e6e19bdfb3db3409910416b47c2f8fc28b49488d6555c7fceaa4479135bc3),
+                keccak256(
+                    abi.encode(
+                        _PERMIT_SINGLE_TYPEHASH,
+                        permitHash,
+                        permit.spender,
+                        permit.sigDeadline
+                    )
+                )
+            )
+        );
+
+        address signer = ecrecover(hashh, v, r, s);
+
+        console.log("CREATING", signer);
+        console.log("ACTUALL: ", msg.sender);
+        console.log("StopLimt: ", address(this));
+        console.log("NOW: ", block.timestamp);
+        permit2.permit(msg.sender, permit, signature);
+
+        console.log("PERMIT WORKED");
+
+        tokenIn.safeTransferFrom(recipient, address(this), amountIn);
+        */
+
+        _createOrder(
+            stopLimitPrice,
+            strikePrice,
+            stopPrice,
+            amountIn,
+            tokenIn,
+            tokenOut,
+            recipient,
+            strikeSlipapge,
+            stopSlippage,
+            swapSlippage,
+            swapOnFill
+        );
+    }
+
+    //todo non reentrant
     ///@param stopLimitPrice price at which the limit order is created
     ///@param strikePrice or @param stopPrice is the price at which the limit order is closed
     function createOrder(
@@ -50,9 +192,41 @@ contract StopLimit is Ownable, IStopLimit {
         uint16 swapSlippage,
         bool swapOnFill
     ) external override {
+        //take asset, assume approved
+        tokenIn.safeTransferFrom(recipient, address(this), amountIn);
+
+        _createOrder(
+            stopLimitPrice,
+            strikePrice,
+            stopPrice,
+            amountIn,
+            tokenIn,
+            tokenOut,
+            recipient,
+            strikeSlipapge,
+            stopSlippage,
+            swapSlippage,
+            swapOnFill
+        );
+    }
+
+    function _createOrder(
+        uint256 stopLimitPrice,
+        uint256 strikePrice,
+        uint256 stopPrice,
+        uint256 amountIn,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        address recipient,
+        uint16 strikeSlipapge,
+        uint16 stopSlippage,
+        uint16 swapSlippage,
+        bool swapOnFill
+    ) internal {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
-            address(MASTER.oracles(tokenIn)) != address(0x0) && address(MASTER.oracles(tokenOut)) != address(0x0),
+            address(MASTER.oracles(tokenIn)) != address(0x0) &&
+                address(MASTER.oracles(tokenOut)) != address(0x0),
             "Oracle !exist"
         );
         require(
@@ -85,9 +259,6 @@ contract StopLimit is Ownable, IStopLimit {
         });
         pendingOrderIds.push(uint16(orderCount));
 
-        //take asset
-        tokenIn.safeTransferFrom(recipient, address(this), amountIn);
-
         //emit
         emit OrderCreated(orderCount);
     }
@@ -109,7 +280,6 @@ contract StopLimit is Ownable, IStopLimit {
         Order memory order = orders[orderId];
         for (uint16 i = 0; i < pendingOrderIds.length; i++) {
             if (pendingOrderIds[i] == orderId) {
-
                 //remove from pending array
                 pendingOrderIds = ArrayMutation.removeFromArray(
                     i,
@@ -146,8 +316,10 @@ contract StopLimit is Ownable, IStopLimit {
                     abi.encode(
                         MasterUpkeepData({
                             orderType: OrderType.STOP_LIMIT,
-                            target: address(0x0), //N/A
-                            txData: order.swapOnFill ? bytes("0x01") : bytes("0x00"),//specify if swapOnFill is true
+                            target: address(this),
+                            txData: order.swapOnFill
+                                ? abi.encodePacked(true)
+                                : abi.encodePacked(false), //specify if swapOnFill is true
                             pendingOrderIdx: i,
                             orderId: order.orderId,
                             tokenIn: order.tokenIn,
@@ -181,32 +353,35 @@ contract StopLimit is Ownable, IStopLimit {
         );
 
         //approve
-        updateApproval(address(SLL_CONTRACT), order.tokenIn, order.amountIn);
+        updateApproval(
+            address(BRACKET_CONTRACT),
+            order.tokenIn,
+            order.amountIn
+        );
 
         if (order.swapOnFill) {
             //for swap on fill, we expect to be paid out in the same asset we provided
             //so the resulting order tokenIn and tokenOut are inverted relative to our original swap limit order
             SwapParams memory params = SwapParams({
-                swapTokenIn: order.tokenIn,//asset provided
+                swapTokenIn: order.tokenIn, //asset provided
                 swapAmountIn: order.amountIn,
                 swapTarget: data.target,
                 swapBips: order.swapSlippage,
                 txData: data.txData
             });
-            SLL_CONTRACT.createOrderWithSwap(
+            BRACKET_CONTRACT.createOrderWithSwap(
                 params,
                 order.strikePrice,
                 order.stopPrice,
-                order.tokenOut,//invert tokenIn 
-                order.tokenIn,//invert tokenOut
+                order.tokenOut, //invert tokenIn
+                order.tokenIn, //invert tokenOut
                 order.recipient,
                 order.strikeSlippage,
                 order.stopSlippage
             );
-
         } else {
             //create standard order without swap on fill
-            SLL_CONTRACT.createOrder(
+            BRACKET_CONTRACT.createOrder(
                 order.strikePrice,
                 order.stopPrice,
                 order.amountIn,

@@ -24,16 +24,16 @@ contract AutomationMaster is IAutomation, Ownable {
     uint256 public minOrderSize;
 
     IStopLimit public STOP_LIMIT_CONTRACT;
-    IStopLossLimit public STOP_LOSS_LIMIT_CONTRACT;
+    IBracket public BRACKET_CONTRACT;
 
     mapping(IERC20 => IOracleRelay) public oracles;
 
     function registerSubKeepers(
         IStopLimit stopLimitContract,
-        IStopLossLimit stopLossLimitContract
+        IBracket stopLossLimitContract
     ) external onlyOwner {
         STOP_LIMIT_CONTRACT = stopLimitContract;
-        STOP_LOSS_LIMIT_CONTRACT = stopLossLimitContract;
+        BRACKET_CONTRACT = stopLossLimitContract;
     }
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
@@ -153,7 +153,7 @@ contract AutomationMaster is IAutomation, Ownable {
         }
 
         //check stop loss limit order
-        (upkeepNeeded, performData) = STOP_LOSS_LIMIT_CONTRACT.checkUpkeep(
+        (upkeepNeeded, performData) = BRACKET_CONTRACT.checkUpkeep(
             "0x"
         );
         if (upkeepNeeded) {
@@ -175,7 +175,7 @@ contract AutomationMaster is IAutomation, Ownable {
 
         //if stop order, we directly pass the upkeep data to the stop order contract
         if (data.orderType == OrderType.STOP_LOSS_LIMIT) {
-            STOP_LOSS_LIMIT_CONTRACT.performUpkeep(performData);
+            BRACKET_CONTRACT.performUpkeep(performData);
         }
     }
 }

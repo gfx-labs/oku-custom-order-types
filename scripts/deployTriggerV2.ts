@@ -195,6 +195,17 @@ const updateSubKeeper = async (signer: Signer) => {
   )
   console.log("Registered Sub Keepers on Master: ", await masterKeeper.getAddress())
 
+  if(mainnet){
+    console.log("Verifying...")
+    await hre.run("verify:verify", {
+      address: await newStopLimit.getAddress(),
+      constructorArguments: [
+        masterAddr,
+        stopLossLimitAddr
+      ]
+    })
+    console.log("verified")
+  }
 
 
 }
