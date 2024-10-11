@@ -6,10 +6,10 @@ import { limitOrderData } from "./limitOrderData";
 import { Signer, TypedDataDomain } from "ethers";
 import { ceaseImpersonation, impersonateAccount } from "../util/impersonator";
 import { setBalance } from "@nomicfoundation/hardhat-network-helpers";
-import { decodeUpkeepData, generateUniTx, MasterUpkeepData } from "../util/msc";
+import { decodeUpkeepData, generateUniTx, MasterUpkeepData, permitSingle } from "../util/msc";
 import { a, o } from "../util/addresser";
 import { s } from "../test/triggerV2/scope";
-import { AllowanceTransfer } from "@uniswap/permit2-sdk";
+import { AllowanceTransfer, PermitSingle } from "@uniswap/permit2-sdk";
 const { ethers } = require("hardhat");
 
 
@@ -94,46 +94,19 @@ async function main() {
 
 const permitTest = async (signer: Signer) => {
     const chainId = 42161
-    const expiration = Math.floor(Date.now() / 1000) + 60 * 60 // 1 hour from now
-    const nonce = 0
-
     const PERMIT2 = IPermit2__factory.connect(a.permit2, signer)
 
-    type PermitDetails = {
-        token: string
-        amount: string
-        expiration: string
-        nonce: string
-    }
 
-    type PermitSingle = {
-        details: PermitDetails
-        spender: string
-        sigDeadline: string
-    }
+    const data = await permitSingle(
+        signer,
+        chainId,
+        a.wethAddress,
+        a.stopLimit,
+        a.permit2,
+        4
+    )
 
-    // Construct PermitDetails
-    const permitDetails: PermitDetails = {
-        token: a.wethAddress,
-        amount: wethAmount,
-        expiration: expiration.toString(),
-        nonce: nonce.toString()
-    };
-
-    // Construct PermitSingle
-    const permitSingle: PermitSingle = {
-        details: permitDetails,
-        spender: a.stopLimit,
-        sigDeadline: (expiration + 86400).toString()
-    };
-
-    const { domain, types, values } = AllowanceTransfer.getPermitData(permitSingle, a.permit2, chainId)
-
-    // Sign permit data
-    const signature = await signer.signTypedData(domain as TypedDataDomain, types, permitSingle);
-    console.log(signature)
-
-    await PERMIT2.connect(signer).permit(await signer.getAddress(), permitSingle, signature, {
+    await PERMIT2.connect(signer).permit(await signer.getAddress(), data.permitSingle, data.signature, {
         gasLimit: 1000000 // Setting a higher gas limit to force transaction to be sent
     })
 }

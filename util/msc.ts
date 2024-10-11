@@ -1,11 +1,26 @@
-import { AbiCoder, AddressLike, BigNumberish, BytesLike, Signer, TransactionResponse } from "ethers"
+import { AbiCoder, AddressLike, BigNumberish, BytesLike, Signer, TransactionResponse, TypedDataDomain } from "ethers"
 import { IERC20, IERC20__factory, IPermit2, ISwapRouter02__factory, UniswapV3Pool } from "../typechain-types"
 import { ethers } from "hardhat"
 import { keccak256 } from "@ethersproject/keccak256";
 import { toUtf8Bytes } from "@ethersproject/strings";
 import { arrayify } from "@ethersproject/bytes";
+import { AllowanceTransfer } from "@uniswap/permit2-sdk";
+import { TypedData } from "ethers/lib.commonjs/abi/typed";
 
 const abi = new AbiCoder()
+
+type PermitDetails = {
+    token: string
+    amount: string
+    expiration: string
+    nonce: string
+}
+
+type PermitSingle = {
+    details: PermitDetails
+    spender: string
+    sigDeadline: string
+}
 
 export type ExactInputSingleParams = {
     tokenIn: AddressLike,
@@ -140,6 +155,50 @@ export const generateUniTx = async (
     )
 
     return encodedMasterUpkeepData
+}
+
+/**
+ * 
+ * @param chainId 
+ * @param expiration 
+ * @return permitData and signature
+ */
+export const permitSingle = async (
+    signer: Signer,
+    chainId: number,
+    token: string,
+    spender: string,
+    permit2: string,
+    nonce: number = 0,
+    expiration?: number,
+) => {
+    if (expiration == undefined) {
+        expiration = Math.floor(Date.now() / 1000) + 60 * 60 // 1 hour from now
+    }
+    
+    const permitDetails: PermitDetails = {
+        token: token,
+        amount: (BigInt(2) ** BigInt(159) - BigInt(1)).toString(),
+        expiration: expiration.toString(),
+        nonce: nonce.toString(),
+    }
+
+    const permitSingle: PermitSingle = {
+        details: permitDetails,
+        spender: spender,
+        sigDeadline: (expiration + 86400).toString()
+    }
+
+    const { domain, types, values } = AllowanceTransfer.getPermitData(permitSingle, permit2, chainId)
+
+    const signature = await signer.signTypedData(domain as TypedDataDomain, types, values)
+
+    return {
+        signature: signature,
+        permitSingle: permitSingle
+    }
+
+
 }
 
 

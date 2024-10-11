@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "./IAutomation.sol";
 import "./AutomationMaster.sol";
@@ -10,13 +10,15 @@ import "../interfaces/uniswapV3/ISwapRouter02.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
+import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../oracle/IOracleRelay.sol";
 
-///@notice This contract owns and handles all logic associated with STOP_MARKET orders
-///@notice STOP_LOSS_LIMIT orders check an external oracle for a pre-determined strike price AND/OR
-/// a pre-determined stop price,
-///once this price is reached, a market swap occurs
-contract Bracket is Ownable, IBracket {
+///@notice This contract owns and handles all logic associated with the following order types:
+/// BRACKET_ORDER - automated fill at strike price AND stop loss, with independant slippapge for each option
+/// LIMIT_ORDER - automated market swap at specified strike price
+/// STOP_LOSS - automated market swap at specified stop price
+/// In order to configure a LIMIT_ORDER or STOP_LOSS order, simply set the strike price or stop price to either 0 or 2^256 - 1 as appropriate
+contract Bracket is Ownable, IBracket, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     AutomationMaster public immutable MASTER;
@@ -46,14 +48,7 @@ contract Bracket is Ownable, IBracket {
         address recipient,
         uint32 strikeSlippage,
         uint32 stopSlippage
-    ) external override {
-        //take asset, assume approved
-        swapParams.swapTokenIn.safeTransferFrom(
-            msg.sender,
-            address(this),
-            swapParams.swapAmountIn
-        );
-
+    ) external override nonReentrant() {
         _createOrderWithSwap(
             swapParams,
             strikePrice,
@@ -75,17 +70,10 @@ contract Bracket is Ownable, IBracket {
         address recipient,
         uint32 strikeSlippage,
         uint32 stopSlippage,
-        IPermit2.PermitTransferFrom memory permit, // Add permit struct for approval-less transfer
-        IPermit2.SignatureTransferDetails memory transferDetails,
+        IPermit2.PermitSingle memory permitSingle,
         bytes calldata signature
-    ) external {
-        // Use Permit2 to approve and transfer tokens on behalf of the user
-        permit2.permitTransferFrom(
-            permit,
-            transferDetails,
-            address(this),
-            signature
-        );
+    ) external nonReentrant(){
+        permit2.permit(msg.sender, permitSingle, signature);
 
         _createOrderWithSwap(
             swapParams,
@@ -112,6 +100,12 @@ contract Bracket is Ownable, IBracket {
         require(
             swapParams.swapBips <= MASTER.MAX_BIPS(),
             "Invalid Slippage BIPS"
+        );
+        //take asset, assume approved
+        swapParams.swapTokenIn.safeTransferFrom(
+            msg.sender,
+            address(this),
+            swapParams.swapAmountIn
         );
         (
             bool success,
@@ -153,17 +147,15 @@ contract Bracket is Ownable, IBracket {
         address recipient,
         uint32 strikeSlippage,
         uint32 stopSlippage,
-        IPermit2.PermitTransferFrom memory permit, // Add permit struct for approval-less transfer
-        IPermit2.SignatureTransferDetails memory transferDetails,
+        IPermit2.PermitSingle memory permitSingle, // Add permit struct for approval-less transfer
         bytes calldata signature
-    ) external {
+    ) external nonReentrant(){
         // Use Permit2 to approve and transfer tokens on behalf of the user
-        permit2.permitTransferFrom(
-            permit,
-            transferDetails,
-            address(this),
-            signature
-        );
+        permit2.permit(msg.sender, permitSingle, signature);
+
+        //take asset
+        tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
+
         _createOrder(
             strikePrice,
             stopPrice,
@@ -187,7 +179,7 @@ contract Bracket is Ownable, IBracket {
         address recipient,
         uint32 strikeSlippage,
         uint32 stopSlippage
-    ) external override {
+    ) external override nonReentrant(){
         //take asset
         tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
 
@@ -330,7 +322,7 @@ contract Bracket is Ownable, IBracket {
     ///that contract will exchange our tokenIn for tokenOut with at least minAmountReceived
     /// pendingOrderIdx is the index of the pending order we are executing,
     ///this pending order is removed from the array via array mutation
-    function performUpkeep(bytes calldata performData) external override {
+    function performUpkeep(bytes calldata performData) external override nonReentrant(){
         MasterUpkeepData memory data = abi.decode(
             performData,
             (MasterUpkeepData)
@@ -445,7 +437,7 @@ contract Bracket is Ownable, IBracket {
             );
         }
     }
-    //todo check for inverted order change in price
+
     function checkInRange(
         Order memory order
     ) internal view returns (bool inRange, bool strike, uint256 exchangeRate) {

@@ -2,7 +2,7 @@ import { AutomationMaster__factory, Bracket__factory, IERC20__factory, IPermit2_
 import { currentBlock, resetCurrentArbBlock } from "../../util/block"
 import { expect } from "chai"
 import { stealMoney } from "../../util/money"
-import { decodeUpkeepData, generateUniTx, generateUniTxData, getGas, MasterUpkeepData } from "../../util/msc"
+import { decodeUpkeepData, generateUniTx, generateUniTxData, getGas, MasterUpkeepData, permitSingle } from "../../util/msc"
 import { s, SwapParams } from "./scope"
 import { DeployContract } from "../../util/deploy"
 import { ethers } from "hardhat"
@@ -487,50 +487,20 @@ describe("Execute Stop-Limit Upkeep", () => {
         const PERMIT = IPermit2__factory.connect(a.permit2, s.Frank)
 
         const approval = await s.WETH.connect(s.Bob).approve(await PERMIT.getAddress(), BigInt(2) ** BigInt(159) - BigInt(1))
-        console.log("approved")
-        console.log("Traditional Allowance: ", await s.WETH.allowance(await s.Bob.getAddress(), await PERMIT.getAddress()))
 
         const chainId = 42161
         const expiration = 1728603016 //1 hour
         const nonce = 0
-        type PermitDetails = {
-            token: string
-            amount: string
-            expiration: string
-            nonce: string
-        }
+        const data = await permitSingle(
+            s.Bob,
+            chainId,
+            a.wethAddress,
+            await s.StopLimit.getAddress(),
+            a.permit2,
+            0
+        )
 
-        type PermitSingle = {
-            details: PermitDetails
-            spender: string
-            sigDeadline: string
-        }
-
-        // Construct PermitDetails
-        const permitDetails: PermitDetails = {
-            token: a.wethAddress,
-            amount: s.wethAmount.toString(),
-            expiration: expiration.toString(),
-            nonce: nonce.toString()
-        };
-
-        // Construct PermitSingle
-        const permitSingle: PermitSingle = {
-            details: permitDetails,
-            spender: await s.StopLimit.getAddress(),
-            sigDeadline: (expiration + 86400).toString()
-        };
-
-        const { domain, types, values } = AllowanceTransfer.getPermitData(permitSingle, a.permit2, chainId)
-
-        console.log("Bob: ", await s.Bob.getAddress())
-        console.log("WETH: ", await s.WETH.getAddress())
-        console.log("StopLimit: ", await s.StopLimit.getAddress())
-        console.log("Permit2: ", a.permit2)
-
-        const signature = await s.Bob.signTypedData(domain as TypedDataDomain, types, values);
-
-        await s.StopLimit.connect(s.Bob).signatureTest(permitSingle, signature)
+        //await s.StopLimit.connect(s.Bob).signatureTest(data.permitSingle, data.signature)
 
     })
 })

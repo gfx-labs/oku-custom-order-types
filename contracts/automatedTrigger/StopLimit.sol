@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "./IAutomation.sol";
 import "./AutomationMaster.sol";
@@ -10,13 +10,12 @@ import "../interfaces/uniswapV3/ISwapRouter02.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
+import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../oracle/IOracleRelay.sol";
-
-import "hardhat/console.sol";
 
 ///@notice This contract owns and handles all logic associated with STOP_LIMIT orders
 ///STOP_LIMIT orders create a new limit order order once filled
-contract StopLimit is Ownable, IStopLimit {
+contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     AutomationMaster public immutable MASTER;
@@ -43,43 +42,6 @@ contract StopLimit is Ownable, IStopLimit {
         return pendingOrderIds;
     }
 
-    function signatureTest(
-        IPermit2.PermitSingle memory permitSingle, 
-        bytes calldata signature
-    ) external {
-        bytes32 _PERMIT_DETAILS_TYPEHASH = keccak256(
-            "PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
-        );
-
-        bytes32 _PERMIT_SINGLE_TYPEHASH = keccak256(
-            "PermitSingle(PermitDetails details,address spender,uint256 sigDeadline)PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
-        );
-
-        bytes32 permitHash = keccak256(
-            abi.encode(_PERMIT_DETAILS_TYPEHASH, permitSingle.details)
-        );
-
-        bytes32 hash = keccak256(
-            abi.encode(
-                _PERMIT_SINGLE_TYPEHASH,
-                permitHash,
-                permitSingle.spender,
-                permitSingle.sigDeadline
-            )
-        );
-
-        console.log("Sig Length: ", signature.length);
-        (bytes32 r, bytes32 s) = abi.decode(signature, (bytes32, bytes32));
-        uint8 v = uint8(signature[64]);
-
-        address signer = ecrecover(hash, v, r, s);
-        console.log("signer: ", signer);
-        console.log("Sender: ", msg.sender);
-
-        permit2.permit(msg.sender, permitSingle, signature);
-    }
-
-    //todo non reentrant
     function createOrderWithPermit(
         uint256 stopLimitPrice,
         uint256 strikePrice,
@@ -92,74 +54,10 @@ contract StopLimit is Ownable, IStopLimit {
         uint16 stopSlippage,
         uint16 swapSlippage,
         bool swapOnFill,
-        IPermit2.PermitTransferFrom memory permit, // Add permit struct for approval-less transfer
-        IPermit2.SignatureTransferDetails memory transferDetails,
+        IPermit2.PermitSingle memory permitSingle, // Add permit struct for approval-less transfer
         bytes calldata signature
-    ) external {
-        permit2.permitTransferFrom(
-            permit,
-            transferDetails,
-            msg.sender,
-            signature
-        );
-
-        /**
-        bytes32 r;
-        bytes32 s;
-        uint8 v;
-
-        if (signature.length == 65) {
-            (r, s) = abi.decode(signature, (bytes32, bytes32));
-            v = uint8(signature[64]);
-        } else if (signature.length == 64) {
-            // EIP-2098
-            bytes32 vs;
-            (r, vs) = abi.decode(signature, (bytes32, bytes32));
-            s =
-                vs &
-                0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-            v = uint8(uint256(vs >> 255)) + 27;
-        }
-
-        bytes32 _PERMIT_DETAILS_TYPEHASH = keccak256(
-            "PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
-        );
-
-        bytes32 _PERMIT_SINGLE_TYPEHASH = keccak256(
-            "PermitSingle(PermitDetails details,address spender,uint256 sigDeadline)PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
-        );
-
-        bytes32 permitHash = keccak256(
-            abi.encode(_PERMIT_DETAILS_TYPEHASH, permit.details)
-        );
-
-        bytes32 hashh = keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                bytes32(0x8a6e6e19bdfb3db3409910416b47c2f8fc28b49488d6555c7fceaa4479135bc3),
-                keccak256(
-                    abi.encode(
-                        _PERMIT_SINGLE_TYPEHASH,
-                        permitHash,
-                        permit.spender,
-                        permit.sigDeadline
-                    )
-                )
-            )
-        );
-
-        address signer = ecrecover(hashh, v, r, s);
-
-        console.log("CREATING", signer);
-        console.log("ACTUALL: ", msg.sender);
-        console.log("StopLimt: ", address(this));
-        console.log("NOW: ", block.timestamp);
-        permit2.permit(msg.sender, permit, signature);
-
-        console.log("PERMIT WORKED");
-
-        tokenIn.safeTransferFrom(recipient, address(this), amountIn);
-        */
+    ) external nonReentrant(){
+        permit2.permit(msg.sender, permitSingle, signature);
 
         _createOrder(
             stopLimitPrice,
@@ -191,10 +89,7 @@ contract StopLimit is Ownable, IStopLimit {
         uint16 stopSlippage,
         uint16 swapSlippage,
         bool swapOnFill
-    ) external override {
-        //take asset, assume approved
-        tokenIn.safeTransferFrom(recipient, address(this), amountIn);
-
+    ) external override nonReentrant(){
         _createOrder(
             stopLimitPrice,
             strikePrice,
@@ -258,6 +153,9 @@ contract StopLimit is Ownable, IStopLimit {
             swapOnFill: swapOnFill
         });
         pendingOrderIds.push(uint16(orderCount));
+
+        //take asset, assume approved
+        tokenIn.safeTransferFrom(recipient, address(this), amountIn);
 
         //emit
         emit OrderCreated(orderCount);
@@ -335,7 +233,7 @@ contract StopLimit is Ownable, IStopLimit {
     }
 
     ///@param performData can simply be passed from return of checkUpkeep without alteration
-    function performUpkeep(bytes calldata performData) external override {
+    function performUpkeep(bytes calldata performData) external override nonReentrant(){
         MasterUpkeepData memory data = abi.decode(
             performData,
             (MasterUpkeepData)
