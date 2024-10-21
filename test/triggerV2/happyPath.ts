@@ -926,11 +926,13 @@ describe("Bracket order with order modification", () => {
             ethers.toBigInt(orderId.toString()),
             ethers.toBigInt(ogOrder.strikePrice),
             ethers.toBigInt(ogOrder.stopPrice),
+            ethers.toBigInt(amountInDelta),
+            ogOrder.tokenOut,
+            ogOrder.recipient,
             ogOrder.strikeSlippage,
             ogOrder.stopSlippage,
             false,
             true,
-            ethers.toBigInt(amountInDelta),
             "0x"
         );
 
@@ -950,11 +952,13 @@ describe("Bracket order with order modification", () => {
             orderId.toString(),
             ethers.toBigInt(ogOrder.strikePrice),
             ethers.toBigInt(ogOrder.stopPrice),
+            amountInDelta,
+            ogOrder.tokenOut,
+            ogOrder.recipient,
             ogOrder.strikeSlippage,
             ogOrder.stopSlippage,
             false,
             false,
-            amountInDelta,
             "0x"
         );
 
@@ -979,11 +983,13 @@ describe("Bracket order with order modification", () => {
             orderId.toString(),
             ethers.toBigInt(ogOrder.strikePrice),
             ethers.toBigInt(ogOrder.strikePrice + 500000000n),
+            0,
+            ogOrder.tokenOut,
+            ogOrder.recipient,
             ogOrder.strikeSlippage,
             ogOrder.stopSlippage,
             false,
             false,
-            0,
             "0x"
         );
         //makes upkeep needed and will fill stop price and slippage
@@ -994,11 +1000,13 @@ describe("Bracket order with order modification", () => {
             orderId.toString(),
             ethers.toBigInt(ogOrder.strikePrice),
             ethers.toBigInt(ogOrder.stopPrice),
+            0,
+            ogOrder.tokenOut,
+            ogOrder.recipient,
             ogOrder.strikeSlippage,
             ogOrder.stopSlippage,
             false,
             false,
-            0,
             "0x"
         )
         check = await s.Master.checkUpkeep("0x")
@@ -1009,11 +1017,13 @@ describe("Bracket order with order modification", () => {
             orderId.toString(),
             ethers.toBigInt(ogOrder.stopPrice),
             ethers.toBigInt(ogOrder.strikePrice),
+            0,
+            ogOrder.tokenOut,
+            ogOrder.recipient,
             ogOrder.strikeSlippage,
             ogOrder.stopSlippage,
             false,
             false,
-            0,
             "0x"
         )
         //upkeep not needed
@@ -1027,11 +1037,13 @@ describe("Bracket order with order modification", () => {
             orderId.toString(),
             ethers.toBigInt(ogOrder.strikePrice),
             ethers.toBigInt(ogOrder.stopPrice),
+            0,
+            ogOrder.tokenOut,
+            ogOrder.recipient,
             ogOrder.strikeSlippage,
             ogOrder.stopSlippage,
             false,
             false,
-            0,
             "0x"
         )
         check = await s.Master.checkUpkeep("0x")

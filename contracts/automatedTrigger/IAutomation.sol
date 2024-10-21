@@ -5,7 +5,6 @@ import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 
 interface IAutomation is AutomationCompatibleInterface {
-
     error TransactionFailed(bytes reason);
 
     enum OrderType {
@@ -54,8 +53,8 @@ interface IStopLimit is IAutomation {
     ///vice versa if false
     struct Order {
         uint256 stopLimitPrice;
-        uint256 stopPrice;
         uint256 strikePrice;
+        uint256 stopPrice;
         uint256 amountIn;
         uint96 orderId;
         IERC20 tokenIn;
@@ -83,7 +82,7 @@ interface IStopLimit is IAutomation {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint16 strikeSlipapge,
+        uint16 strikeSlippage,
         uint16 stopSlippage,
         uint16 swapSlippage,
         bool swapOnFill
@@ -191,7 +190,12 @@ interface IPermit2 {
         address
     ) external view returns (uint160, uint48, uint48);
 
-    function transferFrom(address from, address to, uint160 amount, address token) external;
+    function transferFrom(
+        address from,
+        address to,
+        uint160 amount,
+        address token
+    ) external;
 
     /// @notice Transfers a token using a signed permit message
     /// @dev Reverts if the requested amount is greater than the permitted signed amount

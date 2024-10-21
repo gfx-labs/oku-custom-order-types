@@ -259,14 +259,16 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     ///@param permit is true if @param _amountInDelta > 0 and permit is used for approval
     ///@param permit can be set to false if using legacy approval, in which case @param permitPayload may be set to 0x
     function modifyOrder(
-        uint256 orderId,
+        uint96 orderId,
         uint256 _strikePrice,
         uint256 _stopPrice,
+        uint256 _amountInDelta,
+        IERC20 _tokenOut,
+        address _recipient,
         uint32 _strikeSlippage,
         uint32 _stopSlippage,
         bool permit,
         bool increasePosition,
-        uint256 _amountInDelta,
         bytes calldata permitPayload
     ) external nonReentrant {
         //get order
@@ -298,34 +300,43 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 }
             } else {
                 //ensure delta is valid
-                require(
-                    _amountInDelta < order.amountIn,
-                    "invalid delta"
-                );
+                require(_amountInDelta < order.amountIn, "invalid delta");
 
                 //set new amountIn for accounting
                 newAmountIn -= _amountInDelta;
 
+                 //check min order size for new amount
+                MASTER.checkMinOrderSize(order.tokenIn, newAmountIn);
+
                 //refund position partially
-                order.tokenIn.safeTransfer(
-                    order.recipient,
-                    _amountInDelta
-                );
+                order.tokenIn.safeTransfer(order.recipient, _amountInDelta);
             }
         }
 
-        //make modifications
-        order.strikePrice = _strikePrice;
-        order.stopPrice = _stopPrice;
-        order.strikeSlippage = _strikeSlippage;
-        order.stopSlippage = _stopSlippage;
-        order.amountIn = newAmountIn;
-        order.direction =
-            MASTER.getExchangeRate(order.tokenIn, order.tokenOut) >
-            order.strikePrice;
+         //check for oracles
+        if (_tokenOut != order.tokenOut) {
+            require(
+                address(MASTER.oracles(_tokenOut)) != address(0x0),
+                "Oracle !exist"
+            );
+        }
+
+        Order memory newOrder = Order({
+            orderId: orderId,
+            strikePrice: _strikePrice,
+            stopPrice: _stopPrice,
+            amountIn: newAmountIn,
+            tokenIn: order.tokenIn,
+            tokenOut: _tokenOut,
+            strikeSlippage: _strikeSlippage,
+            stopSlippage: _stopSlippage,
+            recipient: _recipient,
+            direction: MASTER.getExchangeRate(order.tokenIn, _tokenOut) >
+                _strikePrice
+        });
 
         //store new order
-        orders[orderId] = order;
+        orders[orderId] = newOrder;
     }
 
     function adminCancelOrder(uint256 orderId) external onlyOwner {
@@ -556,9 +567,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         }
     }
 
-
-    //todo what if direction is true but strike price is invalidly higher than strike price? 
-    //Just leads to a bad fill? 
+    //todo what if direction is true but strike price is invalidly higher than strike price?
+    //Just leads to a bad fill?
     function checkInRange(
         Order memory order
     ) internal view returns (bool inRange, bool strike, uint256 exchangeRate) {

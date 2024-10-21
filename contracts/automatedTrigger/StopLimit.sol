@@ -56,12 +56,17 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         bool swapOnFill,
         IPermit2.PermitSingle memory permitSingle, // Add permit struct for approval-less transfer
         bytes calldata signature
-    ) external nonReentrant(){
-        //permit 
+    ) external nonReentrant {
+        //permit
         permit2.permit(msg.sender, permitSingle, signature);
 
         //take asset
-        permit2.transferFrom(msg.sender, address(this), uint160(amountIn), address(tokenIn));
+        permit2.transferFrom(
+            msg.sender,
+            address(this),
+            uint160(amountIn),
+            address(tokenIn)
+        );
 
         _createOrder(
             stopLimitPrice,
@@ -93,7 +98,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         uint16 stopSlippage,
         uint16 swapSlippage,
         bool swapOnFill
-    ) external override nonReentrant(){
+    ) external override nonReentrant {
         //take asset, assume approved
         tokenIn.safeTransferFrom(recipient, address(this), amountIn);
 
@@ -162,6 +167,94 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         pendingOrderIds.push(uint16(orderCount));
         //emit
         emit OrderCreated(orderCount);
+    }
+    //todo modify token out?
+    ///@notice this can use permit or approve if increasing the position size
+    ///@param increasePosition is true if adding to the position, false if reducing the position
+    ///@param permit is true if @param _amountInDelta > 0 and permit is used for approval
+    ///@param permit can be set to false if using legacy approval, in which case @param permitPayload may be set to 0x
+    function modifyOrder(
+        uint96 orderId,
+        uint256 _stopLimitPrice,
+        uint256 _strikePrice,
+        uint256 _stopPrice,
+        uint256 _amountInDelta,
+        IERC20 _tokenOut,
+        address _recipient,
+        uint16 _strikeSlippage,
+        uint16 _stopSlippage,
+        uint16 _swapSlippage,
+        bool _swapOnFill,
+        bool permit,
+        bool increasePosition,
+        bytes calldata permitPayload
+    ) external nonReentrant {
+        //get existing order
+        Order memory order = orders[orderId];
+        //only order owner
+        require(msg.sender == order.recipient, "only order owner");
+        //deduce any amountIn changes
+        uint256 newAmountIn = order.amountIn;
+        if (_amountInDelta != 0) {
+            if (increasePosition) {
+                newAmountIn += _amountInDelta;
+                //take funds via permit2
+                if (permit) {
+                    handlePermit(
+                        order.recipient,
+                        permitPayload,
+                        uint160(_amountInDelta),
+                        address(order.tokenIn)
+                    );
+                } else {
+                    //legacy transfer, assume prior approval
+                    order.tokenIn.safeTransferFrom(
+                        order.recipient,
+                        address(this),
+                        _amountInDelta
+                    );
+                }
+            } else {
+                //ensure delta is valid
+                require(_amountInDelta < order.amountIn, "invalid delta");
+
+                //set new amountIn for accounting
+                newAmountIn -= _amountInDelta;
+
+                //check min order size for new amount
+                MASTER.checkMinOrderSize(order.tokenIn, newAmountIn);
+
+                //refund position partially
+                order.tokenIn.safeTransfer(order.recipient, _amountInDelta);
+            }
+        }
+
+        //check for oracles
+        if (_tokenOut != order.tokenOut) {
+            require(
+                address(MASTER.oracles(_tokenOut)) != address(0x0),
+                "Oracle !exist"
+            );
+        }
+
+        Order memory newOrder = Order({
+            orderId: orderId,
+            stopLimitPrice: _stopLimitPrice,
+            strikePrice: _strikePrice,
+            stopPrice: _stopPrice,
+            amountIn: newAmountIn,
+            tokenIn: order.tokenIn,
+            tokenOut: _tokenOut,
+            strikeSlippage: _strikeSlippage,
+            stopSlippage: _stopSlippage,
+            swapSlippage: _swapSlippage,
+            recipient: _recipient,
+            direction: MASTER.getExchangeRate(order.tokenIn, _tokenOut) > _stopLimitPrice,
+            swapOnFill: _swapOnFill
+        });
+
+        //store new order
+        orders[orderId] = newOrder;
     }
 
     ///@notice contract owner can cancel any order
@@ -236,7 +329,9 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
     }
 
     ///@param performData can simply be passed from return of checkUpkeep without alteration
-    function performUpkeep(bytes calldata performData) external override nonReentrant(){
+    function performUpkeep(
+        bytes calldata performData
+    ) external override nonReentrant {
         MasterUpkeepData memory data = abi.decode(
             performData,
             (MasterUpkeepData)
