@@ -686,7 +686,7 @@ describe("Execute Stop-Limit with swap on fill", () => {
  * There is an option to swap on order create
  * In this example, we swap from USDC to WETH on order create, and swap back to USDC when it fills
  */
-describe("Execute Stop-Loss-Limit Upkeep", () => {
+describe("Execute Bracket Upkeep", () => {
 
 
     const stopDelta = ethers.parseUnits("500", 8)
@@ -838,4 +838,288 @@ describe("Execute Stop-Loss-Limit Upkeep", () => {
         const check = await s.Master.checkUpkeep("0x")
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
     })
+})
+
+describe("Bracket order with order modification", () => {
+
+    const stopDelta = ethers.parseUnits("500", 8)
+    const strikeDelta = ethers.parseUnits("100", 8)
+    const strikeBips = 500
+    const stopBips = 5000
+    const swapInBips = 500
+
+    const amountInDelta = s.wethAmount / 4n
+    let orderId: BigInt
+
+    //setup
+    before(async () => {
+        //steal money for s.Bob
+        await stealMoney(s.usdcWhale, await s.Bob.getAddress(), await s.USDC.getAddress(), s.usdcAmount)
+        //reset test oracle price
+        await s.wethOracle.setPrice(s.initialEthPrice)
+        await s.usdcOracle.setPrice(s.initialUsdcPrice)
+        await s.uniOracle.setPrice(s.initialUniPrice)
+        await s.arbOracle.setPrice(s.initialArbPrice)
+
+        let initial = await s.Master.checkUpkeep("0x")
+        expect(initial.upkeepNeeded).to.eq(false)
+
+    })
+
+    it("Create stop-loss-limit order with swap USDC => WETH => USDC", async () => {
+        const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
+        await s.USDC.connect(s.Bob).approve(await s.Bracket.getAddress(), s.usdcAmount)
+        const swapInData = await generateUniTxData(
+            s.USDC,
+            await s.WETH.getAddress(),
+            s.usdcAmount,
+            s.router02,
+            s.UniPool,
+            await s.Bracket.getAddress(),
+            await s.Master.getMinAmountReceived(s.usdcAmount, await s.USDC.getAddress(), await s.WETH.getAddress(), swapInBips)
+        )
+
+
+        const swapParams: SwapParams = {
+            swapTokenIn: await s.USDC.getAddress(),
+            swapAmountIn: s.usdcAmount,
+            swapTarget: s.router02,
+            swapBips: swapInBips,
+            txData: swapInData
+        }
+
+        await s.Bracket.connect(s.Bob).createOrderWithSwap(
+            swapParams,
+            currentPrice + strikeDelta,
+            currentPrice - stopDelta,
+            await s.WETH.getAddress(),
+            await s.USDC.getAddress(),
+            await s.Bob.getAddress(),
+            strikeBips,
+            stopBips
+        )
+
+        const filter = s.Bracket.filters.OrderCreated
+        const events = await s.Bracket.queryFilter(filter, -1)
+        const event = events[0].args
+        expect(Number(event[0])).to.eq(4, "Fourth order Id")
+        orderId = (event[0])
+
+        //verify pending order exists
+        const list = await s.Bracket.getPendingOrders()
+        expect(list.length).to.eq(1, "1 pending order")
+
+        //verify our input token was received
+        const balance = await s.WETH.balanceOf(await s.Bracket.getAddress())
+        expect(balance).to.be.closeTo(s.wethAmount, 200000000000000000n, "WETH received")
+
+    })
+
+    it("Modify order amountIn", async () => {
+        const ogOrder = await s.Bracket.orders(orderId.toString())
+
+        const ogWethBal = await s.WETH.balanceOf(await s.Bob.getAddress())
+
+        //increase amount, providing more USDC to add to the position
+        await s.WETH.connect(s.Bob).approve(await s.Bracket.getAddress(), amountInDelta)
+        await s.Bracket.connect(s.Bob).modifyOrder(
+            ethers.toBigInt(orderId.toString()),
+            ethers.toBigInt(ogOrder.strikePrice),
+            ethers.toBigInt(ogOrder.stopPrice),
+            ogOrder.strikeSlippage,
+            ogOrder.stopSlippage,
+            false,
+            true,
+            ethers.toBigInt(amountInDelta),
+            "0x"
+        );
+
+        //verify
+        const increasedOrder = await s.Bracket.orders(ethers.toBigInt(orderId.toString()))
+        expect(increasedOrder.amountIn).to.eq(ogOrder.amountIn + amountInDelta, "AmountIn correct")
+
+        let balance = await s.WETH.balanceOf(await s.Bob.getAddress())
+        expect(balance).to.eq(ogWethBal - amountInDelta, "Correct amount of weth taken")
+
+        const incOrder = await s.Bracket.orders(orderId.toString())
+        expect(incOrder.amountIn).to.eq(ogOrder.amountIn + amountInDelta, "New order is correct")
+
+
+        //decrease the position back to the og amount, receiving the refund
+        await s.Bracket.connect(s.Bob).modifyOrder(
+            orderId.toString(),
+            ethers.toBigInt(ogOrder.strikePrice),
+            ethers.toBigInt(ogOrder.stopPrice),
+            ogOrder.strikeSlippage,
+            ogOrder.stopSlippage,
+            false,
+            false,
+            amountInDelta,
+            "0x"
+        );
+
+        balance = await s.WETH.balanceOf(await s.Bob.getAddress())
+        expect(balance).to.eq(ogWethBal, "Correct amount of weth refunded")
+
+        const decOrder = await s.Bracket.orders(orderId.toString())
+        expect(decOrder.amountIn).to.eq(ogOrder.amountIn, "New order is correct")
+
+    })
+
+    it("Modify Order Strike Prices", async () => {
+
+        let check = await s.Master.checkUpkeep("0x")
+        expect(check.upkeepNeeded).to.eq(false)
+
+        const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
+        const ogOrder = await s.Bracket.orders(orderId.toString())
+    
+        //set stop above strike price
+        await s.Bracket.connect(s.Bob).modifyOrder(
+            orderId.toString(),
+            ethers.toBigInt(ogOrder.strikePrice),
+            ethers.toBigInt(ogOrder.strikePrice + 500000000n),
+            ogOrder.strikeSlippage,
+            ogOrder.stopSlippage,
+            false,
+            false,
+            0,
+            "0x"
+        );
+        //makes upkeep needed and will fill stop price and slippage
+        check = await s.Master.checkUpkeep("0x")
+        expect(check.upkeepNeeded).to.eq(true)
+        //reset back to original 
+        await s.Bracket.connect(s.Bob).modifyOrder(
+            orderId.toString(),
+            ethers.toBigInt(ogOrder.strikePrice),
+            ethers.toBigInt(ogOrder.stopPrice),
+            ogOrder.strikeSlippage,
+            ogOrder.stopSlippage,
+            false,
+            false,
+            0,
+            "0x"
+        )
+        check = await s.Master.checkUpkeep("0x")
+        expect(check.upkeepNeeded).to.eq(false)
+
+        //invert strike and stop prices
+        await s.Bracket.connect(s.Bob).modifyOrder(
+            orderId.toString(),
+            ethers.toBigInt(ogOrder.stopPrice),
+            ethers.toBigInt(ogOrder.strikePrice),
+            ogOrder.strikeSlippage,
+            ogOrder.stopSlippage,
+            false,
+            false,
+            0,
+            "0x"
+        )
+        //upkeep not needed
+        check = await s.Master.checkUpkeep("0x")
+        expect(check.upkeepNeeded).to.eq(false)
+        const newOrder = await s.Bracket.orders(orderId.toString())
+        expect(newOrder.direction).to.eq(!ogOrder.direction, "New order has inverted direction")
+
+        //reset back to original for future tests
+        await s.Bracket.connect(s.Bob).modifyOrder(
+            orderId.toString(),
+            ethers.toBigInt(ogOrder.strikePrice),
+            ethers.toBigInt(ogOrder.stopPrice),
+            ogOrder.strikeSlippage,
+            ogOrder.stopSlippage,
+            false,
+            false,
+            0,
+            "0x"
+        )
+        check = await s.Master.checkUpkeep("0x")
+        expect(check.upkeepNeeded).to.eq(false)
+    })
+
+    it("Check upkeep", async () => {
+
+        //should be no upkeep needed yet
+        let initial = await s.Master.checkUpkeep("0x")
+        expect(initial.upkeepNeeded).to.eq(false)
+        initial = await s.Bracket.checkUpkeep("0x")
+        expect(initial.upkeepNeeded).to.eq(false)
+
+        //increase price to strike price
+        await s.wethOracle.setPrice(s.initialEthPrice + (strikeDelta))
+
+        //check upkeep
+        let result = await s.Master.checkUpkeep("0x")
+        expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
+        result = await s.Bracket.checkUpkeep("0x")
+        expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
+
+        //reset price
+        await s.wethOracle.setPrice(s.initialEthPrice)
+
+        //upkeep no longer needed
+        result = await s.Master.checkUpkeep("0x")
+        expect(result.upkeepNeeded).to.eq(false)
+        result = await s.Bracket.checkUpkeep("0x")
+        expect(result.upkeepNeeded).to.eq(false)
+
+        //decrease price to stop price
+        await s.wethOracle.setPrice(s.initialEthPrice - (stopDelta))
+
+        //upkeep needed again
+        result = await s.Master.checkUpkeep("0x")
+        expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
+        result = await s.Bracket.checkUpkeep("0x")
+        expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
+    })
+
+
+
+    it("Perform Upkeep - stop loss", async () => {
+        //check upkeep
+        const result = await s.Master.checkUpkeep("0x")
+
+        //get returned upkeep data
+        const data: MasterUpkeepData = await decodeUpkeepData(result.performData, s.Frank)
+
+        //get minAmountReceived
+        const minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, data.bips)
+
+        //generate encoded masterUpkeepData
+        const encodedTxData = await generateUniTx(
+            s.router02,
+            s.UniPool,
+            await s.Bracket.getAddress(),
+            minAmountReceived,
+            data
+        )
+
+        console.log("Gas to performUpkeep: ", await getGas(await s.Master.performUpkeep(encodedTxData)))
+
+    })
+    it("Verify", async () => {
+        //expect user to receive tokens
+        const usdcBalance = await s.USDC.balanceOf(await s.Bob.getAddress())
+        expect(usdcBalance).to.be.gt(0n, "USDC received")
+
+        //pending order removed and length == 0
+        expect(await s.Bracket.pendingOrderIds.length).to.eq(0, "no pending orders left")
+
+        //event
+        const filter = s.Bracket.filters.OrderProcessed
+        const events = await s.Bracket.queryFilter(filter, -1)
+        const event = events[0].args
+        expect(event.orderId).to.eq(4, "Order Id 4")
+        expect(event.success).to.eq(true, "Swap succeeded")
+
+        //no tokens left on contract
+        expect(await s.WETH.balanceOf(await s.Bracket.getAddress())).to.eq(0n, "0 s.WETH left on contract")
+        expect(await s.USDC.balanceOf(await s.Bracket.getAddress())).to.eq(0n, "0 s.USDC left on contract")
+
+        //check upkeep
+        const check = await s.Master.checkUpkeep("0x")
+        expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
+    })
+
 })

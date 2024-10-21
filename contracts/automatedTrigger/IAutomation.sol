@@ -13,6 +13,11 @@ interface IAutomation is AutomationCompatibleInterface {
         STOP_LOSS_LIMIT
     }
 
+    struct Permit2Payload {
+        IPermit2.PermitSingle permitSingle;
+        bytes signature;
+    }
+
     ///@notice params for swap on limit order create
     ///@param swapTokenIn may or may not be the same as @param tokenOut
     struct SwapParams {
@@ -44,6 +49,9 @@ interface IAutomation is AutomationCompatibleInterface {
 interface IStopLimit is IAutomation {
     event StopLimitOrderProcessed(uint256 orderId);
 
+    ///@param direction determines the expected direction of price movement
+    ///if true, strike price is above the current exchange rate and strike price is expected to be below
+    ///vice versa if false
     struct Order {
         uint256 stopLimitPrice;
         uint256 stopPrice;

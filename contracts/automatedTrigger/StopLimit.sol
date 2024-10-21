@@ -297,6 +297,22 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         emit StopLimitOrderProcessed(order.orderId);
     }
 
+    ///@notice handle signature and acquisition of asset with permit2
+    function handlePermit(
+        address owner,
+        bytes calldata permitPayload,
+        uint160 amount,
+        address token
+    ) internal {
+        Permit2Payload memory payload = abi.decode(
+            permitPayload,
+            (Permit2Payload)
+        );
+
+        permit2.permit(owner, payload.permitSingle, payload.signature);
+        permit2.transferFrom(owner, address(this), amount, token);
+    }
+
     ///@notice if current approval is insufficient, approve max
     ///@notice oz safeIncreaseAllowance controls for tokens that require allowance to be reset to 0 before increasing again
     function updateApproval(

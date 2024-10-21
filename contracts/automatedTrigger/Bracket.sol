@@ -13,6 +13,9 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../oracle/IOracleRelay.sol";
 
+//testing
+import "hardhat/console.sol";
+
 ///@notice This contract owns and handles all logic associated with the following order types:
 /// BRACKET_ORDER - automated fill at strike price AND stop loss, with independant slippapge for each option
 /// LIMIT_ORDER - automated market swap at specified strike price
@@ -252,20 +255,20 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     }
 
     ///@notice this can use permit or approve if increasing the position size
+    ///@param increasePosition is true if adding to the position, false if reducing the position
     ///@param permit is true if @param _amountInDelta > 0 and permit is used for approval
-    ///@param permit can be set to false if using legacy approval
-    ///@param permitSingle & @param signature are not required if @param permit is false
+    ///@param permit can be set to false if using legacy approval, in which case @param permitPayload may be set to 0x
     function modifyOrder(
         uint256 orderId,
         uint256 _strikePrice,
         uint256 _stopPrice,
         uint32 _strikeSlippage,
         uint32 _stopSlippage,
-        int256 _amountInDelta,
         bool permit,
-        IPermit2.PermitSingle memory permitSingle,
-        bytes calldata signature
-    ) external nonReentrant(){
+        bool increasePosition,
+        uint256 _amountInDelta,
+        bytes calldata permitPayload
+    ) external nonReentrant {
         //get order
         Order memory order = orders[orderId];
 
@@ -275,15 +278,14 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         //deduce any amountIn changes
         uint256 newAmountIn = order.amountIn;
         if (_amountInDelta != 0) {
-            if (_amountInDelta > 0) {
-                newAmountIn += uint256(_amountInDelta);
+            if (increasePosition) {
+                newAmountIn += _amountInDelta;
                 //take funds via permit2
                 if (permit) {
                     handlePermit(
                         order.recipient,
-                        permitSingle,
-                        signature,
-                        uint160(uint256(_amountInDelta)),
+                        permitPayload,
+                        uint160(_amountInDelta),
                         address(order.tokenIn)
                     );
                 } else {
@@ -291,24 +293,23 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                     order.tokenIn.safeTransferFrom(
                         order.recipient,
                         address(this),
-                        uint256(_amountInDelta)
+                        _amountInDelta
                     );
                 }
             } else {
                 //ensure delta is valid
                 require(
-                    uint256(_amountInDelta) < order.amountIn,
+                    _amountInDelta < order.amountIn,
                     "invalid delta"
                 );
 
                 //set new amountIn for accounting
-                newAmountIn -= uint256(_amountInDelta);
+                newAmountIn -= _amountInDelta;
 
                 //refund position partially
-                order.tokenIn.safeTransferFrom(
-                    address(this),
+                order.tokenIn.safeTransfer(
                     order.recipient,
-                    uint256(_amountInDelta)
+                    _amountInDelta
                 );
             }
         }
@@ -524,12 +525,16 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     ///@notice handle signature and acquisition of asset with permit2
     function handlePermit(
         address owner,
-        IPermit2.PermitSingle memory permitSingle,
-        bytes calldata signature,
+        bytes calldata permitPayload,
         uint160 amount,
         address token
     ) internal {
-        permit2.permit(owner, permitSingle, signature);
+        Permit2Payload memory payload = abi.decode(
+            permitPayload,
+            (Permit2Payload)
+        );
+
+        permit2.permit(owner, payload.permitSingle, payload.signature);
         permit2.transferFrom(owner, address(this), amount, token);
     }
 
@@ -551,6 +556,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         }
     }
 
+
+    //todo what if direction is true but strike price is invalidly higher than strike price? 
+    //Just leads to a bad fill? 
     function checkInRange(
         Order memory order
     ) internal view returns (bool inRange, bool strike, uint256 exchangeRate) {
