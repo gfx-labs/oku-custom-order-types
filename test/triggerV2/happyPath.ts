@@ -452,55 +452,40 @@ describe("Execute Stop-Limit Upkeep", () => {
     })
 
     it("Check permit2", async () => {
-        const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
 
-
-
-
-        /**
-         // Create a signature off-chain using EIP-712 format
-        const domain2 = {
-            name: "Permit2",
-            version: "1",
-            chainId: chainId,
-            verifyingContract: a.permit2,
-        };
-
-        const types = {
-            PermitDetails: [
-                { name: "token", type: "address" },
-                { name: "amount", type: "uint160" },
-                { name: "expiration", type: "uint48" },
-                { name: "nonce", type: "uint48" },
-            ],
-            PermitSingle: [
-                { name: "details", type: "PermitDetails" },
-                { name: "spender", type: "address" },
-                { name: "sigDeadline", type: "uint256" }
-            ]
-        };
-         */
-
-        expect(await s.WETH.balanceOf(await s.Bob.getAddress())).to.eq(s.wethAmount, "Bob has enough weth")
-
-        //approve permit 2
-        const PERMIT = IPermit2__factory.connect(a.permit2, s.Frank)
-
-        const approval = await s.WETH.connect(s.Bob).approve(await PERMIT.getAddress(), BigInt(2) ** BigInt(159) - BigInt(1))
-
-        const chainId = 42161
-        const expiration = 1728603016 //1 hour
-        const nonce = 0
         const data = await permitSingle(
             s.Bob,
-            chainId,
-            a.wethAddress,
+            42161,
+            await s.WETH.getAddress(),
+            s.wethAmount,
             await s.StopLimit.getAddress(),
             a.permit2,
             0
         )
 
-        //await s.StopLimit.connect(s.Bob).signatureTest(data.permitSingle, data.signature)
+        const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
+
+        /**
+        console.log("TESTING")
+        await s.StopLimit.connect(s.Bob).createOrderWithPermit(
+            currentPrice - stopDelta,
+            (currentPrice - stopDelta) + strikeDelta,
+            (currentPrice - stopDelta) - stopDelta,
+            s.wethAmount,
+            await s.WETH.getAddress(),
+            await s.USDC.getAddress(),
+            await s.Bob.getAddress(),
+            strikeBips,//stop limit bips
+            strikeBips,//stop loss bips
+            strikeBips,//swap on fill bips
+            true,//swap on fill
+            data.permitSingle,
+            data.signature,
+            {
+                gasLimit: 1000000 // Setting a higher gas limit to force transaction to be sent
+            }
+        )
+         */
 
     })
 })

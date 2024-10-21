@@ -48,7 +48,13 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         address recipient,
         uint32 strikeSlippage,
         uint32 stopSlippage
-    ) external override nonReentrant() {
+    ) external override nonReentrant {
+        //take asset, assume approved
+        swapParams.swapTokenIn.safeTransferFrom(
+            msg.sender,
+            address(this),
+            swapParams.swapAmountIn
+        );
         _createOrderWithSwap(
             swapParams,
             strikePrice,
@@ -72,8 +78,17 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint32 stopSlippage,
         IPermit2.PermitSingle memory permitSingle,
         bytes calldata signature
-    ) external nonReentrant(){
+    ) external nonReentrant {
+        //permit
         permit2.permit(msg.sender, permitSingle, signature);
+
+        //take asset with permit
+        permit2.transferFrom(
+            msg.sender,
+            address(this),
+            uint160(swapParams.swapAmountIn),
+            address(swapParams.swapTokenIn)
+        );
 
         _createOrderWithSwap(
             swapParams,
@@ -101,16 +116,10 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             swapParams.swapBips <= MASTER.MAX_BIPS(),
             "Invalid Slippage BIPS"
         );
-        //take asset, assume approved
-        swapParams.swapTokenIn.safeTransferFrom(
-            msg.sender,
-            address(this),
-            swapParams.swapAmountIn
-        );
         (
             bool success,
             ,
-            uint256 finalAmountOut,
+            uint256 swapAmountOut,
             uint256 tokenInRefund
         ) = execute(
                 swapParams.swapTarget,
@@ -125,7 +134,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         _createOrder(
             strikePrice,
             stopPrice,
-            finalAmountOut,
+            swapAmountOut,
             tokenIn,
             tokenOut,
             recipient,
@@ -149,7 +158,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint32 stopSlippage,
         IPermit2.PermitSingle memory permitSingle, // Add permit struct for approval-less transfer
         bytes calldata signature
-    ) external nonReentrant(){
+    ) external nonReentrant {
         // Use Permit2 to approve and transfer tokens on behalf of the user
         permit2.permit(msg.sender, permitSingle, signature);
 
@@ -179,8 +188,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         address recipient,
         uint32 strikeSlippage,
         uint32 stopSlippage
-    ) external override nonReentrant(){
-        //take asset
+    ) external override nonReentrant {
+        //take asset, assume approved
         tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
 
         _createOrder(
@@ -240,6 +249,82 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         pendingOrderIds.push(uint16(orderCount));
 
         emit OrderCreated(orderCount);
+    }
+
+    ///@notice this can use permit or approve if increasing the position size
+    ///@param permit is true if @param _amountInDelta > 0 and permit is used for approval
+    ///@param permit can be set to false if using legacy approval
+    ///@param permitSingle & @param signature are not required if @param permit is false
+    function modifyOrder(
+        uint256 orderId,
+        uint256 _strikePrice,
+        uint256 _stopPrice,
+        uint32 _strikeSlippage,
+        uint32 _stopSlippage,
+        int256 _amountInDelta,
+        bool permit,
+        IPermit2.PermitSingle memory permitSingle,
+        bytes calldata signature
+    ) external nonReentrant(){
+        //get order
+        Order memory order = orders[orderId];
+
+        //only order owner
+        require(msg.sender == order.recipient, "only order owner");
+
+        //deduce any amountIn changes
+        uint256 newAmountIn = order.amountIn;
+        if (_amountInDelta != 0) {
+            if (_amountInDelta > 0) {
+                newAmountIn += uint256(_amountInDelta);
+                //take funds via permit2
+                if (permit) {
+                    handlePermit(
+                        order.recipient,
+                        permitSingle,
+                        signature,
+                        uint160(uint256(_amountInDelta)),
+                        address(order.tokenIn)
+                    );
+                } else {
+                    //legacy transfer, assume prior approval
+                    order.tokenIn.safeTransferFrom(
+                        order.recipient,
+                        address(this),
+                        uint256(_amountInDelta)
+                    );
+                }
+            } else {
+                //ensure delta is valid
+                require(
+                    uint256(_amountInDelta) < order.amountIn,
+                    "invalid delta"
+                );
+
+                //set new amountIn for accounting
+                newAmountIn -= uint256(_amountInDelta);
+
+                //refund position partially
+                order.tokenIn.safeTransferFrom(
+                    address(this),
+                    order.recipient,
+                    uint256(_amountInDelta)
+                );
+            }
+        }
+
+        //make modifications
+        order.strikePrice = _strikePrice;
+        order.stopPrice = _stopPrice;
+        order.strikeSlippage = _strikeSlippage;
+        order.stopSlippage = _stopSlippage;
+        order.amountIn = newAmountIn;
+        order.direction =
+            MASTER.getExchangeRate(order.tokenIn, order.tokenOut) >
+            order.strikePrice;
+
+        //store new order
+        orders[orderId] = order;
     }
 
     function adminCancelOrder(uint256 orderId) external onlyOwner {
@@ -322,7 +407,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     ///that contract will exchange our tokenIn for tokenOut with at least minAmountReceived
     /// pendingOrderIdx is the index of the pending order we are executing,
     ///this pending order is removed from the array via array mutation
-    function performUpkeep(bytes calldata performData) external override nonReentrant(){
+    function performUpkeep(
+        bytes calldata performData
+    ) external override nonReentrant {
         MasterUpkeepData memory data = abi.decode(
             performData,
             (MasterUpkeepData)
@@ -339,7 +426,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         (
             bool success,
             bytes memory result,
-            uint256 finalAmountOut,
+            uint256 swapAmountOut,
             uint256 tokenInRefund
         ) = execute(
                 data.target,
@@ -358,9 +445,21 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 pendingOrderIds
             );
 
-            //send tokenOut to recipient
-            order.tokenOut.safeTransfer(order.recipient, finalAmountOut);
+            //apply fee if there is one
+            (uint256 feeAmount, uint256 adjustedAmount) = MASTER.applyFee(
+                swapAmountOut
+            );
 
+            //send fee to master
+            if (feeAmount != 0) {
+                order.tokenOut.safeTransfer(address(MASTER), feeAmount);
+            }
+
+            //send tokenOut to recipient
+            order.tokenOut.safeTransfer(order.recipient, adjustedAmount);
+
+            //refund any unspent tokenIn
+            //this should generally be 0 when using exact input for swaps, which is recommended
             if (tokenInRefund != 0) {
                 order.tokenIn.safeTransfer(order.recipient, tokenInRefund);
             }
@@ -383,7 +482,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         returns (
             bool success,
             bytes memory result,
-            uint256 finalAmountOut,
+            uint256 swapAmountOut,
             uint256 tokenInRefund
         )
     {
@@ -415,9 +514,23 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 "Too Little Received"
             );
 
-            finalAmountOut = finalTokenOut - initialTokenOut;
+            swapAmountOut = finalTokenOut - initialTokenOut;
             tokenInRefund = amountIn - (initialTokenIn - finalTokenIn);
+        } else {
+            revert TransactionFailed(result);
         }
+    }
+
+    ///@notice handle signature and acquisition of asset with permit2
+    function handlePermit(
+        address owner,
+        IPermit2.PermitSingle memory permitSingle,
+        bytes calldata signature,
+        uint160 amount,
+        address token
+    ) internal {
+        permit2.permit(owner, permitSingle, signature);
+        permit2.transferFrom(owner, address(this), amount, token);
     }
 
     ///@notice if current approval is insufficient, approve max

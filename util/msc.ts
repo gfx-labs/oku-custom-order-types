@@ -6,6 +6,8 @@ import { toUtf8Bytes } from "@ethersproject/strings";
 import { arrayify } from "@ethersproject/bytes";
 import { AllowanceTransfer } from "@uniswap/permit2-sdk";
 import { TypedData } from "ethers/lib.commonjs/abi/typed";
+import hre from "hardhat";
+import { impersonateAccount } from "@nomicfoundation/hardhat-network-helpers";
 
 const abi = new AbiCoder()
 
@@ -167,6 +169,7 @@ export const permitSingle = async (
     signer: Signer,
     chainId: number,
     token: string,
+    amount: BigInt,
     spender: string,
     permit2: string,
     nonce: number = 0,
@@ -176,9 +179,16 @@ export const permitSingle = async (
         expiration = Math.floor(Date.now() / 1000) + 60 * 60 // 1 hour from now
     }
     
+    const networkName = hre.network.name
+    if(networkName == "hardhat"|| networkName== "localhost"){
+        console.log("IMPERSONATING", await signer.getAddress())
+        signer = await ethers.getSigner(await signer.getAddress())
+        await impersonateAccount(await signer.getAddress())
+    }
+
     const permitDetails: PermitDetails = {
         token: token,
-        amount: (BigInt(2) ** BigInt(159) - BigInt(1)).toString(),
+        amount: amount.toString(),
         expiration: expiration.toString(),
         nonce: nonce.toString(),
     }

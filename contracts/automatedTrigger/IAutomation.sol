@@ -5,6 +5,9 @@ import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 
 interface IAutomation is AutomationCompatibleInterface {
+
+    error TransactionFailed(bytes reason);
+
     enum OrderType {
         STOP_LIMIT,
         STOP_LOSS_LIMIT
@@ -77,6 +80,29 @@ interface IStopLimit is IAutomation {
         uint16 swapSlippage,
         bool swapOnFill
     ) external;
+
+    ///@notice if no stop loss is desired, set to 0
+    ///@param tokenIn asset to provide
+    ///@param tokenOut asset to receive after resulting limit order is filled
+    ///@param stopLimitPrice execution price for stop limit order
+    ///@param strikePrice execution 'take profit' price for resulting limit order
+    ///@param stopPrice execution 'stop loss' price for resulting limit order
+    ///@param swapSlippage slippage for optional swap, only used if @param swapOnFill is true
+    function createOrderWithPermit(
+        uint256 stopLimitPrice,
+        uint256 strikePrice,
+        uint256 stopPrice,
+        uint256 amountIn,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        address recipient,
+        uint16 strikeSlipapge,
+        uint16 stopSlippage,
+        uint16 swapSlippage,
+        bool swapOnFill,
+        IPermit2.PermitSingle memory permitSingle, // Add permit struct for approval-less transfer
+        bytes calldata signature
+    ) external;
 }
 
 interface IBracket is IAutomation {
@@ -119,7 +145,6 @@ interface IBracket is IAutomation {
 }
 
 interface IPermit2 {
-
     /// @notice The token and amount details for a transfer signed in the permit transfer signature
     struct TokenPermissions {
         // ERC20 token address
@@ -152,7 +177,13 @@ interface IPermit2 {
     /// @notice A mapping from owner address to token address to spender address to PackedAllowance struct, which contains details and conditions of the approval.
     /// @notice The mapping is indexed in the above order see: allowance[ownerAddress][tokenAddress][spenderAddress]
     /// @dev The packed slot holds the allowed amount, expiration at which the allowed amount is no longer valid, and current nonce thats updated on any signature based approvals.
-    function allowance(address, address, address) external view returns (uint160, uint48, uint48);
+    function allowance(
+        address,
+        address,
+        address
+    ) external view returns (uint160, uint48, uint48);
+
+    function transferFrom(address from, address to, uint160 amount, address token) external;
 
     /// @notice Transfers a token using a signed permit message
     /// @dev Reverts if the requested amount is greater than the permitted signed amount
@@ -194,5 +225,9 @@ interface IPermit2 {
     /// @param owner The owner of the tokens being approved
     /// @param permitSingle Data signed over by the owner specifying the terms of approval
     /// @param signature The owner's signature over the permit data
-    function permit(address owner, PermitSingle memory permitSingle, bytes calldata signature) external;
+    function permit(
+        address owner,
+        PermitSingle memory permitSingle,
+        bytes calldata signature
+    ) external;
 }

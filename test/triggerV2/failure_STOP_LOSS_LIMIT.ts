@@ -105,13 +105,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         )
 
         //tx succeeds if we try to fill with 0% slippage, but swap fails
-        expect(await s.Master.performUpkeep(encodedTxData)).to.not.be.reverted
-
-        const orderProcessedFilter = s.Bracket.filters.OrderProcessed
-        const opEvents = await s.Bracket.queryFilter(orderProcessedFilter, -1)
-        const opEvent = opEvents[0].args
-        expect(Number(opEvent.orderId)).to.eq(steveOrder, "steve's order processed")
-        expect(opEvent.success).to.eq(false, "swap failed")
+        expect(s.Master.performUpkeep(encodedTxData)).to.be.reverted
 
 
         //cancel order for future tests

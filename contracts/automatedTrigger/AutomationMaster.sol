@@ -11,13 +11,14 @@ import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../oracle/IOracleRelay.sol";
 
-///@notice This contract owns and handles all logic asstopLimitContractiated with STOP_MARKET orders
-///@notice STOP_MARKET orders check an external oracle for a pre-determined strike price,
-///once this price is reached, a market swap occurs
+///@notice This contract owns and handles all of the settings and accounting logic for automated swaps
+///@notice This contract should not hold any user funds, only collected fees 
 contract AutomationMaster is IAutomation, Ownable {
     using SafeERC20 for IERC20;
 
     uint88 public constant MAX_BIPS = 10000;
+
+    uint88 public feeBips;
 
     uint16 public maxPendingOrders;
 
@@ -27,6 +28,11 @@ contract AutomationMaster is IAutomation, Ownable {
     IBracket public BRACKET_CONTRACT;
 
     mapping(IERC20 => IOracleRelay) public oracles;
+
+    ///@param _feeBips is the raw bips to determine the fee
+    function setFee(uint88 _feeBips) external onlyOwner {
+        feeBips = _feeBips;
+    }
 
     function registerSubKeepers(
         IStopLimit stopLimitContract,
@@ -55,6 +61,13 @@ contract AutomationMaster is IAutomation, Ownable {
     ///@param usdValue must be in 1e8 terms
     function setMinOrderSize(uint256 usdValue) external onlyOwner {
         minOrderSize = usdValue;
+    }
+
+    ///@notice sweep the entire balance of @param token to the owner
+    ///@notice this contract should not hold funds other than collected fees,
+    ///which are forwarded here after each transaction
+    function sweep(IERC20 token) external onlyOwner {
+        token.safeTransfer(owner(), token.balanceOf(address(this)));
     }
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
@@ -119,23 +132,24 @@ contract AutomationMaster is IAutomation, Ownable {
         return amountIn;
     }
 
+    ///@notice apply the protocol fee to @param amount
+    ///@notice fee is in the form of tokenOut after a successful performUpkeep
+    function applyFee(uint256 amount) external view returns (uint256 feeAmount, uint256 adjustedAmount){
+        if(feeBips != 0){
+            //determine adjusted amount and fee amount
+            adjustedAmount = (amount * (MAX_BIPS - feeBips)) / MAX_BIPS;
+            feeAmount = amount - adjustedAmount;
+        }else{
+            return (0, amount);
+        }
+    }
+
     function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) public view {
         uint256 currentPrice = oracles[tokenIn].currentValue();
         uint256 usdValue = (currentPrice * amountIn) /
             (10 ** ERC20(address(tokenIn)).decimals());
 
         require(usdValue > minOrderSize, "order too small");
-    }
-    ///@notice floating point division at @param factor scale
-    function divide(
-        uint256 numerator,
-        uint256 denominator,
-        uint256 factor
-    ) internal pure returns (uint256 result) {
-        uint256 q = (numerator / denominator) * 10 ** factor;
-        uint256 r = ((numerator * 10 ** factor) / denominator) % 10 ** factor;
-
-        return q + r;
     }
 
     function checkUpkeep(

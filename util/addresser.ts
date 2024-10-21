@@ -127,10 +127,18 @@ export class ArbAddresses{
     readonly triggerAddress: string = "0x27F63920D2855853E5aAC290e9fF2406f3c46Dc0"//"0x8fBdE56be121275a80682513292F7831dc951215"
     
     //trigger v2 deployments
-    readonly Master: string = "0xbb5578c08bC08c15AcE5cd09c6683CcCcB2A9148"//"0x8a39E39234Bbb0840484c442Af01584DB04801CE"
+    /**
+     * old
+    readonly Master: string = "0x7131FF92a3604966d7D96CCc9d596F7e9435195c"//"0x8a39E39234Bbb0840484c442Af01584DB04801CE"
     readonly limit: string = "0xCF2FCd9B87113139E809d5F9Ea6f4D571BB1C12a"
-    readonly stopLimit: string = "0xd40decC59AAD75bbe50B91134472e2f2245be4D0"//"0x491397f7eb6f5d9B82B15cEcaBFf835bA31f217F"
-    readonly stopLossLimit: string = "0x756497dDb1D6564b26aeD303E118F9f226EdC3c7"//"0xEF52F132746a55f750ecfb3853e29CfECBC5f6E5"
+    readonly stopLimit: string = "0xcEe78cE44e98d16f59C775494Be24E0D2cFF19A4"//"0x491397f7eb6f5d9B82B15cEcaBFf835bA31f217F"
+    readonly bracket: string = "0x387EedD357836A73eCEf07067E6360A95C254b17"//"0xEF52F132746a55f750ecfb3853e29CfECBC5f6E5"
+     */
+
+    //trigger v2 deployments with permit
+    readonly Master: string = "0x6e521bcc7d159AE2168eb9990CEA09149c8F309C"//"0x8a39E39234Bbb0840484c442Af01584DB04801CE"
+    readonly stopLimit: string = "0x6F7A2f0d9DBd284E274f28a6Fa30e8760C25F9D2"//"0x491397f7eb6f5d9B82B15cEcaBFf835bA31f217F"
+    readonly bracket: string = "0x6D746d529F0D0C38A5abD561792917F8c4623E55"//"0xEF52F132746a55f750ecfb3853e29CfECBC5f6E5"
 
     
     readonly wethFeed: string = "0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612"
@@ -164,6 +172,17 @@ export class BaseAddresses {
     readonly portico02: string = "0x9816d7C448f79CdD4aF18c4Ae1726A14299E8C75"//updated 12/12
     readonly portico03: string = "0x610d4DFAC3EC32e0be98D18DDb280DACD76A1889"
     readonly pancakePortico: string = "0x4568aa1eA0ED54db666c58B4526B3FC9BD9be9bf"//"0x9128bA6B88a3851d6aa856aadE7dA0Bb694560Db"
+
+    //trigger v2
+    readonly Master: string = "0x384Eab89048520e35309E48Ea933D845C495A613"
+    readonly stopLimit: string = "0xd8284305b520FF5486ab718DBdfe46f18454aeDE"
+    readonly bracket: string = "0x24Fb3dFbA019e73eD45c884a31b5A60608968529"
+    readonly permit2: string = "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+    readonly wethOracleAddress: string = "0x45b265c7919D7FD8a0D673D7ACaA8F5A7abb430D"
+    readonly usdcOracleAddress: string = "0xfA81b396270730dbd276D3Ee002B0B7ff68D86F8"
+    readonly nativeUsdcAddress: string = this.usdcAddress
+    readonly wethFeed: string = "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70"
+    readonly usdcFeed: string = "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B"
 }
 
 export class BscAddresses { 
@@ -285,6 +304,12 @@ export class OptimisimAddresses {
     readonly usdcOracleAddress: string = "0x8B5AbFbdC5Ec4B88A4e94afBf9f22b81F71a25a9"//usd price in 1e8 terms
     readonly wethUsdcPoolAddress: string = "0x1fb3cf6e48F1E7B10213E7b6d87D4c073C7Fdb7b"//fee 500
     readonly nativeUsdcAddress: string = "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"
+
+    //automated trigger v2
+    readonly Master: string = "0xf556757ecB7DfeA2eDfe320992e21D68acf670B8"
+    readonly stopLimit: string = "0x3bd3be51634b42B7c1699aDe0Ff726493b378B60"
+    readonly bracket: string = "0x267807b17bBE64Fe7e921E533061131F0f95cc5b"
+    readonly permit2: string = "0x000000000022D473030F116dDEE9F6B43aC78BA3"
 
 }
 

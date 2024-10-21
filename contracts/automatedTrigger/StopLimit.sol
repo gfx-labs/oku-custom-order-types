@@ -57,7 +57,11 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         IPermit2.PermitSingle memory permitSingle, // Add permit struct for approval-less transfer
         bytes calldata signature
     ) external nonReentrant(){
+        //permit 
         permit2.permit(msg.sender, permitSingle, signature);
+
+        //take asset
+        permit2.transferFrom(msg.sender, address(this), uint160(amountIn), address(tokenIn));
 
         _createOrder(
             stopLimitPrice,
@@ -90,6 +94,9 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         uint16 swapSlippage,
         bool swapOnFill
     ) external override nonReentrant(){
+        //take asset, assume approved
+        tokenIn.safeTransferFrom(recipient, address(this), amountIn);
+
         _createOrder(
             stopLimitPrice,
             strikePrice,
@@ -153,10 +160,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             swapOnFill: swapOnFill
         });
         pendingOrderIds.push(uint16(orderCount));
-
-        //take asset, assume approved
-        tokenIn.safeTransferFrom(recipient, address(this), amountIn);
-
         //emit
         emit OrderCreated(orderCount);
     }

@@ -1,24 +1,21 @@
 import hre, { network } from "hardhat";
-import { DeployContract } from "../util/deploy";
-import { currentBlock, resetCurrent, resetCurrentArb, resetCurrentBase, resetCurrentBsc, resetCurrentOP, resetCurrentOPblock, resetCurrentPoly, resetCurrentZksync } from "../util/block";
-import { AutomationMaster, AutomationMaster__factory, IERC20, IERC20__factory, IOracleRelay, IPermit2__factory, MasterKeeper, MasterKeeper__factory, OracleRelay__factory, StopLimit, StopLimit__factory, StopLossLimit, StopLossLimit__factory, UniswapV3Pool__factory } from "../typechain-types";
-import { limitOrderData } from "./limitOrderData";
-import { Signer, TypedDataDomain } from "ethers";
-import { ceaseImpersonation, impersonateAccount } from "../util/impersonator";
+import { currentBlock, resetCurrentArb, resetCurrentBase, resetCurrentOP } from "../util/block";
+import { AutomationMaster, AutomationMaster__factory, Bracket, Bracket__factory, IERC20, IERC20__factory, IPermit2__factory, StopLimit, StopLimit__factory, UniswapV3Pool__factory } from "../typechain-types";
+import { Signer } from "ethers";
+import { impersonateAccount } from "../util/impersonator";
 import { setBalance } from "@nomicfoundation/hardhat-network-helpers";
-import { decodeUpkeepData, generateUniTx, MasterUpkeepData, permitSingle } from "../util/msc";
-import { a, o } from "../util/addresser";
-import { s } from "../test/triggerV2/scope";
-import { AllowanceTransfer, PermitSingle } from "@uniswap/permit2-sdk";
+import { decodeUpkeepData, generateUniTx, generateUniTxData, MasterUpkeepData, permitSingle } from "../util/msc";
+import { a, b, o } from "../util/addresser";
+import { s, SwapParams } from "../test/triggerV2/scope";
 const { ethers } = require("hardhat");
 
 
 let Master: AutomationMaster
 let StopLimit: StopLimit
-let StopLossLimit: StopLossLimit
+let Bracket: Bracket
 let mainnet = true
 let masterAddr: string //"0x8327B0168858bd918A0177e89b2c172475F6B16f"//second deploy//0x4f38FA4F676a053ea497F295f855B2dC3580f517"//initial deploy
-let stopLossLimitAddr: string
+let bracketAddr: string
 let stopLimitAddr: string
 let permitAddr: string
 
@@ -28,13 +25,14 @@ let USDC: IERC20
 
 
 //SET THIS FOR TESTING
-const testingNetwork = "arbitrum"
+const testingNetwork = "op"
 const userAddr = "0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89"
-const wethAmount = ethers.parseEther("0.0001")//~$0.12
+const wethAmount = ethers.parseEther("0.0005")
 const stopLimitDelta = ethers.parseUnits("1", 8)
 const strikeDelta = ethers.parseUnits("5", 8)
 const stopDelta = ethers.parseUnits("5", 8)
 const testBips = 2000
+let chainId = 42161
 
 async function main() {
     console.log("STARTING")
@@ -43,6 +41,9 @@ async function main() {
 
     let [signer] = await ethers.getSigners()
 
+    const network = await ethers.provider.getNetwork();
+    chainId = Number(network.chainId)
+    console.log("GOT CHAINID: ", chainId)
 
     if (networkName == "hardhat" || networkName == "localhost") {
         networkName = testingNetwork
@@ -62,17 +63,49 @@ async function main() {
         }
         masterAddr = a.Master
         stopLimitAddr = a.stopLimit
-        stopLossLimitAddr = a.stopLossLimit
+        bracketAddr = a.bracket
         permitAddr = a.permit2
 
         WETH = IERC20__factory.connect(a.wethAddress, signer)
         USDC = IERC20__factory.connect(a.nativeUsdcAddress, signer)
     }
 
+    if (networkName == "base") {
+
+        if (!mainnet) {
+            await resetCurrentBase()
+            console.log("Testing on BASE @", (await currentBlock())?.number)
+
+        }
+        masterAddr = b.Master
+        stopLimitAddr = b.stopLimit
+        bracketAddr = b.bracket
+        permitAddr = b.permit2
+
+        WETH = IERC20__factory.connect(b.wethAddress, signer)
+        USDC = IERC20__factory.connect(b.nativeUsdcAddress, signer)
+    }
+
+    if (networkName == "op") {
+
+        if (!mainnet) {
+            await resetCurrentOP()
+            console.log("Testing on OP @", (await currentBlock())?.number)
+
+        }
+        masterAddr = o.Master
+        stopLimitAddr = o.stopLimit
+        bracketAddr = o.bracket
+        permitAddr = o.permit2
+
+        WETH = IERC20__factory.connect(o.wethAddress, signer)
+        USDC = IERC20__factory.connect(o.nativeUsdcAddress, signer)
+    }
+
 
     Master = AutomationMaster__factory.connect(masterAddr, signer)
     StopLimit = StopLimit__factory.connect(stopLimitAddr, signer)
-    //StopLossLimit = StopLossLimit__factory.connect(stopLossLimitAddr, signer)
+    Bracket = Bracket__factory.connect(bracketAddr, signer)
 
     if (!mainnet) {
         signer = await ethers.getSigner(userAddr)
@@ -83,9 +116,12 @@ async function main() {
 
     }
 
-    await permitTest(signer)
+    //await permitTest(signer)
 
     //await createStopLimit(signer)
+    //await createStopLimitWithPermit(signer)
+    //await createBracketWithPermit(signer)
+    await createBracketWithSwapAndPermit(signer)
     //await createLimit(signer)
     //await checkOrder(signer)
 
@@ -93,7 +129,6 @@ async function main() {
 }
 
 const permitTest = async (signer: Signer) => {
-    const chainId = 42161
     const PERMIT2 = IPermit2__factory.connect(a.permit2, signer)
 
 
@@ -101,6 +136,7 @@ const permitTest = async (signer: Signer) => {
         signer,
         chainId,
         a.wethAddress,
+        wethAmount,
         a.stopLimit,
         a.permit2,
         4
@@ -111,11 +147,128 @@ const permitTest = async (signer: Signer) => {
     })
 }
 
+const createStopLimitWithPermit = async (signer: Signer) => {
+    //approve max
+    //await WETH.connect(signer).approve(permitAddr, ((2n ** 256n) - 1n))
+
+    //get data
+    const data = await permitSingle(
+        signer,
+        chainId,
+        await WETH.getAddress(),
+        wethAmount,
+        stopLimitAddr,
+        permitAddr,
+        0
+    )
+    const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
+
+    await StopLimit.connect(signer).createOrderWithPermit(
+        currentPrice - stopLimitDelta,
+        (currentPrice - stopLimitDelta) + strikeDelta,
+        (currentPrice - stopLimitDelta) - stopDelta,
+        wethAmount,
+        await WETH.getAddress(),
+        await USDC.getAddress(),
+        await signer.getAddress(),
+        testBips,//stop limit bips
+        testBips,//stop loss bips
+        testBips,//swap on fill bips
+        true,//swap on fill
+        data.permitSingle,
+        data.signature
+    )
+
+
+
+
+
+}
+
+const createBracketWithPermit = async (signer: Signer) => {
+    //get data
+    const data = await permitSingle(
+        signer,
+        chainId,
+        await WETH.getAddress(),
+        wethAmount,
+        bracketAddr,
+        permitAddr,
+        0
+    )
+    const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
+
+    await Bracket.connect(signer).createOrderWithPermit(
+        currentPrice + strikeDelta,
+        currentPrice - stopDelta,
+        wethAmount,
+        await WETH.getAddress(),
+        await USDC.getAddress(),
+        await signer.getAddress(),
+        testBips,//stop limit bips
+        testBips,//stop loss bips
+        data.permitSingle,
+        data.signature,
+        {
+            gasLimit: 1000000 // Setting a higher gas limit to force transaction to be sent
+        }
+    )
+}
+
+const createBracketWithSwapAndPermit = async (signer: Signer) => {
+    //get data
+    const data = await permitSingle(
+        signer,
+        chainId,
+        await WETH.getAddress(),
+        wethAmount,
+        stopLimitAddr,
+        permitAddr,
+        0
+    )
+    const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
+
+    const pool = UniswapV3Pool__factory.connect("0xc31e54c7a869b9fcbecc14363cf510d1c41fa443", signer)
+
+    const swapInData = await generateUniTxData(
+        WETH,
+        await USDC.getAddress(),
+        wethAmount,
+        a.uniRouter,
+        pool,
+        await Bracket.getAddress(),
+        await Master.getMinAmountReceived(wethAmount, await WETH.getAddress(), await USDC.getAddress(), testBips)
+    )
+    const swapParams: SwapParams = {
+        swapTokenIn: await USDC.getAddress(),
+        swapAmountIn: wethAmount,
+        swapTarget: a.uniRouter,
+        swapBips: testBips,
+        txData: swapInData
+    }
+
+    await Bracket.connect(signer).createOrderWithSwapAndPermit(
+        swapParams,
+        currentPrice + strikeDelta,
+        currentPrice - stopDelta,
+        await WETH.getAddress(),
+        await USDC.getAddress(),
+        await signer.getAddress(),
+        testBips,//stop limit bips
+        testBips,//stop loss bips
+        data.permitSingle,
+        data.signature,
+    )
+
+
+}
 
 const createStopLimit = async (signer: Signer) => {
-
+    console.log("CREATIGN STOP LIMIT")
     const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
     console.log("CURRENT PRICE: ", ethers.formatUnits(currentPrice, 8))
+
+    console.log(ethers.formatEther(await WETH.balanceOf(await signer.getAddress())))
 
     await WETH.connect(signer).approve(stopLimitAddr, wethAmount)
     await StopLimit.connect(signer).createOrder(
@@ -129,27 +282,11 @@ const createStopLimit = async (signer: Signer) => {
         testBips,//stop limit bips
         testBips,//stop loss bips
         testBips,//swap on fill bips
-        true//swap on fill
+        true,
+        {
+            gasLimit: 1000000 // Setting a higher gas limit to force transaction to be sent
+        }
     )
-}
-
-const createLimit = async (signer: Signer) => {
-    const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
-    console.log("CURRENT PRICE: ", ethers.formatUnits(currentPrice, 8))
-
-    await WETH.connect(signer).approve(stopLossLimitAddr, wethAmount)
-    await StopLossLimit.connect(signer).createOrder(
-        currentPrice + strikeDelta,
-        currentPrice - stopDelta,
-        wethAmount,
-        await WETH.getAddress(),
-        await USDC.getAddress(),
-        await signer.getAddress(),
-        testBips,
-        testBips
-    )
-
-
 }
 
 const checkOrder = async (signer: Signer) => {
@@ -170,7 +307,7 @@ const checkOrder = async (signer: Signer) => {
         const encodedTxData = await generateUniTx(
             a.uniRouter,
             UniswapV3Pool__factory.connect(a.bridgedUsdcPool, signer),
-            stopLossLimitAddr,
+            bracketAddr,
             minAmountReceived,
             data
         )
