@@ -82,33 +82,12 @@ interface IStopLimit is IAutomation {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint16 strikeSlippage,
-        uint16 stopSlippage,
-        uint16 swapSlippage,
-        bool swapOnFill
-    ) external;
-
-    ///@notice if no stop loss is desired, set to 0
-    ///@param tokenIn asset to provide
-    ///@param tokenOut asset to receive after resulting limit order is filled
-    ///@param stopLimitPrice execution price for stop limit order
-    ///@param strikePrice execution 'take profit' price for resulting limit order
-    ///@param stopPrice execution 'stop loss' price for resulting limit order
-    ///@param swapSlippage slippage for optional swap, only used if @param swapOnFill is true
-    function createOrderWithPermit(
-        uint256 stopLimitPrice,
-        uint256 strikePrice,
-        uint256 stopPrice,
-        uint256 amountIn,
-        IERC20 tokenIn,
-        IERC20 tokenOut,
-        address recipient,
         uint16 strikeSlipapge,
         uint16 stopSlippage,
         uint16 swapSlippage,
         bool swapOnFill,
-        IPermit2.PermitSingle memory permitSingle, // Add permit struct for approval-less transfer
-        bytes calldata signature
+        bool permit,
+        bytes calldata permitPayload
     ) external;
 }
 

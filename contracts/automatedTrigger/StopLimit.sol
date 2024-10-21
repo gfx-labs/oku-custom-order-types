@@ -41,48 +41,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
     function getPendingOrders() external view returns (uint16[] memory) {
         return pendingOrderIds;
     }
-
-    function createOrderWithPermit(
-        uint256 stopLimitPrice,
-        uint256 strikePrice,
-        uint256 stopPrice,
-        uint256 amountIn,
-        IERC20 tokenIn,
-        IERC20 tokenOut,
-        address recipient,
-        uint16 strikeSlipapge,
-        uint16 stopSlippage,
-        uint16 swapSlippage,
-        bool swapOnFill,
-        IPermit2.PermitSingle memory permitSingle, // Add permit struct for approval-less transfer
-        bytes calldata signature
-    ) external nonReentrant {
-        //permit
-        permit2.permit(msg.sender, permitSingle, signature);
-
-        //take asset
-        permit2.transferFrom(
-            msg.sender,
-            address(this),
-            uint160(amountIn),
-            address(tokenIn)
-        );
-
-        _createOrder(
-            stopLimitPrice,
-            strikePrice,
-            stopPrice,
-            amountIn,
-            tokenIn,
-            tokenOut,
-            recipient,
-            strikeSlipapge,
-            stopSlippage,
-            swapSlippage,
-            swapOnFill
-        );
-    }
-
     //todo non reentrant
     ///@param stopLimitPrice price at which the limit order is created
     ///@param strikePrice or @param stopPrice is the price at which the limit order is closed
@@ -97,10 +55,21 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         uint16 strikeSlipapge,
         uint16 stopSlippage,
         uint16 swapSlippage,
-        bool swapOnFill
+        bool swapOnFill,
+        bool permit,
+        bytes calldata permitPayload
     ) external override nonReentrant {
-        //take asset, assume approved
-        tokenIn.safeTransferFrom(recipient, address(this), amountIn);
+        if (permit) {
+            handlePermit(
+                recipient,
+                permitPayload,
+                uint160(amountIn),
+                address(tokenIn)
+            );
+        } else {
+            //take asset, assume prior approval
+            tokenIn.safeTransferFrom(recipient, address(this), amountIn);
+        }
 
         _createOrder(
             stopLimitPrice,
@@ -249,7 +218,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             stopSlippage: _stopSlippage,
             swapSlippage: _swapSlippage,
             recipient: _recipient,
-            direction: MASTER.getExchangeRate(order.tokenIn, _tokenOut) > _stopLimitPrice,
+            direction: MASTER.getExchangeRate(order.tokenIn, _tokenOut) >
+                _stopLimitPrice,
             swapOnFill: _swapOnFill
         });
 
