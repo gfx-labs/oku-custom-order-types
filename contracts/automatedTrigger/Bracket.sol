@@ -13,8 +13,6 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../oracle/IOracleRelay.sol";
 
-//testing
-import "hardhat/console.sol";
 
 ///@notice This contract owns and handles all logic associated with the following order types:
 /// BRACKET_ORDER - automated fill at strike price AND stop loss, with independant slippapge for each option
@@ -42,71 +40,83 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         return pendingOrderIds;
     }
 
-    function createOrderWithSwap(
-        SwapParams calldata swapParams,
+    function createOrder(
+        bytes calldata swapPayload,
         uint256 strikePrice,
         uint256 stopPrice,
-        IERC20 tokenIn,
-        IERC20 tokenOut,
-        address recipient,
-        uint32 strikeSlippage,
-        uint32 stopSlippage
-    ) external override nonReentrant {
-        //take asset, assume approved
-        swapParams.swapTokenIn.safeTransferFrom(
-            msg.sender,
-            address(this),
-            swapParams.swapAmountIn
-        );
-        _createOrderWithSwap(
-            swapParams,
-            strikePrice,
-            stopPrice,
-            tokenIn,
-            tokenOut,
-            recipient,
-            strikeSlippage,
-            stopSlippage
-        );
-    }
-
-    function createOrderWithSwapAndPermit(
-        SwapParams calldata swapParams,
-        uint256 strikePrice,
-        uint256 stopPrice,
+        uint256 amountIn,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
         uint32 strikeSlippage,
         uint32 stopSlippage,
-        IPermit2.PermitSingle memory permitSingle,
-        bytes calldata signature
-    ) external nonReentrant {
-        //permit
-        permit2.permit(msg.sender, permitSingle, signature);
+        bool permit,
+        bytes calldata permitPayload
+    ) external override nonReentrant {
+        //determine if we are doing a swap first
+        if (swapPayload.length != 0) {
+        
+            SwapParams memory swapParams = abi.decode(
+                swapPayload,
+                (SwapParams)
+            );
+            //procure swap token in
+            if (permit) {
+                handlePermit(
+                    msg.sender,
+                    permitPayload,
+                    uint160(swapParams.swapAmountIn),
+                    address(swapParams.swapTokenIn)
+                );
+            } else {
+                //take asset, assume prior approval
+                swapParams.swapTokenIn.safeTransferFrom(
+                    msg.sender,
+                    address(this),
+                    swapParams.swapAmountIn
+                );
+            }
 
-        //take asset with permit
-        permit2.transferFrom(
-            msg.sender,
-            address(this),
-            uint160(swapParams.swapAmountIn),
-            address(swapParams.swapTokenIn)
-        );
+            _createOrderWithSwap(
+                swapParams,
+                strikePrice,
+                stopPrice,
+                tokenIn,
+                tokenOut,
+                recipient,
+                strikeSlippage,
+                stopSlippage
+            );
+        } else {
+            //no swap
+            //procure tokens
+            if (permit) {
+                handlePermit(
+                    msg.sender,
+                    permitPayload,
+                    uint160(amountIn),
+                    address(tokenIn)
+                );
+            } else {
+                //assume prior approval
+                tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
+            }
 
-        _createOrderWithSwap(
-            swapParams,
-            strikePrice,
-            stopPrice,
-            tokenIn,
-            tokenOut,
-            recipient,
-            strikeSlippage,
-            stopSlippage
-        );
+            _createOrder(
+                strikePrice,
+                stopPrice,
+                amountIn,
+                tokenIn,
+                tokenOut,
+                recipient,
+                strikeSlippage,
+                stopSlippage
+            );
+        }
     }
 
     function _createOrderWithSwap(
-        SwapParams calldata swapParams,
+        SwapParams memory swapParams,
         uint256 strikePrice,
         uint256 stopPrice,
         IERC20 tokenIn,
@@ -119,21 +129,16 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             swapParams.swapBips <= MASTER.MAX_BIPS(),
             "Invalid Slippage BIPS"
         );
-        (
-            bool success,
-            ,
-            uint256 swapAmountOut,
-            uint256 tokenInRefund
-        ) = execute(
-                swapParams.swapTarget,
-                swapParams.txData,
-                swapParams.swapAmountIn,
-                swapParams.swapTokenIn,
-                tokenIn,
-                swapParams.swapBips
-            );
 
-        require(success, "swap failed");
+        (, , uint256 swapAmountOut, uint256 tokenInRefund) = execute(
+            swapParams.swapTarget,
+            swapParams.txData,
+            swapParams.swapAmountIn,
+            swapParams.swapTokenIn,
+            tokenIn,
+            swapParams.swapBips
+        );
+
         _createOrder(
             strikePrice,
             stopPrice,
@@ -148,63 +153,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         if (tokenInRefund != 0) {
             swapParams.swapTokenIn.safeTransfer(recipient, tokenInRefund);
         }
-    }
-
-    function createOrderWithPermit(
-        uint256 strikePrice,
-        uint256 stopPrice,
-        uint256 amountIn,
-        IERC20 tokenIn,
-        IERC20 tokenOut,
-        address recipient,
-        uint32 strikeSlippage,
-        uint32 stopSlippage,
-        IPermit2.PermitSingle memory permitSingle, // Add permit struct for approval-less transfer
-        bytes calldata signature
-    ) external nonReentrant {
-        // Use Permit2 to approve and transfer tokens on behalf of the user
-        permit2.permit(msg.sender, permitSingle, signature);
-
-        //take asset
-        tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
-
-        _createOrder(
-            strikePrice,
-            stopPrice,
-            amountIn,
-            tokenIn,
-            tokenOut,
-            recipient,
-            strikeSlippage,
-            stopSlippage
-        );
-    }
-
-    ///@param strikePrice is in terms of exchange rate of tokenIn / tokenOut,
-    /// thus is dependent on direction
-    function createOrder(
-        uint256 strikePrice,
-        uint256 stopPrice,
-        uint256 amountIn,
-        IERC20 tokenIn,
-        IERC20 tokenOut,
-        address recipient,
-        uint32 strikeSlippage,
-        uint32 stopSlippage
-    ) external override nonReentrant {
-        //take asset, assume approved
-        tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
-
-        _createOrder(
-            strikePrice,
-            stopPrice,
-            amountIn,
-            tokenIn,
-            tokenOut,
-            recipient,
-            strikeSlippage,
-            stopSlippage
-        );
     }
 
     function _createOrder(
@@ -305,7 +253,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 //set new amountIn for accounting
                 newAmountIn -= _amountInDelta;
 
-                 //check min order size for new amount
+                //check min order size for new amount
                 MASTER.checkMinOrderSize(order.tokenIn, newAmountIn);
 
                 //refund position partially
@@ -313,7 +261,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             }
         }
 
-         //check for oracles
+        //check for oracles
         if (_tokenOut != order.tokenOut) {
             require(
                 address(MASTER.oracles(_tokenOut)) != address(0x0),

@@ -8,8 +8,9 @@ import { DeployContract } from "../../util/deploy"
 import { ethers } from "hardhat"
 import { a } from "../../util/addresser"
 import { AllowanceTransfer } from "@uniswap/permit2-sdk"
-import { TypedDataDomain } from "ethers"
+import { AbiCoder, TypedDataDomain } from "ethers"
 
+const abiCoder = new ethers.AbiCoder();
 
 ///All tests are performed as if on Arbitrum
 ///Testing is on the Arb WETH/USDC.e pool @ 500
@@ -34,7 +35,6 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         s.USDC = IERC20__factory.connect(await s.UniPool.token1(), s.Frank)
         s.ARB = IERC20__factory.connect("0x912CE59144191C1204E64559FE8253a0e49E6548", s.Frank)
         s.UNI = IERC20__factory.connect("0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0", s.Frank)
-        console.log("USDC: ", await s.USDC.getAddress())
 
 
     })
@@ -131,7 +131,9 @@ describe("Execute Stop-Limit Upkeep", () => {
             strikeBips,
             0,//no stop loss bips
             0,//no swap on fill bips
-            false//no swap on fill
+            false,//no swap on fill
+            false,//no permit
+            "0x"
         )
 
         const filter = s.StopLimit.filters.OrderCreated
@@ -526,13 +528,15 @@ describe("Execute Stop-Limit with swap on fill", () => {
             strikePrice,
             stopLoss,
             s.usdcAmount,
-            await s.USDC.getAddress(),
-            await s.WETH.getAddress(),
+            await s.USDC.getAddress(),//tokenIn
+            await s.WETH.getAddress(),//tokenOut
             await s.Charles.getAddress(),
             strikeBips,
             stopBips,//no stop loss bips
             swapBips,//no swap on fill bips
-            true//no swap on fill
+            true,//swap on fill
+            false,//no permit
+            "0x"
         )
 
         const filter = s.StopLimit.filters.OrderCreated
@@ -597,7 +601,6 @@ describe("Execute Stop-Limit with swap on fill", () => {
         )
 
         const initOrders = await s.Bracket.orderCount()
-
         console.log("Gas to performUpkeep: ", await getGas(await s.Master.performUpkeep(encodedTxData)))
 
         const filter = s.Bracket.filters.OrderCreated
@@ -635,7 +638,6 @@ describe("Execute Stop-Limit with swap on fill", () => {
         expect(check.upkeepNeeded).to.eq(false)
 
         //set price to fill price 
-        console.log("FINAL")
         await s.wethOracle.connect(s.Frank).setPrice(strikePrice)
         check = await s.Master.checkUpkeep("0x")
         expect(check.upkeepNeeded).to.eq(true)
@@ -670,7 +672,7 @@ describe("Execute Stop-Limit with swap on fill", () => {
         //USDC received is not perfect as we do not attempt to manipulate the true uni pool price
         let balance = await s.USDC.balanceOf(await s.Charles.getAddress())
         //expect(Number(ethers.formatUnits(balance, 6))).to.be.closeTo(Number(ethers.formatUnits(s.usdcAmount)), 10, "USDC received")
-        console.log("todo")
+        //console.log("todo")
 
 
 
@@ -722,7 +724,6 @@ describe("Execute Bracket Upkeep", () => {
             await s.Master.getMinAmountReceived(s.usdcAmount, await s.USDC.getAddress(), await s.WETH.getAddress(), swapInBips)
         )
 
-
         const swapParams: SwapParams = {
             swapTokenIn: await s.USDC.getAddress(),
             swapAmountIn: s.usdcAmount,
@@ -731,16 +732,33 @@ describe("Execute Bracket Upkeep", () => {
             txData: swapInData
         }
 
-        await s.Bracket.connect(s.Bob).createOrderWithSwap(
-            swapParams,
+        const swapParamsTuple = [
+            swapParams.swapTokenIn,           // Address (IERC20)
+            BigInt(swapParams.swapAmountIn),   // uint256
+            swapParams.swapTarget,             // Address
+            swapParams.swapBips,               // uint32
+            swapParams.txData                  // bytes
+        ];
+
+        const swapPayload = ethers.AbiCoder.defaultAbiCoder().encode(
+            ["tuple(address,uint256,address,uint32,bytes)"], // Struct as a tuple
+            [swapParamsTuple]                                // Data as a single tuple
+        );
+
+        await s.Bracket.connect(s.Bob).createOrder(
+            swapPayload,
             currentPrice + strikeDelta,
             currentPrice - stopDelta,
+            s.wethAmount,
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Bob.getAddress(),
             strikeBips,
-            stopBips
+            stopBips,
+            false,//no permit
+            "0x"
         )
+
 
         const filter = s.Bracket.filters.OrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
@@ -880,23 +898,43 @@ describe("Bracket order with order modification", () => {
         )
 
 
+
         const swapParams: SwapParams = {
             swapTokenIn: await s.USDC.getAddress(),
             swapAmountIn: s.usdcAmount,
             swapTarget: s.router02,
             swapBips: swapInBips,
             txData: swapInData
-        }
+        };
 
-        await s.Bracket.connect(s.Bob).createOrderWithSwap(
-            swapParams,
+        const swapPayload = abiCoder.encode(
+            [
+                "tuple(address,uint256,address,uint32,bytes)"
+            ],
+            [
+                [
+                    swapParams.swapTokenIn,
+                    swapParams.swapAmountIn,
+                    swapParams.swapTarget,
+                    swapParams.swapBips,
+                    swapParams.txData
+                ]
+            ]
+        );
+
+
+        await s.Bracket.connect(s.Bob).createOrder(
+            swapPayload,
             currentPrice + strikeDelta,
             currentPrice - stopDelta,
+            s.wethAmount,
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Bob.getAddress(),
             strikeBips,
-            stopBips
+            stopBips,
+            false,
+            "0x"
         )
 
         const filter = s.Bracket.filters.OrderCreated
@@ -977,7 +1015,7 @@ describe("Bracket order with order modification", () => {
 
         const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
         const ogOrder = await s.Bracket.orders(orderId.toString())
-    
+
         //set stop above strike price
         await s.Bracket.connect(s.Bob).modifyOrder(
             orderId.toString(),

@@ -13,6 +13,7 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../oracle/IOracleRelay.sol";
 
+
 ///@notice This contract owns and handles all logic associated with STOP_LIMIT orders
 ///STOP_LIMIT orders create a new limit order order once filled
 contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
@@ -325,6 +326,10 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             order.amountIn
         );
 
+        //TODO refactor this for new createOrder
+        bytes memory swapPayload;
+        IERC20 tokenIn = order.tokenIn;
+        IERC20 tokenOut = order.tokenOut;
         if (order.swapOnFill) {
             //for swap on fill, we expect to be paid out in the same asset we provided
             //so the resulting order tokenIn and tokenOut are inverted relative to our original swap limit order
@@ -335,29 +340,27 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
                 swapBips: order.swapSlippage,
                 txData: data.txData
             });
-            BRACKET_CONTRACT.createOrderWithSwap(
-                params,
-                order.strikePrice,
-                order.stopPrice,
-                order.tokenOut, //invert tokenIn
-                order.tokenIn, //invert tokenOut
-                order.recipient,
-                order.strikeSlippage,
-                order.stopSlippage
-            );
-        } else {
-            //create standard order without swap on fill
-            BRACKET_CONTRACT.createOrder(
-                order.strikePrice,
-                order.stopPrice,
-                order.amountIn,
-                order.tokenIn,
-                order.tokenOut,
-                order.recipient,
-                order.strikeSlippage,
-                order.stopSlippage
-            );
+            swapPayload = abi.encode(params);
+
+            //invert tokens as we are about to swap
+            tokenIn = order.tokenOut;
+            tokenOut = order.tokenIn;
         }
+
+        //create standard order without swap on fill
+        BRACKET_CONTRACT.createOrder(
+            swapPayload,
+            order.strikePrice,
+            order.stopPrice,
+            order.amountIn,
+            tokenIn,
+            tokenOut,
+            order.recipient,
+            order.strikeSlippage,
+            order.stopSlippage,
+            false, //permit
+            "0x" //permitPayload
+        );
 
         emit StopLimitOrderProcessed(order.orderId);
     }

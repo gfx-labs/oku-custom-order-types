@@ -43,6 +43,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
     it("Swap fails due to slippage", async () => {
         await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), s.steveWeth)
         await s.Bracket.connect(s.Steve).createOrder(
+            "0x",
             currentPrice + steveStrikeDelta,
             currentPrice - steveStrikeDelta,
             s.wethAmount,
@@ -50,7 +51,9 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             await s.USDC.getAddress(),
             await s.Steve.getAddress(),
             smallSlippage,
-            smallSlippage
+            smallSlippage,
+            false,
+            "0x"
         )
 
         steveOrder = Number(await s.Bracket.orderCount())
@@ -117,6 +120,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
     it("Order creation fails due to insufficient balance", async () => {
         await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), veryLargeWethAmount)
         expect(s.Bracket.connect(s.Steve).createOrder(
+            "0x",//no swap data
             currentPrice + steveStrikeDelta,
             currentPrice - steveStrikeDelta,
             veryLargeWethAmount,
@@ -124,7 +128,9 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             await s.USDC.getAddress(),
             await s.Steve.getAddress(),
             smallSlippage,
-            smallSlippage
+            smallSlippage,
+            false,
+            "0x"
         )).to.be.revertedWith("ERC20: transfer amount exceeds balance")
 
     })
@@ -135,6 +141,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         //create order
         await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), s.wethAmount)
         await s.Bracket.connect(s.Steve).createOrder(
+            "0x",
             currentPrice + steveStrikeDelta,
             currentPrice - steveStrikeDelta,
             s.wethAmount,
@@ -142,7 +149,9 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             await s.USDC.getAddress(),
             await s.Steve.getAddress(),
             steveBips,
-            steveBips
+            steveBips,
+            false,
+            "0x"
         )
 
         //adjust oracle

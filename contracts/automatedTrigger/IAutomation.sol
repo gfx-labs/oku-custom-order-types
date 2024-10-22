@@ -106,6 +106,7 @@ interface IBracket is IAutomation {
     }
 
     function createOrder(
+        bytes calldata swapPayload,
         uint256 strikePrice,
         uint256 stopPrice,
         uint256 amountIn,
@@ -113,20 +114,9 @@ interface IBracket is IAutomation {
         IERC20 tokenOut,
         address recipient,
         uint32 strikeSlippage,
-        uint32 stopSlippage
-    ) external;
-
-    ///@notice this will perform a swap when order is created
-    ///Initial swap tokenOut will always be @param tokenIn, which will be the resulting order tokenIn
-    function createOrderWithSwap(
-        SwapParams calldata swapParams,
-        uint256 strikePrice,
-        uint256 stopPrice,
-        IERC20 tokenIn,
-        IERC20 tokenOut,
-        address recipient,
-        uint32 strikeSlippage,
-        uint32 stopSlippage
+        uint32 stopSlippage,
+        bool permit,
+        bytes calldata permitPayload
     ) external;
 }
 

@@ -54,9 +54,10 @@ describe("Test for failure - STOP LIMIT", () => {
             smallSlippage,
             smallSlippage,
             0,
-            false
+            false,
+            false,//no permit
+            "0x"
         )).to.be.revertedWith("ERC20: transfer amount exceeds balance")
-
     })
 
 })
