@@ -136,9 +136,9 @@ export class ArbAddresses{
      */
 
     //trigger v2 deployments with permit
-    readonly Master: string = "0x6e521bcc7d159AE2168eb9990CEA09149c8F309C"//"0x8a39E39234Bbb0840484c442Af01584DB04801CE"
-    readonly stopLimit: string = "0x6F7A2f0d9DBd284E274f28a6Fa30e8760C25F9D2"//"0x491397f7eb6f5d9B82B15cEcaBFf835bA31f217F"
-    readonly bracket: string = "0x6D746d529F0D0C38A5abD561792917F8c4623E55"//"0xEF52F132746a55f750ecfb3853e29CfECBC5f6E5"
+    readonly Master: string = "0x107dA33FdfA0661360D91E134FA5f5D4BEC25e4d"//"0x8a39E39234Bbb0840484c442Af01584DB04801CE"
+    readonly stopLimit: string = "0xCC1c159fcc0a226fd1A24c70454Ec349Deedd97b"//"0x491397f7eb6f5d9B82B15cEcaBFf835bA31f217F"
+    readonly bracket: string = "0x950DDb2F428057F41Ab6639c765EF10eC98F9DCd"//"0xEF52F132746a55f750ecfb3853e29CfECBC5f6E5"
 
     
     readonly wethFeed: string = "0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612"

@@ -84,6 +84,8 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         //set min order size 1000000000n
         await s.Master.connect(s.Frank).setMinOrderSize(s.minOrderSize)
 
+        await s.Master.connect(s.Frank).setFee(5)
+
     })
 
     it("Check upkeep", async () => {
@@ -1171,5 +1173,6 @@ describe("Bracket order with order modification", () => {
         const check = await s.Master.checkUpkeep("0x")
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
     })
-
 })
+
+

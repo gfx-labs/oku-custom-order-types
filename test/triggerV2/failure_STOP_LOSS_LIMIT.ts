@@ -12,7 +12,6 @@ import { ethers } from "hardhat"
 ///Testing is on the Arb WETH/USDC.e pool @ 500
 describe("Test for failure - STOP LOSS LIMIT", () => {
 
-
     let currentPrice: bigint
 
     let steveOrder: number

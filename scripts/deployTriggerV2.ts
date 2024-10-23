@@ -134,8 +134,8 @@ async function main() {
 
   //do things
   //await deployOracles(signer)
-  //await deployEverything(signer)
-  await updateSubKeeper(signer)
+  await deployEverything(signer)
+  //await updateSubKeeper(signer)
 
 
   console.log("DONE")
@@ -204,6 +204,10 @@ const register = async (signer: Signer) => {
   tx = await Master.connect(signer).setMinOrderSize(ethers.parseUnits("0.25", 8))
   await tx.wait()
   console.log("SET MIN ORDER SIZE")
+
+  tx = await Master.connect(signer).setFee(5n)
+  await tx.wait()
+  console.log("SET FEE TO 5 BIPS")
 
 }
 
