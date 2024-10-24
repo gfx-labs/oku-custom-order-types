@@ -14,7 +14,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
 
     let currentPrice: bigint
 
-    let steveOrder: number
+    let steveOrder: bigint
     const steveStrikeDelta = BigInt(ethers.parseUnits("75", 8))
     const smallSlippage = 0
     const steveBips = 500
@@ -55,14 +55,15 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             "0x"
         )
 
-        steveOrder = Number(await s.Bracket.orderCount())
-        const order = await s.Bracket.orders(steveOrder)
-        expect(order.recipient).to.eq(await s.Steve.getAddress(), "steve's order")
-
+       
         const filter = s.Bracket.filters.OrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
-        expect(Number(event.orderId)).to.eq(steveOrder, "First order Id")
+        steveOrder = event[0]
+        expect(Number(event.orderId)).to.not.eq(0, "First order")
+
+        const order = await s.Bracket.orders(steveOrder)
+        expect(order.recipient).to.eq(await s.Steve.getAddress(), "steve's order")
 
         //check upkeep
         let check = await s.Master.checkUpkeep("0x")
@@ -162,7 +163,12 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
 
 
         //confirm pending order to be executed is steve's order
-        steveOrder = Number(await s.Bracket.orderCount())
+
+        const filter = s.Bracket.filters.OrderCreated
+        const events = await s.Bracket.queryFilter(filter, -1)
+        const event = events[0].args
+        steveOrder = event[0]
+
         const order = await s.Bracket.orders(steveOrder)
         expect(order.recipient).to.eq(await s.Steve.getAddress(), "steve's order")
         const data: MasterUpkeepData = await decodeUpkeepData(check.performData, s.Steve)

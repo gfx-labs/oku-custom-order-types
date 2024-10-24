@@ -103,7 +103,7 @@ describe("Automated Trigger Testing on Arbitrum", () => {
  */
 describe("Execute Stop-Limit Upkeep", () => {
 
-
+    let orderId: BigInt
     const stopDelta = ethers.parseUnits("500", 8)//create limit order when price reaches stop
     const strikeDelta = ethers.parseUnits("100", 8)//close limit order when price reaches strike
     const strikeBips = 200
@@ -141,7 +141,8 @@ describe("Execute Stop-Limit Upkeep", () => {
         const filter = s.StopLimit.filters.OrderCreated
         const events = await s.StopLimit.queryFilter(filter, -1)
         const event = events[0].args
-        expect(Number(event[0])).to.eq(1, "First order Id")
+        orderId = (event[0])
+        expect(orderId).to.not.eq(0, "First order Id")
 
         //verify pending order exists
         const list = await s.StopLimit.getPendingOrders()
@@ -192,10 +193,10 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(await s.StopLimit.pendingOrderIds.length).to.eq(0, "no pending orders left")
 
         //stop-limit order filled event
-        const opFilter = s.StopLimit.filters.StopLimitOrderProcessed
-        const opEvents = await s.StopLimit.queryFilter(opFilter, -1)
-        const opEvent = opEvents[0].args
-        expect(opEvent.orderId).to.eq(1, "Order Id 1")
+        const Filter = s.StopLimit.filters.StopLimitOrderProcessed
+        const Events = await s.StopLimit.queryFilter(Filter, -1)
+        const Event = Events[0].args
+        expect(Event.orderId).to.eq(orderId, "Order Id correct")
 
         //no tokens left on contract
         expect(await s.WETH.balanceOf(await s.StopLimit.getAddress())).to.eq(0n, "0 WETH left on contract")
@@ -209,7 +210,7 @@ describe("Execute Stop-Limit Upkeep", () => {
         const filter = s.Bracket.filters.OrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
-        expect(Number(event[0])).to.eq(1, "First order Id")
+        expect(event[0]).to.eq(orderId, "First order Id")
 
         //verify pending order exists
         const list = await s.Bracket.getPendingOrders()
@@ -220,7 +221,7 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(balance).to.eq(s.wethAmount, "WETH received")
 
         //cancel limit order for future tests
-        await s.Bracket.connect(s.Bob).cancelOrder(1)
+        await s.Bracket.connect(s.Bob).cancelOrder(orderId.toString())
     })
 
     it("scratchpad", async () => {
@@ -497,7 +498,7 @@ describe("Execute Stop-Limit Upkeep", () => {
  * For swap on fill, we expect to receive the same asset we provide
  * In this case, we provide USDC, swap to WETH when the stop limit is filled, 
  * and when the resulting limit order closes, we expect our WETH to be swapped back to USDC
- */
+*/
 describe("Execute Stop-Limit with swap on fill", () => {
     //0.00029475 => 3,392.70 per ETH
     //0.00029200 => 3424.66
@@ -544,7 +545,8 @@ describe("Execute Stop-Limit with swap on fill", () => {
         const filter = s.StopLimit.filters.OrderCreated
         const events = await s.StopLimit.queryFilter(filter, -1)
         const event = events[0].args
-        expect(Number(event[0])).to.eq(2, "Second order Id")
+        charlesOrder = event[0]
+        expect(charlesOrder).to.not.eq(0, "Second order Id")
 
         //verify pending order exists
         const list = await s.StopLimit.getPendingOrders()
@@ -602,16 +604,13 @@ describe("Execute Stop-Limit with swap on fill", () => {
             data
         )
 
-        const initOrders = await s.Bracket.orderCount()
         console.log("Gas to performUpkeep: ", await getGas(await s.Master.performUpkeep(encodedTxData)))
 
         const filter = s.Bracket.filters.OrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
-        expect(Number(event[0])).to.eq(2, "Second order Id")
+        expect(event[0]).to.eq(charlesOrder, "Charles order")
 
-        expect(await s.Bracket.orderCount()).to.eq(initOrders + 1n, "New Order Created")
-        charlesOrder = await s.Bracket.orderCount()
     })
 
     it("Verify", async () => {
@@ -698,6 +697,8 @@ describe("Execute Bracket Upkeep", () => {
     const strikeBips = 500
     const stopBips = 5000
     const swapInBips = 500
+
+    let orderId: BigInt
     //setup
     before(async () => {
         //steal money for s.Bob
@@ -765,7 +766,8 @@ describe("Execute Bracket Upkeep", () => {
         const filter = s.Bracket.filters.OrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
-        expect(Number(event[0])).to.eq(3, "Third order Id")
+        orderId = event[0]
+        expect(Number(event[0])).to.not.eq(0, "Third order")
 
         //verify pending order exists
         const list = await s.Bracket.getPendingOrders()
@@ -776,6 +778,7 @@ describe("Execute Bracket Upkeep", () => {
         expect(balance).to.be.closeTo(s.wethAmount, 200000000000000000n, "WETH received")
 
     })
+
 
     it("Check upkeep", async () => {
 
@@ -835,6 +838,7 @@ describe("Execute Bracket Upkeep", () => {
         console.log("Gas to performUpkeep: ", await getGas(await s.Master.performUpkeep(encodedTxData)))
 
     })
+
     it("Verify", async () => {
         //expect user to receive tokens
         const usdcBalance = await s.USDC.balanceOf(await s.Bob.getAddress())
@@ -847,7 +851,7 @@ describe("Execute Bracket Upkeep", () => {
         const filter = s.Bracket.filters.OrderProcessed
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
-        expect(event.orderId).to.eq(3, "Order Id 3")
+        expect(event.orderId).to.eq(orderId, "Order Id correct")
         expect(event.success).to.eq(true, "Swap succeeded")
 
         //no tokens left on contract
@@ -942,7 +946,7 @@ describe("Bracket order with order modification", () => {
         const filter = s.Bracket.filters.OrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
-        expect(Number(event[0])).to.eq(4, "Fourth order Id")
+        expect(Number(event[0])).to.not.eq(0, "Fourth order")
         orderId = (event[0])
 
         //verify pending order exists
@@ -1126,8 +1130,6 @@ describe("Bracket order with order modification", () => {
         expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
     })
 
-
-
     it("Perform Upkeep - stop loss", async () => {
         //check upkeep
         const result = await s.Master.checkUpkeep("0x")
@@ -1150,6 +1152,7 @@ describe("Bracket order with order modification", () => {
         console.log("Gas to performUpkeep: ", await getGas(await s.Master.performUpkeep(encodedTxData)))
 
     })
+
     it("Verify", async () => {
         //expect user to receive tokens
         const usdcBalance = await s.USDC.balanceOf(await s.Bob.getAddress())
@@ -1162,7 +1165,7 @@ describe("Bracket order with order modification", () => {
         const filter = s.Bracket.filters.OrderProcessed
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
-        expect(event.orderId).to.eq(4, "Order Id 4")
+        expect(event.orderId).to.eq(orderId, "Order Id correct")
         expect(event.success).to.eq(true, "Swap succeeded")
 
         //no tokens left on contract

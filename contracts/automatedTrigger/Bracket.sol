@@ -24,7 +24,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     AutomationMaster public immutable MASTER;
-    IStopLimit public STOP_LIMIT_CONTRACT;
     IPermit2 public immutable permit2;
 
     uint96[] public pendingOrderIds;
@@ -33,11 +32,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
 
     constructor(
         AutomationMaster _master,
-        IStopLimit _stopLimit,
         IPermit2 _permit2
     ) {
         MASTER = _master;
-        STOP_LIMIT_CONTRACT = _stopLimit;
         permit2 = _permit2;
     }
 
@@ -166,7 +163,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         bool permit,
         bytes calldata permitPayload
     ) external override nonReentrant{
-        require(msg.sender == address(STOP_LIMIT_CONTRACT), "Only Stop Limit");
+        require(msg.sender == address(MASTER.STOP_LIMIT_CONTRACT()), "Only Stop Limit");
         _initializeOrder(
             swapPayload,
             takeProfit,
