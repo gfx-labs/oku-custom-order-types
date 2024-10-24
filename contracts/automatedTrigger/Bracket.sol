@@ -6,13 +6,13 @@ import "./AutomationMaster.sol";
 import "../libraries/ArrayMutation.sol";
 import "../interfaces/ILimitOrderRegistry.sol";
 import "../interfaces/uniswapV3/UniswapV3Pool.sol";
+import "../interfaces/uniswapV3/IPermit2.sol";
 import "../interfaces/uniswapV3/ISwapRouter02.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../oracle/IOracleRelay.sol";
-
 
 ///@notice This contract owns and handles all logic associated with the following order types:
 /// BRACKET_ORDER - automated fill at strike price AND stop loss, with independant slippapge for each option
@@ -41,22 +41,129 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         return pendingOrderIds;
     }
 
+    //check upkeep
+    function checkUpkeep(
+        bytes calldata
+    )
+        external
+        view
+        override
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        for (uint16 i = 0; i < pendingOrderIds.length; i++) {
+            Order memory order = orders[pendingOrderIds[i]];
+            (bool inRange, bool strike, uint256 exchangeRate) = checkInRange(
+                order
+            );
+            if (inRange) {
+                return (
+                    true,
+                    abi.encode(
+                        MasterUpkeepData({
+                            orderType: OrderType.BRACKET,
+                            target: address(this),
+                            txData: "0x",
+                            pendingOrderIdx: i,
+                            orderId: order.orderId,
+                            tokenIn: order.tokenIn,
+                            tokenOut: order.tokenOut,
+                            slippage: strike
+                                ? order.takeProfitSlippage
+                                : order.stopSlippage, //bips based on strike or stop fill
+                            amountIn: order.amountIn,
+                            exchangeRate: exchangeRate
+                        })
+                    )
+                );
+            }
+        }
+    }
+
+    ///@notice recipient of swap should be this contract,
+    ///as we need to account for tokens received.
+    ///This contract will then forward the tokens to the user
+    /// target refers to some contract where when we send @param performData,
+    ///that contract will exchange our tokenIn for tokenOut with at least minAmountReceived
+    /// pendingOrderIdx is the index of the pending order we are executing,
+    ///this pending order is removed from the array via array mutation
+    function performUpkeep(
+        bytes calldata performData
+    ) external override nonReentrant {
+        MasterUpkeepData memory data = abi.decode(
+            performData,
+            (MasterUpkeepData)
+        );
+        Order memory order = orders[pendingOrderIds[data.pendingOrderIdx]];
+        //deduce if we are filling stop or strike
+        (bool inRange, bool strike, ) = checkInRange(order);
+        require(inRange, "order ! in range");
+
+        //deduce bips
+        uint32 bips;
+        strike ? bips = order.takeProfitSlippage : bips = order.stopSlippage;
+
+        (
+            bool success,
+            bytes memory result,
+            uint256 swapAmountOut,
+            uint256 tokenInRefund
+        ) = execute(
+                data.target,
+                data.txData,
+                order.amountIn,
+                order.tokenIn,
+                order.tokenOut,
+                bips
+            );
+
+        //handle accounting
+        if (success) {
+            //remove from pending array
+            pendingOrderIds = ArrayMutation.removeFromArray(
+                data.pendingOrderIdx,
+                pendingOrderIds
+            );
+
+            //apply fee if there is one
+            (uint256 feeAmount, uint256 adjustedAmount) = MASTER.applyFee(
+                swapAmountOut
+            );
+
+            //send fee to master
+            if (feeAmount != 0) {
+                order.tokenOut.safeTransfer(address(MASTER), feeAmount);
+            }
+
+            //send tokenOut to recipient
+            order.tokenOut.safeTransfer(order.recipient, adjustedAmount);
+
+            //refund any unspent tokenIn
+            //this should generally be 0 when using exact input for swaps, which is recommended
+            if (tokenInRefund != 0) {
+                order.tokenIn.safeTransfer(order.recipient, tokenInRefund);
+            }
+        }
+
+        //emit
+        emit OrderProcessed(order.orderId, success, result);
+    }
+
+    ///@notice see @IBracket
     function createOrder(
         bytes calldata swapPayload,
-        uint256 strikePrice,
+        uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint32 strikeSlippage,
+        uint32 takeProfitSlippage,
         uint32 stopSlippage,
         bool permit,
         bytes calldata permitPayload
     ) external override nonReentrant {
         //determine if we are doing a swap first
         if (swapPayload.length != 0) {
-        
             SwapParams memory swapParams = abi.decode(
                 swapPayload,
                 (SwapParams)
@@ -80,12 +187,12 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
 
             _createOrderWithSwap(
                 swapParams,
-                strikePrice,
+                takeProfit,
                 stopPrice,
                 tokenIn,
                 tokenOut,
                 recipient,
-                strikeSlippage,
+                takeProfitSlippage,
                 stopSlippage
             );
         } else {
@@ -104,112 +211,22 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             }
 
             _createOrder(
-                strikePrice,
+                takeProfit,
                 stopPrice,
                 amountIn,
                 tokenIn,
                 tokenOut,
                 recipient,
-                strikeSlippage,
+                takeProfitSlippage,
                 stopSlippage
             );
         }
     }
 
-    function _createOrderWithSwap(
-        SwapParams memory swapParams,
-        uint256 strikePrice,
-        uint256 stopPrice,
-        IERC20 tokenIn,
-        IERC20 tokenOut,
-        address recipient,
-        uint32 strikeSlippage,
-        uint32 stopSlippage
-    ) internal {
-        require(
-            swapParams.swapBips <= MASTER.MAX_BIPS(),
-            "Invalid Slippage BIPS"
-        );
-
-        (, , uint256 swapAmountOut, uint256 tokenInRefund) = execute(
-            swapParams.swapTarget,
-            swapParams.txData,
-            swapParams.swapAmountIn,
-            swapParams.swapTokenIn,
-            tokenIn,
-            swapParams.swapBips
-        );
-
-        _createOrder(
-            strikePrice,
-            stopPrice,
-            swapAmountOut,
-            tokenIn,
-            tokenOut,
-            recipient,
-            strikeSlippage,
-            stopSlippage
-        );
-        //if exact input is not used, refund any remaining tokenIn
-        if (tokenInRefund != 0) {
-            swapParams.swapTokenIn.safeTransfer(recipient, tokenInRefund);
-        }
-    }
-
-    function _createOrder(
-        uint256 strikePrice,
-        uint256 stopPrice,
-        uint256 amountIn,
-        IERC20 tokenIn,
-        IERC20 tokenOut,
-        address recipient,
-        uint32 strikeSlippage,
-        uint32 stopSlippage
-    ) internal {
-        //verify both oracles exist, as we need both to calc the exchange rate
-        require(
-            address(MASTER.oracles(tokenIn)) != address(0x0) &&
-                address(MASTER.oracles(tokenIn)) != address(0x0),
-            "Oracle !exist"
-        );
-        require(
-            orderCount < MASTER.maxPendingOrders(),
-            "Max Order Count Reached"
-        );
-        require(
-            stopSlippage <= MASTER.MAX_BIPS() &&
-                strikeSlippage <= MASTER.MAX_BIPS(),
-            "Invalid Slippage BIPS"
-        );
-
-        MASTER.checkMinOrderSize(tokenIn, amountIn);
-
-        orderCount++;
-        orders[orderCount] = Order({
-            orderId: orderCount,
-            strikePrice: strikePrice,
-            stopPrice: stopPrice,
-            amountIn: amountIn,
-            tokenIn: tokenIn,
-            tokenOut: tokenOut,
-            recipient: recipient,
-            strikeSlippage: strikeSlippage,
-            stopSlippage: stopSlippage,
-            direction: MASTER.getExchangeRate(tokenIn, tokenOut) > strikePrice //exchangeRate in/out > strikePrice
-        });
-
-        pendingOrderIds.push(uint16(orderCount));
-
-        emit OrderCreated(orderCount);
-    }
-
-    ///@notice this can use permit or approve if increasing the position size
-    ///@param increasePosition is true if adding to the position, false if reducing the position
-    ///@param permit is true if @param _amountInDelta > 0 and permit is used for approval
-    ///@param permit can be set to false if using legacy approval, in which case @param permitPayload may be set to 0x
+    ///@notice see @IBracket
     function modifyOrder(
         uint96 orderId,
-        uint256 _strikePrice,
+        uint256 _takeProfit,
         uint256 _stopPrice,
         uint256 _amountInDelta,
         IERC20 _tokenOut,
@@ -219,7 +236,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         bool permit,
         bool increasePosition,
         bytes calldata permitPayload
-    ) external nonReentrant {
+    ) external override nonReentrant {
         //get order
         Order memory order = orders[orderId];
 
@@ -270,18 +287,19 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             );
         }
 
+        //construct new order
         Order memory newOrder = Order({
             orderId: orderId,
-            strikePrice: _strikePrice,
+            takeProfit: _takeProfit,
             stopPrice: _stopPrice,
             amountIn: newAmountIn,
             tokenIn: order.tokenIn,
             tokenOut: _tokenOut,
-            strikeSlippage: _strikeSlippage,
+            takeProfitSlippage: _strikeSlippage,
             stopSlippage: _stopSlippage,
             recipient: _recipient,
             direction: MASTER.getExchangeRate(order.tokenIn, _tokenOut) >
-                _strikePrice
+                _takeProfit
         });
 
         //store new order
@@ -299,6 +317,97 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(order), "Order not active");
+    }
+
+    function _createOrderWithSwap(
+        SwapParams memory swapParams,
+        uint256 takeProfit,
+        uint256 stopPrice,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        address recipient,
+        uint32 takeProfitSlippage,
+        uint32 stopSlippage
+    ) internal {
+        require(
+            swapParams.swapSlippage <= MASTER.MAX_BIPS(),
+            "Invalid Slippage BIPS"
+        );
+
+        //execute the swap
+        (, , uint256 swapAmountOut, uint256 tokenInRefund) = execute(
+            swapParams.swapTarget,
+            swapParams.txData,
+            swapParams.swapAmountIn,
+            swapParams.swapTokenIn,
+            tokenIn,
+            swapParams.swapSlippage
+        );
+
+        _createOrder(
+            takeProfit,
+            stopPrice,
+            swapAmountOut,
+            tokenIn,
+            tokenOut,
+            recipient,
+            takeProfitSlippage,
+            stopSlippage
+        );
+        //refund any unspent tokenIn
+        //this should generally be 0 when using exact input for swaps, which is recommended
+        if (tokenInRefund != 0) {
+            swapParams.swapTokenIn.safeTransfer(recipient, tokenInRefund);
+        }
+    }
+
+    function _createOrder(
+        uint256 takeProfit,
+        uint256 stopPrice,
+        uint256 amountIn,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        address recipient,
+        uint32 takeProfitSlippage,
+        uint32 stopSlippage
+    ) internal {
+        //verify both oracles exist, as we need both to calc the exchange rate
+        require(
+            address(MASTER.oracles(tokenIn)) != address(0x0) &&
+                address(MASTER.oracles(tokenIn)) != address(0x0),
+            "Oracle !exist"
+        );
+        require(
+            orderCount < MASTER.maxPendingOrders(),
+            "Max Order Count Reached"
+        );
+        require(
+            stopSlippage <= MASTER.MAX_BIPS() &&
+                takeProfitSlippage <= MASTER.MAX_BIPS(),
+            "Invalid Slippage BIPS"
+        );
+
+        MASTER.checkMinOrderSize(tokenIn, amountIn);
+
+        //construct order
+        orderCount++;
+        orders[orderCount] = Order({
+            orderId: orderCount,
+            takeProfit: takeProfit,
+            stopPrice: stopPrice,
+            amountIn: amountIn,
+            tokenIn: tokenIn,
+            tokenOut: tokenOut,
+            recipient: recipient,
+            takeProfitSlippage: takeProfitSlippage,
+            stopSlippage: stopSlippage,
+            direction: MASTER.getExchangeRate(tokenIn, tokenOut) > takeProfit //exchangeRate in/out > takeProfit
+        });
+
+        //store pending order
+        pendingOrderIds.push(uint16(orderCount));
+
+        emit OrderCreated(orderCount);
     }
 
     function _cancelOrder(Order memory order) internal returns (bool) {
@@ -321,113 +430,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             }
         }
         return false;
-    }
-
-    //check upkeep
-    function checkUpkeep(
-        bytes calldata
-    )
-        external
-        view
-        override
-        returns (bool upkeepNeeded, bytes memory performData)
-    {
-        for (uint16 i = 0; i < pendingOrderIds.length; i++) {
-            Order memory order = orders[pendingOrderIds[i]];
-            (bool inRange, bool strike, uint256 exchangeRate) = checkInRange(
-                order
-            );
-            if (inRange) {
-                return (
-                    true,
-                    abi.encode(
-                        MasterUpkeepData({
-                            orderType: OrderType.BRACKET,
-                            target: address(this),
-                            txData: "0x",
-                            pendingOrderIdx: i,
-                            orderId: order.orderId,
-                            tokenIn: order.tokenIn,
-                            tokenOut: order.tokenOut,
-                            bips: strike
-                                ? order.strikeSlippage
-                                : order.stopSlippage, //bips based on strike or stop fill
-                            amountIn: order.amountIn,
-                            exchangeRate: exchangeRate
-                        })
-                    )
-                );
-            }
-        }
-    }
-
-    ///@notice recipient of swap should be this contract,
-    ///as we need to account for tokens received.
-    ///This contract will then forward the tokens to the user
-    /// target refers to some contract where when we send @param performData,
-    ///that contract will exchange our tokenIn for tokenOut with at least minAmountReceived
-    /// pendingOrderIdx is the index of the pending order we are executing,
-    ///this pending order is removed from the array via array mutation
-    function performUpkeep(
-        bytes calldata performData
-    ) external override nonReentrant {
-        MasterUpkeepData memory data = abi.decode(
-            performData,
-            (MasterUpkeepData)
-        );
-        Order memory order = orders[pendingOrderIds[data.pendingOrderIdx]];
-        //deduce if we are filling stop or strike
-        (bool inRange, bool strike, ) = checkInRange(order);
-        require(inRange, "order ! in range");
-
-        //deduce bips
-        uint32 bips;
-        strike ? bips = order.strikeSlippage : bips = order.stopSlippage;
-
-        (
-            bool success,
-            bytes memory result,
-            uint256 swapAmountOut,
-            uint256 tokenInRefund
-        ) = execute(
-                data.target,
-                data.txData,
-                order.amountIn,
-                order.tokenIn,
-                order.tokenOut,
-                bips
-            );
-
-        //handle accounting
-        if (success) {
-            //remove from pending array
-            pendingOrderIds = ArrayMutation.removeFromArray(
-                data.pendingOrderIdx,
-                pendingOrderIds
-            );
-
-            //apply fee if there is one
-            (uint256 feeAmount, uint256 adjustedAmount) = MASTER.applyFee(
-                swapAmountOut
-            );
-
-            //send fee to master
-            if (feeAmount != 0) {
-                order.tokenOut.safeTransfer(address(MASTER), feeAmount);
-            }
-
-            //send tokenOut to recipient
-            order.tokenOut.safeTransfer(order.recipient, adjustedAmount);
-
-            //refund any unspent tokenIn
-            //this should generally be 0 when using exact input for swaps, which is recommended
-            if (tokenInRefund != 0) {
-                order.tokenIn.safeTransfer(order.recipient, tokenInRefund);
-            }
-        }
-
-        //emit
-        emit OrderProcessed(order.orderId, success, result);
     }
 
     ///@notice execute swap via @param txData
@@ -475,7 +477,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 "Too Little Received"
             );
 
-            swapAmountOut = finalTokenOut - initialTokenOut;//todo change name for swapAmountOut?
+            swapAmountOut = finalTokenOut - initialTokenOut; //todo change name for swapAmountOut?
             tokenInRefund = amountIn - (initialTokenIn - finalTokenIn);
         } else {
             revert TransactionFailed(result);
@@ -506,7 +508,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         exchangeRate = MASTER.getExchangeRate(order.tokenIn, order.tokenOut);
         if (order.direction) {
             //check for strike price
-            if (exchangeRate <= order.strikePrice) {
+            if (exchangeRate <= order.takeProfit) {
                 return (true, true, exchangeRate);
             }
             //check for stop price
@@ -515,7 +517,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             }
         } else {
             //check for strike price
-            if (exchangeRate >= order.strikePrice) {
+            if (exchangeRate >= order.takeProfit) {
                 return (true, true, exchangeRate);
             }
             //check for stop price

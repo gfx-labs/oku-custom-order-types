@@ -3,9 +3,9 @@ pragma solidity ^0.8.19;
 
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
+import "../interfaces/uniswapV3/IPermit2.sol";
 
 /**
-Fix approval for contract => contract to specific amount only for external call, StopLimit => bracket is fine
 Randomize order IDs and keep the ID for the resulting bracket once stop limit is filled
 Define all params in the interface and add any functions here
 clean up all comments
@@ -14,13 +14,16 @@ rename params strike price => take profit
  */
 
 interface IAutomation is AutomationCompatibleInterface {
+    ///@notice force a revert if the external call fails
     error TransactionFailed(bytes reason);
 
+    ///@notice allow the AutomationMaster to determine what kind of order is being filled
     enum OrderType {
         STOP_LIMIT,
         BRACKET
     }
 
+    ///@notice encode permit2 data into a single struct
     struct Permit2Payload {
         IPermit2.PermitSingle permitSingle;
         bytes signature;
@@ -28,22 +31,36 @@ interface IAutomation is AutomationCompatibleInterface {
 
     ///@notice params for swap on limit order create
     ///@param swapTokenIn may or may not be the same as @param tokenOut
+    ///@param swapAmountIn amount to swap
+    ///@param swapSlippage raw bips of slippage allowed
+    ///@param txData transaction data to be sent to the target to make the swap
     struct SwapParams {
         IERC20 swapTokenIn;
         uint256 swapAmountIn;
         address swapTarget;
-        uint32 swapBips;
+        uint32 swapSlippage;
         bytes txData;
     }
 
+    ///@notice standard return expected from checkUpkeep upkeep is needed
+    ///@param orderType enum allow the AutomationMaster to determine what kind of order is being filled
+    ///@param target address to send the transaction data to in order to perform the swap
+    ///@param tokenIn token sold in the swap
+    ///@param tokenOut token bought in the swap
+    ///@param orderId unique id to associate the order
+    ///@param pendingOrderIdx index of the pending order in the array
+    ///@param slippage raw bips for the upcoming swap
+    ///@param amountIn amount of @param tokenIn to sell
+    ///@param exchangeRate current exchange rate of @param tokenIn => @param tokenOut
+    ///@param txData transaction data to be sent to @param target to make the swap
     struct MasterUpkeepData {
         OrderType orderType;
         address target;
         IERC20 tokenIn;
         IERC20 tokenOut;
         uint96 orderId;
-        uint16 pendingOrderIdx;//todo idx ==/== orderId in terms of size, only reduce loop size?
-        uint88 bips;
+        uint16 pendingOrderIdx; //todo idx ==/== orderId in terms of size, only reduce loop size?
+        uint88 slippage;
         uint256 amountIn;
         uint256 exchangeRate;
         bytes txData;
@@ -54,170 +71,184 @@ interface IAutomation is AutomationCompatibleInterface {
     event OrderCancelled(uint256 orderId);
 }
 
+///@notice Stop Limit orders create a new bracket order once filled
+/// the resulting bracket order will have the same unique order ID but will exist on the Bracket contract
 interface IStopLimit is IAutomation {
+    ///@notice emitted when an order is filled
     event StopLimitOrderProcessed(uint256 orderId);
 
+    ///@notice StopLimit orders create a new bracket order once @param stopLimitPrice is reached
+    ///@param stopLimitPrice execution price to fill the Stop Limit order
+    ///@param takeProfit execution price for resulting Bracket order
+    ///@param stopPrice execution price for resulting Bracket order
+    ///@param amountIn amount of @param tokenIn to sell
+    ///@param orderId unique id to associate the order
+    ///@param tokenIn token sold in the swap
+    ///@param tokenOut token bought in the swap
+    ///@param recipient owner of the order and receiver of the funds once the order is closed
+    ///@param takeProfitSlippage raw bips used to determine slippage for resulting Bracket order once @param takeProfit is reached
+    ///@param stopSlippage raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
+    ///@param swapSlippage raw bips used to determine slippage for resulting swap if @param swapOnFill is true
     ///@param direction determines the expected direction of price movement
-    ///if true, strike price is above the current exchange rate and strike price is expected to be below
-    ///vice versa if false
+    ///@param swapOnFill determines if @param tokenIn is swapped for @param tokenOut once the Stop Limit order is filled
     struct Order {
         uint256 stopLimitPrice;
-        uint256 strikePrice;
+        uint256 takeProfit;
         uint256 stopPrice;
         uint256 amountIn;
         uint96 orderId;
         IERC20 tokenIn;
         IERC20 tokenOut;
         address recipient;
-        uint16 strikeSlippage;
+        uint16 takeProfitSlippage;
         uint16 stopSlippage;
         uint16 swapSlippage;
         bool direction;
         bool swapOnFill;
     }
 
-    ///@notice if no stop loss is desired, set to 0
-    ///@param tokenIn asset to provide
-    ///@param tokenOut asset to receive after resulting limit order is filled
-    ///@param stopLimitPrice execution price for stop limit order
-    ///@param strikePrice execution 'take profit' price for resulting limit order
-    ///@param stopPrice execution 'stop loss' price for resulting limit order
-    ///@param swapSlippage slippage for optional swap, only used if @param swapOnFill is true
+    ///@notice StopLimit orders create a new bracket order once filled
+    ///@param stopLimitPrice execution price to fill the Stop Limit order
+    ///@param takeProfit execution price for resulting Bracket order
+    ///@param stopPrice execution price for resulting Bracket order
+    ///@param amountIn amount of @param tokenIn to sell
+    ///@param tokenIn token sold in the swap
+    ///@param tokenOut token bought in the swap
+    ///@param recipient owner of the order and receiver of the funds once the order is closed
+    ///@param takeProfitSlippage raw bips used to determine slippage for resulting Bracket order once @param takeProfit is reached
+    ///@param stopSlippage raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
+    ///@param swapSlippage raw bips used to determine slippage for resulting swap if @param swapOnFill is true
+    ///@param swapOnFill determines if @param tokenIn is swapped for @param tokenOut once the Stop Limit order is filled
+    ///@param permit is true if using permit2, false if using legacy ERC20 approve
+    ///@param permitPayload encoded permit data matching the Permit2Payload struct
+    ///@notice @param permitPayload may be empty or set to "0x" if @param permit is false
     function createOrder(
         uint256 stopLimitPrice,
-        uint256 strikePrice,
+        uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint16 strikeSlipapge,
+        uint16 takeProfitSlippage,
         uint16 stopSlippage,
         uint16 swapSlippage,
         bool swapOnFill,
         bool permit,
         bytes calldata permitPayload
     ) external;
+
+    ///@param orderId unique id to reference the order being modified
+    ///@param stopLimitPrice new execution price to fill the Stop Limit order
+    ///@param takeProfit new execution price for resulting Bracket order
+    ///@param stopPrice new execution price for resulting Bracket order
+    ///@param amountInDelta amount to either increase or decrease the position, depending on @param increasePosition
+    ///@param tokenOut new token to be bought in the swap
+    ///@param recipient new owner of the order and receiver of the funds once the order is closed
+    ///@param takeProfitSlippage new raw bips used to determine slippage for resulting Bracket order once @param takeProfit is reached
+    ///@param stopSlippage new raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
+    ///@param swapSlippage new raw bips used to determine slippage for resulting swap if @param swapOnFill is true
+    ///@param swapOnFill determines if @param tokenIn is swapped for @param tokenOut once the Stop Limit order is filled
+    ///@param permit is true if using permit2, false if using legacy ERC20 approve
+    ///@param increasePosition true if adding to the position, false if reducing the position
+    ///@notice @param permit & @param permitPayload are not referenced if @param increasePosition is false
+    ///@param permitPayload encoded permit data matching the Permit2Payload struct
+    ///@notice @param permitPayload may be empty or set to "0x" if @param permit is false
+    function modifyOrder(
+        uint96 orderId,
+        uint256 stopLimitPrice,
+        uint256 takeProfit,
+        uint256 stopPrice,
+        uint256 amountInDelta,
+        IERC20 tokenOut,
+        address recipient,
+        uint16 takeProfitSlippage,
+        uint16 stopSlippage,
+        uint16 swapSlippage,
+        bool swapOnFill,
+        bool permit,
+        bool increasePosition,
+        bytes calldata permitPayload
+    ) external;
 }
 
 interface IBracket is IAutomation {
+    ///@notice Bracket orders are filled when either @param takeProfit or @param stopPrice are reached,
+    /// at which time @param tokenIn is swapped for @param tokenOut
+    ///@param takeProfit execution price for resulting Bracket order
+    ///@param stopPrice execution price for resulting Bracket order
+    ///@param amountIn amount of @param tokenIn to sell
+    ///@param orderId unique id to associate the order
+    ///@param tokenIn token sold in the swap
+    ///@param tokenOut token bought in the swap
+    ///@param recipient owner of the order and receiver of the funds once the order is closed
+    ///@param takeProfitSlippage raw bips used to determine slippage for resulting Bracket order once @param takeProfit is reached
+    ///@param stopSlippage raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
+    ///@param direction determines the expected direction of price movement
     struct Order {
-        uint256 strikePrice; //defined by exchange rate of tokenIn / tokenOut
+        uint256 takeProfit; //defined by exchange rate of tokenIn / tokenOut
         uint256 stopPrice;
         uint256 amountIn;
         uint96 orderId;
         IERC20 tokenIn;
         IERC20 tokenOut;
         address recipient; //addr to receive swap results
-        uint32 strikeSlippage; //slippage if order is filled
+        uint32 takeProfitSlippage; //slippage if order is filled
         uint32 stopSlippage; //slippage of stop price is reached
         bool direction; //true if initial exchange rate > strike price
     }
 
+    ///@notice Bracket orders are filled when either @param takeProfit or @param stopPrice are reached,
+    /// at which time @param tokenIn is swapped for @param tokenOut    ///@param stopLimitPrice execution price to fill the Stop Limit order
+    ///@param takeProfit execution price for resulting Bracket order
+    ///@param stopPrice execution price for resulting Bracket order
+    ///@param amountIn amount of @param tokenIn to sell
+    ///@param tokenIn token sold in the swap
+    ///@param tokenOut token bought in the swap
+    ///@param recipient owner of the order and receiver of the funds once the order is closed
+    ///@param takeProfitSlippage raw bips used to determine slippage for resulting Bracket order once @param takeProfit is reached
+    ///@param stopSlippage raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
+    ///@param permit is true if using permit2, false if using legacy ERC20 approve
+    ///@param permitPayload encoded permit data matching the Permit2Payload struct
+    ///@notice @param permitPayload may be empty or set to "0x" if @param permit is false
     function createOrder(
         bytes calldata swapPayload,
-        uint256 strikePrice,
+        uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint32 strikeSlippage,
+        uint32 takeProfitSlippage,
         uint32 stopSlippage,
         bool permit,
         bytes calldata permitPayload
     ) external;
-}
 
-interface IPermit2 {
-    /// @notice The token and amount details for a transfer signed in the permit transfer signature
-    struct TokenPermissions {
-        // ERC20 token address
-        address token;
-        // the maximum amount that can be spent
-        uint256 amount;
-    }
-
-    /// @notice The signed permit message for a single token transfer
-    struct PermitTransferFrom {
-        TokenPermissions permitted;
-        // a unique value for every token owner's signature to prevent signature replays
-        uint256 nonce;
-        // deadline on the permit signature
-        uint256 deadline;
-    }
-
-    /// @notice Specifies the recipient address and amount for batched transfers.
-    /// @dev Recipients and amounts correspond to the index of the signed token permissions array.
-    /// @dev Reverts if the requested amount is greater than the permitted signed amount.
-    struct SignatureTransferDetails {
-        // recipient address
-        address to;
-        // spender requested amount
-        uint256 requestedAmount;
-    }
-
-    function DOMAIN_SEPARATOR() external view returns (bytes32);
-
-    /// @notice A mapping from owner address to token address to spender address to PackedAllowance struct, which contains details and conditions of the approval.
-    /// @notice The mapping is indexed in the above order see: allowance[ownerAddress][tokenAddress][spenderAddress]
-    /// @dev The packed slot holds the allowed amount, expiration at which the allowed amount is no longer valid, and current nonce thats updated on any signature based approvals.
-    function allowance(
-        address,
-        address,
-        address
-    ) external view returns (uint160, uint48, uint48);
-
-    function transferFrom(
-        address from,
-        address to,
-        uint160 amount,
-        address token
-    ) external;
-
-    /// @notice Transfers a token using a signed permit message
-    /// @dev Reverts if the requested amount is greater than the permitted signed amount
-    /// @param permit The permit data signed over by the owner
-    /// @param owner The owner of the tokens to transfer
-    /// @param transferDetails The spender's requested transfer details for the permitted token
-    /// @param signature The signature to verify
-    function permitTransferFrom(
-        PermitTransferFrom memory permit,
-        SignatureTransferDetails calldata transferDetails,
-        address owner,
-        bytes calldata signature
-    ) external;
-
-    /// @notice The permit data for a token
-    struct PermitDetails {
-        // ERC20 token address
-        address token;
-        // the maximum amount allowed to spend
-        uint160 amount;
-        // timestamp at which a spender's token allowances become invalid
-        uint48 expiration;
-        // an incrementing value indexed per owner,token,and spender for each signature
-        uint48 nonce;
-    }
-
-    /// @notice The permit message signed for a single token allownce
-    struct PermitSingle {
-        // the permit data for a single token alownce
-        PermitDetails details;
-        // address permissioned on the allowed tokens
-        address spender;
-        // deadline on the permit signature
-        uint256 sigDeadline;
-    }
-
-    /// @notice Permit a spender to a given amount of the owners token via the owner's EIP-712 signature
-    /// @dev May fail if the owner's nonce was invalidated in-flight by invalidateNonce
-    /// @param owner The owner of the tokens being approved
-    /// @param permitSingle Data signed over by the owner specifying the terms of approval
-    /// @param signature The owner's signature over the permit data
-    function permit(
-        address owner,
-        PermitSingle memory permitSingle,
-        bytes calldata signature
+    ///@param orderId unique id to reference the order being modified
+    ///@param takeProfit new execution price for resulting Bracket order
+    ///@param stopPrice new execution price for resulting Bracket order
+    ///@param amountInDelta amount to either increase or decrease the position, depending on @param increasePosition
+    ///@param tokenOut new token to be bought in the swap
+    ///@param recipient new owner of the order and receiver of the funds once the order is closed
+    ///@param takeProfitSlippage new raw bips used to determine slippage for resulting Bracket order once @param takeProfit is reached
+    ///@param stopSlippage new raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
+    ///@param permit is true if using permit2, false if using legacy ERC20 approve
+    ///@param increasePosition true if adding to the position, false if reducing the position
+    ///@notice @param permit & @param permitPayload are not referenced if @param increasePosition is false
+    ///@param permitPayload encoded permit data matching the Permit2Payload struct
+    ///@notice @param permitPayload may be empty or set to "0x" if @param permit is false
+    function modifyOrder(
+        uint96 orderId,
+        uint256 takeProfit,
+        uint256 stopPrice,
+        uint256 amountInDelta,
+        IERC20 tokenOut,
+        address recipient,
+        uint32 takeProfitSlippage,
+        uint32 stopSlippage,
+        bool permit,
+        bool increasePosition,
+        bytes calldata permitPayload
     ) external;
 }

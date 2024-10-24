@@ -7,15 +7,15 @@ import "../libraries/ArrayMutation.sol";
 import "../interfaces/ILimitOrderRegistry.sol";
 import "../interfaces/uniswapV3/UniswapV3Pool.sol";
 import "../interfaces/uniswapV3/ISwapRouter02.sol";
+import "../interfaces/uniswapV3/IPermit2.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../oracle/IOracleRelay.sol";
 
-
 ///@notice This contract owns and handles all logic associated with STOP_LIMIT orders
-///STOP_LIMIT orders create a new limit order order once filled
+///STOP_LIMIT orders create a new Bracket order order once filled
 contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -45,17 +45,115 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         return pendingOrderIds;
     }
 
-    ///@param stopLimitPrice price at which the limit order is created
-    ///@param strikePrice or @param stopPrice is the price at which the limit order is closed
+    ///@notice this should never be called inside of a write function due to high gas usage
+    function checkUpkeep(
+        bytes calldata
+    )
+        external
+        view
+        override
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        for (uint16 i = 0; i < pendingOrderIds.length; i++) {
+            Order memory order = orders[pendingOrderIds[i]];
+            (bool inRange, uint256 exchangeRate) = checkInRange(order);
+            if (inRange) {
+                return (
+                    true,
+                    abi.encode(
+                        MasterUpkeepData({
+                            orderType: OrderType.STOP_LIMIT,
+                            target: address(this),
+                            txData: order.swapOnFill
+                                ? abi.encodePacked(true)
+                                : abi.encodePacked(false), //specify if swapOnFill is true
+                            pendingOrderIdx: i,
+                            orderId: order.orderId,
+                            tokenIn: order.tokenIn,
+                            tokenOut: order.tokenOut,
+                            slippage: order.swapSlippage,
+                            amountIn: order.amountIn,
+                            exchangeRate: exchangeRate
+                        })
+                    )
+                );
+            }
+        }
+    }   
+
+    function performUpkeep(
+        bytes calldata performData
+    ) external override nonReentrant {
+        MasterUpkeepData memory data = abi.decode(
+            performData,
+            (MasterUpkeepData)
+        );
+        Order memory order = orders[pendingOrderIds[data.pendingOrderIdx]];
+
+        //confirm order is in range to prevent improper fill
+        (bool inRange, ) = checkInRange(order);
+        require(inRange, "order ! in range");
+
+        //remove from pending array
+        pendingOrderIds = ArrayMutation.removeFromArray(
+            data.pendingOrderIdx,
+            pendingOrderIds
+        );
+
+        //approve
+        updateApproval(
+            address(BRACKET_CONTRACT),
+            order.tokenIn,
+            order.amountIn
+        );
+
+        bytes memory swapPayload;
+        IERC20 tokenIn = order.tokenIn;
+        IERC20 tokenOut = order.tokenOut;
+        if (order.swapOnFill) {
+            //for swap on fill, we expect to be paid out in the same asset we provided
+            //so the resulting order tokenIn and tokenOut are inverted relative to our original swap limit order
+            SwapParams memory params = SwapParams({
+                swapTokenIn: order.tokenIn, //asset provided
+                swapAmountIn: order.amountIn,
+                swapTarget: data.target,
+                swapSlippage: order.swapSlippage,
+                txData: data.txData
+            });
+            swapPayload = abi.encode(params);
+
+            tokenIn = order.tokenOut;
+            tokenOut = order.tokenIn;
+        }
+
+        //create bracket order
+        BRACKET_CONTRACT.createOrder(
+            swapPayload,
+            order.takeProfit,
+            order.stopPrice,
+            order.amountIn,
+            tokenIn,
+            tokenOut,
+            order.recipient,
+            order.takeProfitSlippage,
+            order.stopSlippage,
+            false, //permit
+            "0x" //permitPayload
+        );
+
+        emit StopLimitOrderProcessed(order.orderId);
+    }
+
+    ///@notice see @IStopLimit
     function createOrder(
         uint256 stopLimitPrice,
-        uint256 strikePrice,
+        uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint16 strikeSlipapge,
+        uint16 takeProfitSlippage,
         uint16 stopSlippage,
         uint16 swapSlippage,
         bool swapOnFill,
@@ -76,91 +174,36 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
         _createOrder(
             stopLimitPrice,
-            strikePrice,
+            takeProfit,
             stopPrice,
             amountIn,
             tokenIn,
             tokenOut,
             recipient,
-            strikeSlipapge,
+            takeProfitSlippage,
             stopSlippage,
             swapSlippage,
             swapOnFill
         );
     }
 
-    function _createOrder(
-        uint256 stopLimitPrice,
-        uint256 strikePrice,
-        uint256 stopPrice,
-        uint256 amountIn,
-        IERC20 tokenIn,
-        IERC20 tokenOut,
-        address recipient,
-        uint16 strikeSlipapge,
-        uint16 stopSlippage,
-        uint16 swapSlippage,
-        bool swapOnFill
-    ) internal {
-        //verify both oracles exist, as we need both to calc the exchange rate
-        require(
-            address(MASTER.oracles(tokenIn)) != address(0x0) &&
-                address(MASTER.oracles(tokenOut)) != address(0x0),
-            "Oracle !exist"
-        );
-        require(
-            orderCount < MASTER.maxPendingOrders(),
-            "Max Order Count Reached"
-        );
-        require(
-            strikeSlipapge <= MASTER.MAX_BIPS() &&
-                stopSlippage <= MASTER.MAX_BIPS(),
-            "invalid slippage"
-        );
-
-        MASTER.checkMinOrderSize(tokenIn, amountIn);
-
-        orderCount++;
-        orders[orderCount] = Order({
-            orderId: orderCount,
-            stopLimitPrice: stopLimitPrice,
-            stopPrice: stopPrice,
-            strikePrice: strikePrice,
-            amountIn: amountIn,
-            tokenIn: tokenIn,
-            tokenOut: tokenOut,
-            strikeSlippage: strikeSlipapge,
-            stopSlippage: stopSlippage,
-            swapSlippage: swapSlippage,
-            recipient: recipient,
-            direction: MASTER.getExchangeRate(tokenIn, tokenOut) > stopPrice, //compare to stop price for this order's direction
-            swapOnFill: swapOnFill
-        });
-        pendingOrderIds.push(uint16(orderCount));
-        //emit
-        emit OrderCreated(orderCount);
-    }
-
-    ///@notice this can use permit or approve if increasing the position size
-    ///@param increasePosition is true if adding to the position, false if reducing the position
-    ///@param permit is true if @param _amountInDelta > 0 and permit is used for approval
-    ///@param permit can be set to false if using legacy approval, in which case @param permitPayload may be set to 0x
+    ///@notice see @IStopLimit
     function modifyOrder(
         uint96 orderId,
         uint256 _stopLimitPrice,
-        uint256 _strikePrice,
+        uint256 _takeProfit,
         uint256 _stopPrice,
         uint256 _amountInDelta,
         IERC20 _tokenOut,
         address _recipient,
-        uint16 _strikeSlippage,
+        uint16 _takeProfitSlippage,
         uint16 _stopSlippage,
         uint16 _swapSlippage,
         bool _swapOnFill,
         bool permit,
         bool increasePosition,
         bytes calldata permitPayload
-    ) external nonReentrant {
+    ) external override nonReentrant {
         //get existing order
         Order memory order = orders[orderId];
         //only order owner
@@ -209,15 +252,16 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             );
         }
 
+        //construct order
         Order memory newOrder = Order({
             orderId: orderId,
             stopLimitPrice: _stopLimitPrice,
-            strikePrice: _strikePrice,
+            takeProfit: _takeProfit,
             stopPrice: _stopPrice,
             amountIn: newAmountIn,
             tokenIn: order.tokenIn,
             tokenOut: _tokenOut,
-            strikeSlippage: _strikeSlippage,
+            takeProfitSlippage: _takeProfitSlippage,
             stopSlippage: _stopSlippage,
             swapSlippage: _swapSlippage,
             recipient: _recipient,
@@ -231,6 +275,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
     }
 
     ///@notice contract owner can cancel any order
+    ///@notice cancelled orders refund the order recipient
     function adminCancelOrder(uint256 orderId) external onlyOwner {
         _cancelOrder(orderId);
     }
@@ -241,6 +286,58 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(orderId), "Order not active");
+    }
+
+    function _createOrder(
+        uint256 stopLimitPrice,
+        uint256 takeProfit,
+        uint256 stopPrice,
+        uint256 amountIn,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        address recipient,
+        uint16 takeProfitSlippage,
+        uint16 stopSlippage,
+        uint16 swapSlippage,
+        bool swapOnFill
+    ) internal {
+        //verify both oracles exist, as we need both to calc the exchange rate
+        require(
+            address(MASTER.oracles(tokenIn)) != address(0x0) &&
+                address(MASTER.oracles(tokenOut)) != address(0x0),
+            "Oracle !exist"
+        );
+        require(
+            orderCount < MASTER.maxPendingOrders(),
+            "Max Order Count Reached"
+        );
+        require(
+            takeProfitSlippage <= MASTER.MAX_BIPS() &&
+                stopSlippage <= MASTER.MAX_BIPS(),
+            "invalid slippage"
+        );
+
+        MASTER.checkMinOrderSize(tokenIn, amountIn);
+
+        orderCount++;
+        orders[orderCount] = Order({
+            orderId: orderCount,
+            stopLimitPrice: stopLimitPrice,
+            stopPrice: stopPrice,
+            takeProfit: takeProfit,
+            amountIn: amountIn,
+            tokenIn: tokenIn,
+            tokenOut: tokenOut,
+            takeProfitSlippage: takeProfitSlippage,
+            stopSlippage: stopSlippage,
+            swapSlippage: swapSlippage,
+            recipient: recipient,
+            direction: MASTER.getExchangeRate(tokenIn, tokenOut) > stopPrice, //compare to stop price for this order's direction
+            swapOnFill: swapOnFill
+        });
+        pendingOrderIds.push(uint16(orderCount));
+        //emit
+        emit OrderCreated(orderCount);
     }
 
     function _cancelOrder(uint256 orderId) internal returns (bool) {
@@ -262,108 +359,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             }
         }
         return false;
-    }
-
-    ///@return upkeepNeeded is true only when there is a stop-limit order to fill
-    ///@return performData should be passed unaltered to performUpkeep
-    function checkUpkeep(
-        bytes calldata
-    )
-        external
-        view
-        override
-        returns (bool upkeepNeeded, bytes memory performData)
-    {
-        for (uint16 i = 0; i < pendingOrderIds.length; i++) {
-            Order memory order = orders[pendingOrderIds[i]];
-            (bool inRange, uint256 exchangeRate) = checkInRange(order);
-            if (inRange) {
-                return (
-                    true,
-                    abi.encode(
-                        MasterUpkeepData({
-                            orderType: OrderType.STOP_LIMIT,
-                            target: address(this),
-                            txData: order.swapOnFill
-                                ? abi.encodePacked(true)
-                                : abi.encodePacked(false), //specify if swapOnFill is true
-                            pendingOrderIdx: i,
-                            orderId: order.orderId,
-                            tokenIn: order.tokenIn,
-                            tokenOut: order.tokenOut,
-                            bips: order.swapSlippage,
-                            amountIn: order.amountIn,
-                            exchangeRate: exchangeRate
-                        })
-                    )
-                );
-            }
-        }
-    }
-
-    ///@param performData can simply be passed from return of checkUpkeep without alteration
-    function performUpkeep(
-        bytes calldata performData
-    ) external override nonReentrant {
-        MasterUpkeepData memory data = abi.decode(
-            performData,
-            (MasterUpkeepData)
-        );
-        Order memory order = orders[pendingOrderIds[data.pendingOrderIdx]];
-
-        //confirm order is in range to prevent improper fill
-        (bool inRange, ) = checkInRange(order);
-        require(inRange, "order ! in range");
-
-        //remove from pending array
-        pendingOrderIds = ArrayMutation.removeFromArray(
-            data.pendingOrderIdx,
-            pendingOrderIds
-        );
-
-        //approve
-        updateApproval(
-            address(BRACKET_CONTRACT),
-            order.tokenIn,
-            order.amountIn
-        );
-
-        bytes memory swapPayload;
-        IERC20 tokenIn = order.tokenIn;
-        IERC20 tokenOut = order.tokenOut;
-        if (order.swapOnFill) {
-            //for swap on fill, we expect to be paid out in the same asset we provided
-            //so the resulting order tokenIn and tokenOut are inverted relative to our original swap limit order
-            SwapParams memory params = SwapParams({
-                swapTokenIn: order.tokenIn, //asset provided
-                swapAmountIn: order.amountIn,
-                swapTarget: data.target,
-                swapBips: order.swapSlippage,
-                txData: data.txData
-            });
-            swapPayload = abi.encode(params);
-
-            //invert tokens as we are about to swap
-            tokenIn = order.tokenOut;
-            tokenOut = order.tokenIn;
-        }
-
-        //create standard order without swap on fill
-        BRACKET_CONTRACT.createOrder(
-            swapPayload,
-            order.strikePrice,
-            order.stopPrice,
-            order.amountIn,
-            tokenIn,
-            tokenOut,
-            order.recipient,
-            order.strikeSlippage,
-            order.stopSlippage,
-            false, //permit
-            "0x" //permitPayload
-        );
-
-        emit StopLimitOrderProcessed(order.orderId);
     }
 
     ///@notice handle signature and acquisition of asset with permit2
@@ -400,6 +395,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         }
     }
 
+    ///@notice check if the order is fillable
     function checkInRange(
         Order memory order
     ) internal view returns (bool inRange, uint256 exchangeRate) {
