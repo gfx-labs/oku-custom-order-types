@@ -25,8 +25,10 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
     uint96 public orderCount;
 
+    //todo double check this size?
     uint16[] public pendingOrderIds;
 
+    //todo adjust order id size?
     mapping(uint256 => Order) public orders;
 
     constructor(
@@ -42,7 +44,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
     function getPendingOrders() external view returns (uint16[] memory) {
         return pendingOrderIds;
     }
-    //todo non reentrant
+
     ///@param stopLimitPrice price at which the limit order is created
     ///@param strikePrice or @param stopPrice is the price at which the limit order is closed
     function createOrder(
@@ -138,7 +140,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         //emit
         emit OrderCreated(orderCount);
     }
-    //todo modify token out?
+
     ///@notice this can use permit or approve if increasing the position size
     ///@param increasePosition is true if adding to the position, false if reducing the position
     ///@param permit is true if @param _amountInDelta > 0 and permit is used for approval
@@ -326,7 +328,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             order.amountIn
         );
 
-        //TODO refactor this for new createOrder
         bytes memory swapPayload;
         IERC20 tokenIn = order.tokenIn;
         IERC20 tokenOut = order.tokenOut;

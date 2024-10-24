@@ -18,7 +18,8 @@ import "../oracle/IOracleRelay.sol";
 /// BRACKET_ORDER - automated fill at strike price AND stop loss, with independant slippapge for each option
 /// LIMIT_ORDER - automated market swap at specified strike price
 /// STOP_LOSS - automated market swap at specified stop price
-/// In order to configure a LIMIT_ORDER or STOP_LOSS order, simply set the strike price or stop price to either 0 or 2^256 - 1 as appropriate
+/// In order to configure a LIMIT_ORDER or STOP_LOSS order, simply set the strike price or stop price to either 0 for the lower bound or 2^256 - 1 for the upper bound
+///todo example
 contract Bracket is Ownable, IBracket, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -341,7 +342,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                     true,
                     abi.encode(
                         MasterUpkeepData({
-                            orderType: OrderType.STOP_LOSS_LIMIT,
+                            orderType: OrderType.BRACKET,
                             target: address(this),
                             txData: "0x",
                             pendingOrderIdx: i,
@@ -379,7 +380,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         (bool inRange, bool strike, ) = checkInRange(order);
         require(inRange, "order ! in range");
 
-        //asing bips
+        //deduce bips
         uint32 bips;
         strike ? bips = order.strikeSlippage : bips = order.stopSlippage;
 
@@ -394,7 +395,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 order.amountIn,
                 order.tokenIn,
                 order.tokenOut,
-                order.stopSlippage
+                bips
             );
 
         //handle accounting
@@ -451,7 +452,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint256 initialTokenOut = tokenOut.balanceOf(address(this));
 
         //approve
-        updateApproval(target, tokenIn, amountIn);
+        tokenIn.safeApprove(target, amountIn);
 
         //perform the call
         (success, result) = target.call(txData);
@@ -474,7 +475,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 "Too Little Received"
             );
 
-            swapAmountOut = finalTokenOut - initialTokenOut;
+            swapAmountOut = finalTokenOut - initialTokenOut;//todo change name for swapAmountOut?
             tokenInRefund = amountIn - (initialTokenIn - finalTokenIn);
         } else {
             revert TransactionFailed(result);
@@ -495,24 +496,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
 
         permit2.permit(owner, payload.permitSingle, payload.signature);
         permit2.transferFrom(owner, address(this), amount, token);
-    }
-
-    ///@notice if current approval is insufficient, approve max
-    ///@notice oz safeIncreaseAllowance controls for tokens that require allowance to be reset to 0 before increasing again
-    function updateApproval(
-        address spender,
-        IERC20 token,
-        uint256 amount
-    ) internal {
-        // get current allowance
-        uint256 currentAllowance = token.allowance(address(this), spender);
-        if (currentAllowance < amount) {
-            // amount is a delta, so need to pass max - current to avoid overflow
-            token.safeIncreaseAllowance(
-                spender,
-                type(uint256).max - currentAllowance
-            );
-        }
     }
 
     //todo what if direction is true but strike price is invalidly higher than strike price?

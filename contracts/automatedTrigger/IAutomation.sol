@@ -4,12 +4,21 @@ pragma solidity ^0.8.19;
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 
+/**
+Fix approval for contract => contract to specific amount only for external call, StopLimit => bracket is fine
+Randomize order IDs and keep the ID for the resulting bracket once stop limit is filled
+Define all params in the interface and add any functions here
+clean up all comments
+standardize use of slippage bips vs just bips (which could be fee)
+rename params strike price => take profit
+ */
+
 interface IAutomation is AutomationCompatibleInterface {
     error TransactionFailed(bytes reason);
 
     enum OrderType {
         STOP_LIMIT,
-        STOP_LOSS_LIMIT
+        BRACKET
     }
 
     struct Permit2Payload {
@@ -33,7 +42,7 @@ interface IAutomation is AutomationCompatibleInterface {
         IERC20 tokenIn;
         IERC20 tokenOut;
         uint96 orderId;
-        uint16 pendingOrderIdx;
+        uint16 pendingOrderIdx;//todo idx ==/== orderId in terms of size, only reduce loop size?
         uint88 bips;
         uint256 amountIn;
         uint256 exchangeRate;

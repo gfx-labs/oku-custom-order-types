@@ -188,7 +188,7 @@ contract AutomationMaster is IAutomation, Ownable {
         }
 
         //if stop order, we directly pass the upkeep data to the stop order contract
-        if (data.orderType == OrderType.STOP_LOSS_LIMIT) {
+        if (data.orderType == OrderType.BRACKET) {
             BRACKET_CONTRACT.performUpkeep(performData);
         }
     }
