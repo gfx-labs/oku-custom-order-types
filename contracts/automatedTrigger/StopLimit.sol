@@ -26,7 +26,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
     uint96 public orderCount;
 
     //todo double check this size?
-    uint16[] public pendingOrderIds;
+    uint96[] public pendingOrderIds;
 
     //todo adjust order id size?
     mapping(uint256 => Order) public orders;
@@ -41,7 +41,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         permit2 = _permit2;
     }
 
-    function getPendingOrders() external view returns (uint16[] memory) {
+    function getPendingOrders() external view returns (uint96[] memory) {
         return pendingOrderIds;
     }
 
@@ -54,7 +54,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        for (uint16 i = 0; i < pendingOrderIds.length; i++) {
+        for (uint96 i = 0; i < pendingOrderIds.length; i++) {
             Order memory order = orders[pendingOrderIds[i]];
             (bool inRange, uint256 exchangeRate) = checkInRange(order);
             if (inRange) {
@@ -335,14 +335,14 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) > stopPrice, //compare to stop price for this order's direction
             swapOnFill: swapOnFill
         });
-        pendingOrderIds.push(uint16(orderCount));
+        pendingOrderIds.push(uint96(orderCount));
         //emit
         emit OrderCreated(orderCount);
     }
 
     function _cancelOrder(uint256 orderId) internal returns (bool) {
         Order memory order = orders[orderId];
-        for (uint16 i = 0; i < pendingOrderIds.length; i++) {
+        for (uint96 i = 0; i < pendingOrderIds.length; i++) {
             if (pendingOrderIds[i] == orderId) {
                 //remove from pending array
                 pendingOrderIds = ArrayMutation.removeFromArray(

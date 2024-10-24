@@ -11,6 +11,10 @@ Define all params in the interface and add any functions here
 clean up all comments
 standardize use of slippage bips vs just bips (which could be fee)
 rename params strike price => take profit
+
+
+ORDER IDS are uint96 to fit with an address
+SLIPPAGE is uint16 as they are never gonna be > 10k
  */
 
 interface IAutomation is AutomationCompatibleInterface {
@@ -38,7 +42,7 @@ interface IAutomation is AutomationCompatibleInterface {
         IERC20 swapTokenIn;
         uint256 swapAmountIn;
         address swapTarget;
-        uint32 swapSlippage;
+        uint16 swapSlippage;
         bytes txData;
     }
 
@@ -59,8 +63,8 @@ interface IAutomation is AutomationCompatibleInterface {
         IERC20 tokenIn;
         IERC20 tokenOut;
         uint96 orderId;
-        uint16 pendingOrderIdx; //todo idx ==/== orderId in terms of size, only reduce loop size?
-        uint88 slippage;
+        uint96 pendingOrderIdx; //todo idx ==/== orderId in terms of size, only reduce loop size?
+        uint16 slippage;
         uint256 amountIn;
         uint256 exchangeRate;
         bytes txData;
@@ -193,8 +197,8 @@ interface IBracket is IAutomation {
         IERC20 tokenIn;
         IERC20 tokenOut;
         address recipient; //addr to receive swap results
-        uint32 takeProfitSlippage; //slippage if order is filled
-        uint32 stopSlippage; //slippage of stop price is reached
+        uint16 takeProfitSlippage; //slippage if order is filled
+        uint16 stopSlippage; //slippage of stop price is reached
         bool direction; //true if initial exchange rate > strike price
     }
 
@@ -219,8 +223,8 @@ interface IBracket is IAutomation {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint32 takeProfitSlippage,
-        uint32 stopSlippage,
+        uint16 takeProfitSlippage,
+        uint16 stopSlippage,
         bool permit,
         bytes calldata permitPayload
     ) external;
@@ -245,8 +249,8 @@ interface IBracket is IAutomation {
         uint256 amountInDelta,
         IERC20 tokenOut,
         address recipient,
-        uint32 takeProfitSlippage,
-        uint32 stopSlippage,
+        uint16 takeProfitSlippage,
+        uint16 stopSlippage,
         bool permit,
         bool increasePosition,
         bytes calldata permitPayload

@@ -95,7 +95,7 @@ contract AutomationMaster is IAutomation, Ownable {
         uint256 amountIn,
         IERC20 tokenIn,
         IERC20 tokenOut,
-        uint88 slippageBips
+        uint96 slippageBips
     ) external view returns (uint256 minAmountReceived) {
         uint256 exchangeRate = _getExchangeRate(tokenIn, tokenOut);
 

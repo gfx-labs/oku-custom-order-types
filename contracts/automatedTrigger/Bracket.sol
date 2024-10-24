@@ -28,7 +28,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
 
     uint96 public orderCount;
 
-    uint16[] public pendingOrderIds;
+    uint96[] public pendingOrderIds;
 
     mapping(uint256 => Order) public orders;
 
@@ -37,7 +37,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         permit2 = _permit2;
     }
 
-    function getPendingOrders() external view returns (uint16[] memory) {
+    function getPendingOrders() external view returns (uint96[] memory) {
         return pendingOrderIds;
     }
 
@@ -50,7 +50,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        for (uint16 i = 0; i < pendingOrderIds.length; i++) {
+        for (uint96 i = 0; i < pendingOrderIds.length; i++) {
             Order memory order = orders[pendingOrderIds[i]];
             (bool inRange, bool strike, uint256 exchangeRate) = checkInRange(
                 order
@@ -99,7 +99,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         require(inRange, "order ! in range");
 
         //deduce bips
-        uint32 bips;
+        uint16 bips;
         strike ? bips = order.takeProfitSlippage : bips = order.stopSlippage;
 
         (
@@ -157,8 +157,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint32 takeProfitSlippage,
-        uint32 stopSlippage,
+        uint16 takeProfitSlippage,
+        uint16 stopSlippage,
         bool permit,
         bytes calldata permitPayload
     ) external override nonReentrant {
@@ -231,8 +231,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint256 _amountInDelta,
         IERC20 _tokenOut,
         address _recipient,
-        uint32 _strikeSlippage,
-        uint32 _stopSlippage,
+        uint16 _strikeSlippage,
+        uint16 _stopSlippage,
         bool permit,
         bool increasePosition,
         bytes calldata permitPayload
@@ -306,14 +306,14 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         orders[orderId] = newOrder;
     }
 
-    function adminCancelOrder(uint256 orderId) external onlyOwner {
+    function adminCancelOrder(uint96 orderId) external onlyOwner {
         Order memory order = orders[orderId];
         require(_cancelOrder(order), "Order not active");
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(uint256 orderId) external {
+    function cancelOrder(uint96 orderId) external {
         Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(order), "Order not active");
@@ -326,8 +326,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint32 takeProfitSlippage,
-        uint32 stopSlippage
+        uint16 takeProfitSlippage,
+        uint16 stopSlippage
     ) internal {
         require(
             swapParams.swapSlippage <= MASTER.MAX_BIPS(),
@@ -368,8 +368,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
-        uint32 takeProfitSlippage,
-        uint32 stopSlippage
+        uint16 takeProfitSlippage,
+        uint16 stopSlippage
     ) internal {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
@@ -405,13 +405,13 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         });
 
         //store pending order
-        pendingOrderIds.push(uint16(orderCount));
+        pendingOrderIds.push(orderCount);
 
         emit OrderCreated(orderCount);
     }
 
     function _cancelOrder(Order memory order) internal returns (bool) {
-        for (uint16 i = 0; i < pendingOrderIds.length; i++) {
+        for (uint96 i = 0; i < pendingOrderIds.length; i++) {
             if (pendingOrderIds[i] == order.orderId) {
                 //remove from pending array
                 pendingOrderIds = ArrayMutation.removeFromArray(
@@ -439,7 +439,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint256 amountIn,
         IERC20 tokenIn,
         IERC20 tokenOut,
-        uint32 bips
+        uint16 bips
     )
         internal
         returns (
