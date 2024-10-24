@@ -202,6 +202,8 @@ interface IBracket is IAutomation {
         bool direction; //true if initial exchange rate > strike price
     }
 
+    
+
     ///@notice Bracket orders are filled when either @param takeProfit or @param stopPrice are reached,
     /// at which time @param tokenIn is swapped for @param tokenOut    ///@param stopLimitPrice execution price to fill the Stop Limit order
     ///@param takeProfit execution price for resulting Bracket order
@@ -228,6 +230,24 @@ interface IBracket is IAutomation {
         bool permit,
         bytes calldata permitPayload
     ) external;
+
+    ///@notice create a new Bracket order as a Stop Limit order is filled
+    ///@notice @param existingOrderId allows the use of the same orderId for the resulting Bracket order
+    function fillStopLimitOrder(
+        bytes calldata swapPayload,
+        uint256 takeProfit,
+        uint256 stopPrice,
+        uint256 amountIn,
+        uint96 existingOrderId,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        address recipient,
+        uint16 takeProfitSlippage,
+        uint16 stopSlippage,
+        bool permit,
+        bytes calldata permitPayload
+    ) external;
+
 
     ///@param orderId unique id to reference the order being modified
     ///@param takeProfit new execution price for resulting Bracket order

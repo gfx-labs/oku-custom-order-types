@@ -23,8 +23,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
     IBracket public immutable BRACKET_CONTRACT;
     IPermit2 public immutable permit2;
 
-    uint96 public orderCount;
-
     //todo double check this size?
     uint96[] public pendingOrderIds;
 
@@ -127,11 +125,12 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         }
 
         //create bracket order
-        BRACKET_CONTRACT.createOrder(
+        BRACKET_CONTRACT.fillStopLimitOrder(
             swapPayload,
             order.takeProfit,
             order.stopPrice,
             order.amountIn,
+            order.orderId,
             tokenIn,
             tokenOut,
             order.recipient,
@@ -308,7 +307,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             "Oracle !exist"
         );
         require(
-            orderCount < MASTER.maxPendingOrders(),
+            pendingOrderIds.length < MASTER.maxPendingOrders(),
             "Max Order Count Reached"
         );
         require(
@@ -319,9 +318,10 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
         MASTER.checkMinOrderSize(tokenIn, amountIn);
 
-        orderCount++;
-        orders[orderCount] = Order({
-            orderId: orderCount,
+        uint96 orderId = MASTER.generateOrderId(msg.sender);
+
+        orders[orderId] = Order({
+            orderId: orderId,
             stopLimitPrice: stopLimitPrice,
             stopPrice: stopPrice,
             takeProfit: takeProfit,
@@ -335,9 +335,9 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) > stopPrice, //compare to stop price for this order's direction
             swapOnFill: swapOnFill
         });
-        pendingOrderIds.push(uint96(orderCount));
+        pendingOrderIds.push(uint96(orderId));
         //emit
-        emit OrderCreated(orderCount);
+        emit OrderCreated(orderId);
     }
 
     function _cancelOrder(uint256 orderId) internal returns (bool) {

@@ -91,6 +91,11 @@ contract AutomationMaster is IAutomation, Ownable {
         return (priceIn * 1e8) / priceOut;
     }
 
+    function generateOrderId(address sender) public view returns (uint96) {
+        uint256 hashedValue = uint256(keccak256(abi.encodePacked(sender, block.timestamp)));
+        return uint96(hashedValue);
+    }
+
     function getMinAmountReceived(
         uint256 amountIn,
         IERC20 tokenIn,

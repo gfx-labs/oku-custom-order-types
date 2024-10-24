@@ -24,16 +24,20 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     AutomationMaster public immutable MASTER;
+    IStopLimit public STOP_LIMIT_CONTRACT;
     IPermit2 public immutable permit2;
-
-    uint96 public orderCount;
 
     uint96[] public pendingOrderIds;
 
     mapping(uint256 => Order) public orders;
 
-    constructor(AutomationMaster _master, IPermit2 _permit2) {
+    constructor(
+        AutomationMaster _master,
+        IStopLimit _stopLimit,
+        IPermit2 _permit2
+    ) {
         MASTER = _master;
+        STOP_LIMIT_CONTRACT = _stopLimit;
         permit2 = _permit2;
     }
 
@@ -148,6 +152,37 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         emit OrderProcessed(order.orderId, success, result);
     }
 
+    function fillStopLimitOrder(
+        bytes calldata swapPayload,
+        uint256 takeProfit,
+        uint256 stopPrice,
+        uint256 amountIn,
+        uint96 existingOrderId,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        address recipient,
+        uint16 takeProfitSlippage,
+        uint16 stopSlippage,
+        bool permit,
+        bytes calldata permitPayload
+    ) external override nonReentrant{
+        require(msg.sender == address(STOP_LIMIT_CONTRACT), "Only Stop Limit");
+        _initializeOrder(
+            swapPayload,
+            takeProfit,
+            stopPrice,
+            amountIn,
+            existingOrderId,
+            tokenIn,
+            tokenOut,
+            recipient,
+            takeProfitSlippage,
+            stopSlippage,
+            permit,
+            permitPayload
+        );
+    }
+
     ///@notice see @IBracket
     function createOrder(
         bytes calldata swapPayload,
@@ -162,65 +197,20 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         bool permit,
         bytes calldata permitPayload
     ) external override nonReentrant {
-        //determine if we are doing a swap first
-        if (swapPayload.length != 0) {
-            SwapParams memory swapParams = abi.decode(
-                swapPayload,
-                (SwapParams)
-            );
-            //procure swap token in
-            if (permit) {
-                handlePermit(
-                    msg.sender,
-                    permitPayload,
-                    uint160(swapParams.swapAmountIn),
-                    address(swapParams.swapTokenIn)
-                );
-            } else {
-                //take asset, assume prior approval
-                swapParams.swapTokenIn.safeTransferFrom(
-                    msg.sender,
-                    address(this),
-                    swapParams.swapAmountIn
-                );
-            }
-
-            _createOrderWithSwap(
-                swapParams,
-                takeProfit,
-                stopPrice,
-                tokenIn,
-                tokenOut,
-                recipient,
-                takeProfitSlippage,
-                stopSlippage
-            );
-        } else {
-            //no swap
-            //procure tokens
-            if (permit) {
-                handlePermit(
-                    msg.sender,
-                    permitPayload,
-                    uint160(amountIn),
-                    address(tokenIn)
-                );
-            } else {
-                //assume prior approval
-                tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
-            }
-
-            _createOrder(
-                takeProfit,
-                stopPrice,
-                amountIn,
-                tokenIn,
-                tokenOut,
-                recipient,
-                takeProfitSlippage,
-                stopSlippage
-            );
-        }
+        _initializeOrder(
+            swapPayload,
+            takeProfit,
+            stopPrice,
+            amountIn,
+            0, //no existing order id
+            tokenIn,
+            tokenOut,
+            recipient,
+            takeProfitSlippage,
+            stopSlippage,
+            permit,
+            permitPayload
+        );
     }
 
     ///@notice see @IBracket
@@ -319,10 +309,88 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         require(_cancelOrder(order), "Order not active");
     }
 
+    function _initializeOrder(
+        bytes calldata swapPayload,
+        uint256 takeProfit,
+        uint256 stopPrice,
+        uint256 amountIn,
+        uint96 existingOrderId,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        address recipient,
+        uint16 takeProfitSlippage,
+        uint16 stopSlippage,
+        bool permit,
+        bytes calldata permitPayload
+    ) internal {
+        //determine if we are doing a swap first
+        if (swapPayload.length != 0) {
+            SwapParams memory swapParams = abi.decode(
+                swapPayload,
+                (SwapParams)
+            );
+            //procure swap token in
+            if (permit) {
+                handlePermit(
+                    msg.sender,
+                    permitPayload,
+                    uint160(swapParams.swapAmountIn),
+                    address(swapParams.swapTokenIn)
+                );
+            } else {
+                //take asset, assume prior approval
+                swapParams.swapTokenIn.safeTransferFrom(
+                    msg.sender,
+                    address(this),
+                    swapParams.swapAmountIn
+                );
+            }
+
+            _createOrderWithSwap(
+                swapParams,
+                takeProfit,
+                stopPrice,
+                existingOrderId,
+                tokenIn,
+                tokenOut,
+                recipient,
+                takeProfitSlippage,
+                stopSlippage
+            );
+        } else {
+            //no swap
+            //procure tokens
+            if (permit) {
+                handlePermit(
+                    msg.sender,
+                    permitPayload,
+                    uint160(amountIn),
+                    address(tokenIn)
+                );
+            } else {
+                //assume prior approval
+                tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
+            }
+
+            _createOrder(
+                takeProfit,
+                stopPrice,
+                amountIn,
+                existingOrderId,
+                tokenIn,
+                tokenOut,
+                recipient,
+                takeProfitSlippage,
+                stopSlippage
+            );
+        }
+    }
+
     function _createOrderWithSwap(
         SwapParams memory swapParams,
         uint256 takeProfit,
         uint256 stopPrice,
+        uint96 existingOrderId,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
@@ -348,6 +416,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             takeProfit,
             stopPrice,
             swapAmountOut,
+            existingOrderId,
             tokenIn,
             tokenOut,
             recipient,
@@ -365,6 +434,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
+        uint96 existingOrderId,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
@@ -378,7 +448,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             "Oracle !exist"
         );
         require(
-            orderCount < MASTER.maxPendingOrders(),
+            pendingOrderIds.length < MASTER.maxPendingOrders(),
             "Max Order Count Reached"
         );
         require(
@@ -389,10 +459,14 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
 
         MASTER.checkMinOrderSize(tokenIn, amountIn);
 
+        //generate random but unique order id if there is not an existing orderId from a stop limit order
+        if (existingOrderId == 0) {
+            existingOrderId = MASTER.generateOrderId(msg.sender);
+        }
+
         //construct order
-        orderCount++;
-        orders[orderCount] = Order({
-            orderId: orderCount,
+        orders[existingOrderId] = Order({
+            orderId: existingOrderId,
             takeProfit: takeProfit,
             stopPrice: stopPrice,
             amountIn: amountIn,
@@ -405,9 +479,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         });
 
         //store pending order
-        pendingOrderIds.push(orderCount);
+        pendingOrderIds.push(existingOrderId);
 
-        emit OrderCreated(orderCount);
+        emit OrderCreated(existingOrderId);
     }
 
     function _cancelOrder(Order memory order) internal returns (bool) {
