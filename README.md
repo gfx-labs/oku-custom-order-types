@@ -15,16 +15,13 @@ A **Stop Limit Order** is used to trigger the creation of a new Bracket Order wh
 
 - **Shared Order ID**: Both the Stop Limit Order and the resulting Bracket Order share the same `orderId` for easy tracking and management.
 
-### Additional Order Types
-- **Limit Order**: By setting the `stopPrice` to 0, the system will create a standard **limit order**. This order type will only execute when the `takeProfit` is reached.
-  
-- **Stop Loss Order**: By setting the `takeProfit` to the maximum possible value (`2 ** 256 - 1`), the system will create a **stop loss order**. This order type executes when the `stopPrice` is reached to minimize potential losses.
+### 3. Additional Order Types
 
-## Usage
+My manipulating the `stopPrice` or the `takeProfit` in a **Bracket Order**, two more order types can be functionally replicated. 
 
-1. **Creating a Bracket Order**: A Bracket Order is created by specifying the target `takeProfit` and `stopPrice` along with the amount of the input token to sell. Once either condition is met, the trade is executed.
+1. **Limit Order**: By setting the `stopPrice` to 0, the system will have functionally created a standard **limit order**. This order type will only execute when the `takeProfit` is reached.
   
-2. **Creating a Stop Limit Order**: A Stop Limit Order is created by specifying the `stopLimitPrice`, `takeProfit`, and `stopPrice`. When the `stopLimitPrice` is reached, a new Bracket Order is created with the same `orderId` as the Stop Limit Order.
+2. **Stop Loss Order**: By setting the `takeProfit` to the maximum possible value (`2 ** 256 - 1`), the system will have functionally created a **stop loss order**. This order type executes when the `stopPrice` is reached to minimize potential losses.
 
 ## Example Orders
 
@@ -32,26 +29,26 @@ For all examples, assume `WETH` price is `$3000`
 
 ### Bracket Order
 1. User holds `1 WETH` and creates a **Bracket Order**, with a `takeProfit` set to `3200` and a `stopPrice` set to `2500`.
-2. If either of these are reached, the user's WETH will be automaticly swapped to USDC
+2. If either of these are reached, the user's `1 WETH` will be automaticly swapped to how ever much `USDC` can be bought at that price
 
 ### Take Profit Order
-1. User holds 1 WETH and creates a **Bracket Order**, with a `takeProfit` set to `3200` and a `stopPrice` set to `0`.
-2. In this scenario, the user will never sell their WETH until the `takeProfit` is reached
+1. User holds `1 WETH` and creates a **Bracket Order**, with a `takeProfit` set to `3200` and a `stopPrice` set to `0`.
+2. In this scenario, the user will never sell their `WETH` until the `takeProfit` is reached
 
 ### Stop Loss Order
-1. User holds 1 WETH and creates a **Bracket Order**, with a `takeProfit` set to `(2^256) - 1` and a `stopPrice` set to `2800`.
-2. In this scenario, the user will hold their WETH until the price has dropped to the `stopPrice`, at which point they will sell for USDC
+1. User holds `1 WETH` and creates a **Bracket Order**, with a `takeProfit` set to `(2^256) - 1` and a `stopPrice` set to `2800`.
+2. In this scenario, the user will hold their `WETH` until the price has dropped to the `stopPrice`, at which point they will sell for `USDC`
 
 ### Stop Limit Order
 1. User holds `3000 USDC` and creates a **Stop Limit Order**  with a `stopLimitPrice` set to `2800`
 2. Once this price is reached, the **Stop Limit Order** is filled, creating a new **Bracket Order**. This new **Bracket Order** will share the same `orderId` as the **Stop Limit Order**
-3. Suppose this new **Bracket Order** has a `stopPrice` at `2500`, and WETH continues to fall to this price. 
-4. Once this price is reached, the **Bracket Order** will be filled, and the user's USDC will be swapped to WETH
+3. Suppose this new **Bracket Order** has a `stopPrice` at `2500`, and `WETH` continues to fall to this price. 
+4. Once this price is reached, the **Bracket Order** will be filled, and the user's `USDC` will be swapped to `WETH`
 
 ### Stop Limit Order with 'Swap-On-Fill'
 1. User holds `2800 USDC` and creates a **Stop Limit Order**  with a `stopLimitPrice` set to `2800` and `swapOnFill` set to `true`
 2. Once this price is reached, the **Stop Limit Order** is filled, swapping the `2800 USDC` for `1 WETH` and creating a new **Bracket Order**. This new **Bracket Order** will share the same `orderId` as the **Stop Limit Order**
-3. Suppose this new **Bracket Order** has a `takeProfit` at `3000`, and WETH bounces back to this price. 
+3. Suppose this new **Bracket Order** has a `takeProfit` at `3000`, and `WETH` bounces back to this price. 
 4. Once this price is reached, the **Bracket Order** will be filled, and the user's `1 WETH` will be swapped back to `3000 USDC`, and the user has profited ~`200 USDC`
 
 
@@ -95,7 +92,7 @@ For all examples, assume `WETH` price is `$3000`
 
 ## Oracles
 
-Oracles are expected to return a USD price in 1e8 terms, so the price of USDC should be returned as ~1e8 or ~```100000000```
+Oracles are expected to return a USD price in 1e8 terms, so the price of USDC should be returned as ~1e8 or ~`100000000`
 
 ## Testing
 
@@ -105,4 +102,4 @@ In order to run the tests, create a .env file and add a MAINNET_URL and ARB_URL 
 MAINNET_URL="https://rpc.ankr.com/eth"
 ARB_URL="https://rpc.ankr.com/arbitrum"
 ```
-Then the tests can be run by ```npm run test```
+Then the tests can then be run by ```npm run test```
