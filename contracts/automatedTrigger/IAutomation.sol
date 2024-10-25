@@ -5,18 +5,6 @@ import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "../interfaces/uniswapV3/IPermit2.sol";
 
-/**
-Randomize order IDs and keep the ID for the resulting bracket once stop limit is filled
-Define all params in the interface and add any functions here
-clean up all comments
-standardize use of slippage bips vs just bips (which could be fee)
-rename params strike price => take profit
-
-
-ORDER IDS are uint96 to fit with an address
-SLIPPAGE is uint16 as they are never gonna be > 10k
- */
-
 interface IAutomation is AutomationCompatibleInterface {
     ///@notice force a revert if the external call fails
     error TransactionFailed(bytes reason);

@@ -1,4 +1,8 @@
 {
+  "name": "OkuCustomOrderTypes",
+  "scripts": {
+    "test": "npx hardhat test ./test/triggerV2/index.ts"
+  },
   "dependencies": {
     "@matterlabs/hardhat-zksync-solc": "^1.1.4",
     "@matterlabs/hardhat-zksync-verify": "^1.4.1",
