@@ -20,33 +20,42 @@ A **Stop Limit Order** is used to trigger the creation of a new Bracket Order wh
   
 - **Stop Loss Order**: By setting the `takeProfit` to the maximum possible value (`2 ** 256 - 1`), the system will create a **stop loss order**. This order type executes when the `stopPrice` is reached to minimize potential losses.
 
-## Contract Interfaces
-
-### IAutomation
-The main contract for handling automation logic, which fills orders when conditions are met. This contract defines the core structures and event flow for automated order processing. Key elements include:
-- **Order Types** (`OrderType`): Identifies whether an order is a `STOP_LIMIT` or `BRACKET` order.
-- **Permit2** integration (`Permit2Payload`): Encodes permit2 data for token approvals.
-- **Swap Params** (`SwapParams`): Holds details for swaps triggered during order execution, such as slippage, swap amount, and transaction data.
-
-### IStopLimit
-Handles Stop Limit orders, which create Bracket orders once filled. The `Order` struct for Stop Limit Orders includes additional parameters such as `stopLimitPrice`, `swapSlippage`, and `swapOnFill`.
-
-### IBracket
-Manages Bracket orders that execute trades when either the `takeProfit` or `stopPrice` is reached. These orders swap the input token (`tokenIn`) for the output token (`tokenOut`) and define both profit-taking and stop-loss parameters.
-
-## Events
-The system triggers key events during the order lifecycle:
-- **OrderProcessed**: Emitted when an order is successfully filled or if an error occurs.
-- **OrderCreated**: Emitted when a new order is placed.
-- **OrderCancelled**: Emitted when an order is canceled.
-
 ## Usage
 
 1. **Creating a Bracket Order**: A Bracket Order is created by specifying the target `takeProfit` and `stopPrice` along with the amount of the input token to sell. Once either condition is met, the trade is executed.
   
 2. **Creating a Stop Limit Order**: A Stop Limit Order is created by specifying the `stopLimitPrice`, `takeProfit`, and `stopPrice`. When the `stopLimitPrice` is reached, a new Bracket Order is created with the same `orderId` as the Stop Limit Order.
 
-## Example Transactions
+## Example Orders
+
+For all examples, assume `WETH` price is `$3000`
+
+### Bracket Order
+1. User holds `1 WETH` and creates a **Bracket Order**, with a `takeProfit` set to `3200` and a `stopPrice` set to `2500`.
+2. If either of these are reached, the user's WETH will be automaticly swapped to USDC
+
+### Take Profit Order
+1. User holds 1 WETH and creates a **Bracket Order**, with a `takeProfit` set to `3200` and a `stopPrice` set to `0`.
+2. In this scenario, the user will never sell their WETH until the `takeProfit` is reached
+
+### Stop Loss Order
+1. User holds 1 WETH and creates a **Bracket Order**, with a `takeProfit` set to `(2^256) - 1` and a `stopPrice` set to `2800`.
+2. In this scenario, the user will hold their WETH until the price has dropped to the `stopPrice`, at which point they will sell for USDC
+
+### Stop Limit Order
+1. User holds `3000 USDC` and creates a **Stop Limit Order**  with a `stopLimitPrice` set to `2800`
+2. Once this price is reached, the **Stop Limit Order** is filled, creating a new **Bracket Order**. This new **Bracket Order** will share the same `orderId` as the **Stop Limit Order**
+3. Suppose this new **Bracket Order** has a `stopPrice` at `2500`, and WETH continues to fall to this price. 
+4. Once this price is reached, the **Bracket Order** will be filled, and the user's USDC will be swapped to WETH
+
+### Stop Limit Order with 'Swap-On-Fill'
+1. User holds `2800 USDC` and creates a **Stop Limit Order**  with a `stopLimitPrice` set to `2800` and `swapOnFill` set to `true`
+2. Once this price is reached, the **Stop Limit Order** is filled, swapping the `2800 USDC` for `1 WETH` and creating a new **Bracket Order**. This new **Bracket Order** will share the same `orderId` as the **Stop Limit Order**
+3. Suppose this new **Bracket Order** has a `takeProfit` at `3000`, and WETH bounces back to this price. 
+4. Once this price is reached, the **Bracket Order** will be filled, and the user's `1 WETH` will be swapped back to `3000 USDC`, and the user has profited ~`200 USDC`
+
+
+## Order Creation
 
 - **Bracket Order Creation**:
     ```solidity
