@@ -14,6 +14,9 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../oracle/IOracleRelay.sol";
 
+//testing
+import "hardhat/console.sol";
+
 ///@notice This contract owns and handles all logic associated with STOP_LIMIT orders
 ///STOP_LIMIT orders create a new Bracket order order once filled
 contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
@@ -332,7 +335,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             stopSlippage: stopSlippage,
             swapSlippage: swapSlippage,
             recipient: recipient,
-            direction: MASTER.getExchangeRate(tokenIn, tokenOut) > stopPrice, //compare to stop price for this order's direction
+            direction: MASTER.getExchangeRate(tokenIn, tokenOut) > stopLimitPrice, //compare to stop price for this order's direction
             swapOnFill: swapOnFill
         });
         pendingOrderIds.push(uint96(orderId));
@@ -399,6 +402,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
     function checkInRange(
         Order memory order
     ) internal view returns (bool inRange, uint256 exchangeRate) {
+        //console.log("CHECK IN RANGE");
         exchangeRate = MASTER.getExchangeRate(order.tokenIn, order.tokenOut);
         if (order.direction) {
             if (exchangeRate <= order.stopLimitPrice) {

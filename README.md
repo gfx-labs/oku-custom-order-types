@@ -2,6 +2,10 @@
 
 This repository contains the smart contracts for an automated trading system, designed to execute orders as they come within range. There are two primary types of orders supported by the system: **Bracket Orders** and **Stop Limit Orders**.
 
+## Automation
+
+The Automation Master contract is designed to be monitored by Chainlink Automation-type systems. Anyone can fill any of the orders as long as the order is eligible and they provide the necessary assets to satisfy the slippage requirements. The token-out assets are sent to the user as part of the upkeep function.
+
 ## Order Types
 
 ### 1. Bracket Orders
@@ -17,7 +21,7 @@ A **Stop Limit Order** is used to trigger the creation of a new Bracket Order wh
 
 ### 3. Additional Order Types
 
-My manipulating the `stopPrice` or the `takeProfit` in a **Bracket Order**, two more order types can be functionally replicated. 
+By manipulating the `stopPrice` or the `takeProfit` in a **Bracket Order**, two more order types can be functionally replicated. 
 
 1. **Limit Order**: By setting the `stopPrice` to 0, the system will have functionally created a standard **limit order**. This order type will only execute when the `takeProfit` is reached.
   

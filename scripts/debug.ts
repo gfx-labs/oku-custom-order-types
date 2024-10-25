@@ -1,5 +1,5 @@
 import hre, { network } from "hardhat";
-import { currentBlock, resetCurrentArb, resetCurrentArbBlock, resetCurrentBase, resetCurrentOP, resetCurrentOPblock } from "../util/block";
+import { currentBlock, hardhat_mine_timed, resetCurrentArb, resetCurrentArbBlock, resetCurrentBase, resetCurrentOP, resetCurrentOPblock } from "../util/block";
 import { AutomationMaster, AutomationMaster__factory, Bracket, Bracket__factory, IERC20, IERC20__factory, IPermit2__factory, StopLimit, StopLimit__factory, UniswapV3Pool__factory } from "../typechain-types";
 import { Signer } from "ethers";
 import { impersonateAccount } from "../util/impersonator";
@@ -110,6 +110,8 @@ async function main() {
     if (!mainnet) {
         signer = await ethers.getSigner(userAddr)
 
+        console.log("IMPERSONATING: ", await signer.getAddress())
+
         //testing does not scale tx cost correctly 
         await setBalance(await signer.getAddress(), ethers.parseEther("1"))
         await impersonateAccount(await signer.getAddress())
@@ -122,25 +124,66 @@ async function main() {
 
 const checkOrder = async (signer: Signer) => {
 
-    await resetCurrentArbBlock(266980619)
+    //await resetCurrentArbBlock(266980619)
+    await resetCurrentArb()
 
     const orderId = 4//266980619//current sl price, high str price low stop price
     //const orderId = 3//266977095//high sl price
     //const orderId = 2//266974358//low sl price
 
-    const result = await Master.checkUpkeep("0x")
-    console.log(result.upkeepNeeded)
+    //const result = await Master.checkUpkeep("0x")
+    //console.log(result.upkeepNeeded)
 
     //get order
     const order = await StopLimit.orders(orderId)
-    console.log("order", order)
+    //console.log("order", order)
 
     const er = await Master.getExchangeRate(order.tokenIn, order.tokenOut)
-    console.log("excng: ", er)
-    console.log("SLPR:: ", order.stopLimitPrice)
-    console.log("dire: ", order.direction)
+    console.log("EXCHANGE RATE: ", er)
 
-   
+
+    await impersonateAccount(await signer.getAddress())
+    await setBalance(await signer.getAddress(), ethers.parseEther("1"))
+
+    let check = await Master.checkUpkeep("0x")
+    console.log("UpkeepNeeded: ", check.upkeepNeeded)
+
+
+    //create an order to compare
+    await WETH.connect(signer).approve(await StopLimit.getAddress(), wethAmount)
+    await StopLimit.connect(signer).createOrder(
+        249399113866n,
+        er,
+        1n,
+        wethAmount,
+        await WETH.getAddress(),
+        await USDC.getAddress(),
+        await signer.getAddress(),
+        500,
+        500,
+        500,
+        false,
+        false,
+        "0x"
+    )
+
+    const filter = StopLimit.filters.OrderCreated
+    const events = await StopLimit.queryFilter(filter, -1)
+    const event = events[0].args
+    const testOrderId = (event[0])
+
+    const testOrder = await StopLimit.orders(testOrderId)
+    console.log(testOrder)
+    console.log("ORDER CREATED")
+
+    await hardhat_mine_timed(10, 5)
+
+    check = await Master.checkUpkeep("0x")
+    console.log("UpkeepNeeded: ", check.upkeepNeeded)
+
+    //252295854237n
+    //252292592233n
+
 
 
 

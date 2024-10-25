@@ -1,5 +1,5 @@
 import { AutomationMaster__factory, Bracket__factory, IERC20__factory, IPermit2__factory, PlaceholderOracle__factory, StopLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
-import { currentBlock, resetCurrentArbBlock } from "../../util/block"
+import { currentBlock, hardhat_mine, hardhat_mine_timed, resetCurrentArbBlock } from "../../util/block"
 import { expect } from "chai"
 import { stealMoney } from "../../util/money"
 import { decodeUpkeepData, generateUniTx, generateUniTxData, getGas, MasterUpkeepData, permitSingle } from "../../util/msc"
@@ -124,8 +124,8 @@ describe("Execute Stop-Limit Upkeep", () => {
         await s.WETH.connect(s.Bob).approve(await s.StopLimit.getAddress(), s.wethAmount)
         await s.StopLimit.connect(s.Bob).createOrder(
             currentPrice - stopDelta,
-            (currentPrice - stopDelta) + strikeDelta,
-            0n,//no stop loss
+            (currentPrice + stopDelta) + strikeDelta,
+            (currentPrice - stopDelta) - strikeDelta,
             s.wethAmount,
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
@@ -156,14 +156,48 @@ describe("Execute Stop-Limit Upkeep", () => {
 
     it("Check upkeep", async () => {
 
+        console.log("TESTING")
+        console.log("TESTING")
+        console.log("TESTING")
+
         //should be no upkeep needed yet
+        await hardhat_mine_timed(10, 10)
         let initial = await s.Master.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
         initial = await s.StopLimit.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
 
-        //reduce price to stop limit price
-        await s.wethOracle.setPrice(s.initialEthPrice - (stopDelta))
+
+
+        //confirm order pricing is correct
+        const order = await s.StopLimit.orders(orderId.toString())
+        let currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
+
+        //reduce to stop limit price + 1
+        await s.wethOracle.setPrice(order.stopLimitPrice + BigInt(ethers.parseUnits("1", 8)))
+        await hardhat_mine_timed(10, 10)
+        initial = await s.Master.checkUpkeep("0x")
+        expect(initial.upkeepNeeded).to.eq(false)
+        initial = await s.StopLimit.checkUpkeep("0x")
+        expect(initial.upkeepNeeded).to.eq(false)
+
+
+
+        //increase price to over take profit, should not trigger
+        await s.wethOracle.setPrice(order.takeProfit + BigInt(ethers.parseUnits("1", 8)))
+        await hardhat_mine_timed(10, 10)
+        initial = await s.Master.checkUpkeep("0x")
+        expect(initial.upkeepNeeded).to.eq(false)
+        initial = await s.StopLimit.checkUpkeep("0x")
+        expect(initial.upkeepNeeded).to.eq(false)
+
+
+        //reduce price to stop limit price to trigger order
+        await s.wethOracle.setPrice(order.stopLimitPrice - BigInt(ethers.parseUnits("1", 8)))
+        await hardhat_mine_timed(10, 10)
+        currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
+        console.log("CURRENT: ", currentPrice)
+        console.log("SLPRICE: ", order.stopLimitPrice)
 
         //check upkeep
         let result = await s.Master.checkUpkeep("0x")
@@ -223,282 +257,12 @@ describe("Execute Stop-Limit Upkeep", () => {
         //cancel limit order for future tests
         await s.Bracket.connect(s.Bob).cancelOrder(orderId.toString())
     })
-
-    it("scratchpad", async () => {
-        /**
-        const PERMIT_DETAILS = [
-            { name: 'token', type: 'address' },
-            { name: 'amount', type: 'uint160' },
-            { name: 'expiration', type: 'uint48' },
-            { name: 'nonce', type: 'uint48' },
-        ] as const
-
-        const PERMIT_TYPES = {
-            PermitSingle: [
-                { name: 'details', type: 'PermitDetails' },
-                { name: 'spender', type: 'address' },
-                { name: 'sigDeadline', type: 'uint256' },
-            ],
-            PermitDetails: PERMIT_DETAILS,
-        } as const
-
-        const domain = {
-            name: 'Permit2',
-            chainId,
-            verifyingContract: a.permit2,
-        }
-
-        const details: PermitDetails = {
-            token: a.wethAddress,
-            amount: s.wethAmount.toString(),
-            expiration: expiration.toString(),
-            nonce: nonce.toString()
-        }
-
-        const permit:PermitSingle = {
-            details: details,
-            spender: await s.StopLimit.getAddress(),
-            sigDeadline: (expiration * 30).toString()
-        }
-
-        const permitData = {
-            account,
-            domain,
-            types: PERMIT_TYPES,
-            message: {
-                details: {
-                    token: permit.details.token as `0x{string}`,
-                    amount: BigInt(BigInt(2) ** BigInt(160) - BigInt(1)),
-                    expiration: expiration != undefined ? expiration : Number(permit.details.expiration),
-                    nonce: Number(permit.details.nonce),
-                },
-                spender: permit.spender as `0x${string}`,
-                sigDeadline: BigInt(permit.sigDeadline),
-            },
-            primaryType: 'PermitSingle' as keyof typeof PERMIT_TYPES,
-        }
-         */
-
-
-
-
-
-
-        /**
-        const provider = new ethers.JsonRpcProvider()
-        const network = await provider.getNetwork()
-
-        const PERMIT_EXPIRATION = 2592000 //30d
-        const PERMIT_SIG_EXPIRATION = 1800 //30m
-
-        const permitSingle: PermitSingle = {
-            details: {
-                token: await s.WETH.getAddress(),
-                amount: s.wethAmount,
-                // You may set your own deadline - we use 30 days.
-                expiration: toDeadline(PERMIT_EXPIRATION),
-                nonce: await s.Bob.getNonce(),
-            },
-            spender: await s.Bob.getAddress(),
-            // You may set your own deadline - we use 30 minutes.
-            sigDeadline: toDeadline(PERMIT_SIG_EXPIRATION),
-        }
-
-        const { domain, types, values } = AllowanceTransfer.getPermitData(permitSingle, a.permit2, Number(network.chainId))
-        //const sig = await s.Bob.signTypedData(domain, types, values)
-         */
-
-
-        /**
-        //permitTransferFrom
-         // Define permit and transfer details
-        // Example parameters
-        const tokenAddress = await s.WETH.getAddress();
-        const spender = await s.StopLimit.getAddress();
-        const owner = await s.Bob.getAddress();  // Address of the token holder
-        const permit2Address = a.permit2; // Address of Permit2 contract
-        const deadline = Math.floor(Date.now() / 1000) + 3600; // 1-hour deadline
-        const signer = s.Bob
-        const amount = s.wethAmount
-
-        // Define permit and transfer details
-        const permit = {
-            permitted: {
-                token: tokenAddress,
-                amount: amount, // Replace with correct amount and decimals
-            },
-            nonce: nonce,
-            deadline: deadline,
-        };
-
-        const transferDetails = {
-            to: spender,
-            requestedAmount: amount, // Replace with correct amount
-        };
-
-        // Create a signature off-chain using EIP-712 format
-        const domain = {
-            name: "Permit2",
-            version: "1",
-            chainId: 42161,
-            verifyingContract: permit2Address,
-        };
-
-
-        const types = {
-            PermitTransferFrom: [
-                { name: "permitted", type: "TokenPermissions" },
-                { name: "nonce", type: "uint256" },
-                { name: "deadline", type: "uint256" },
-            ],
-            TokenPermissions: [
-                { name: "token", type: "address" },
-                { name: "amount", type: "uint256" },
-            ],
-        };
-
-        const value = {
-            permitted: {
-                token: permit.permitted.token,
-                amount: permit.permitted.amount,
-            },
-            nonce: permit.nonce,
-            deadline: permit.deadline,
-        };
-
-
-        const signature = await signer.signTypedData(domain, types, value);
-
-        console.log("GOT SIG: ", signature)
-
-        await s.StopLimit.connect(s.Bob).createOrderWithPermit(
-            currentPrice - stopDelta,
-            (currentPrice - stopDelta) + strikeDelta,
-            0n,//no stop loss
-            s.wethAmount,
-            await s.WETH.getAddress(),
-            await s.USDC.getAddress(),
-            await s.Bob.getAddress(),
-            strikeBips,
-            0,//no stop loss bips
-            0,//no swap on fill bips
-            false,//no swap on 
-            permit,
-            transferDetails,
-            signature
-        )
-        console.log("IT WORKED")
-
-
-         */
-
-        /**
-        // Construct PermitDetails
-        const permitDetails = {
-            token: a.wethAddress,
-            amount: s.wethAmount,
-            expiration: expiration,
-            nonce: nonce
-        };
-
-        // Construct PermitSingle
-        const permit = {
-            details: permitDetails,
-            spender: await s.StopLimit.getAddress(),
-            sigDeadline: expiration * 24
-        };
-
-        const domain = {
-            name: "Permit2",  // Name of the contract (as defined in its domain)
-            version: "1",
-            chainId: chainId,
-            verifyingContract: a.permit2
-        };
-
-        const types = {
-            PermitDetails: [
-                { name: "token", type: "address" },
-                { name: "amount", type: "uint160" },
-                { name: "expiration", type: "uint48" },
-                { name: "nonce", type: "uint48" },
-            ],
-            PermitSingle: [
-                { name: "details", type: "PermitDetails" },
-                { name: "spender", type: "address" },
-                { name: "sigDeadline", type: "uint256" }
-            ]
-        };
-
-        // Sign permit data
-        const signature = await s.Bob.signTypedData(domain, types, permit);
-
-        const PERMIT = IPermit2__factory.connect(a.permit2, s.Bob)
-        console.log("permit: ", a.permit2)
-
-        await s.StopLimit.connect(s.Bob).createOrderWithPermit(
-            currentPrice - stopDelta,
-            (currentPrice - stopDelta) + strikeDelta,
-            0n,//no stop loss
-            s.wethAmount,
-            await s.WETH.getAddress(),
-            await s.USDC.getAddress(),
-            await s.Bob.getAddress(),
-            strikeBips,
-            0,//no stop loss bips
-            0,//no swap on fill bips
-            false,//no swap on 
-            permit,
-            signature
-        )
-        //1728513427
-        //1721850057
-
-         */
-    })
-
-    it("Check permit2", async () => {
-
-        const data = await permitSingle(
-            s.Bob,
-            42161,
-            await s.WETH.getAddress(),
-            s.wethAmount,
-            await s.StopLimit.getAddress(),
-            a.permit2,
-            0
-        )
-
-        const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
-
-        /**
-        console.log("TESTING")
-        await s.StopLimit.connect(s.Bob).createOrderWithPermit(
-            currentPrice - stopDelta,
-            (currentPrice - stopDelta) + strikeDelta,
-            (currentPrice - stopDelta) - stopDelta,
-            s.wethAmount,
-            await s.WETH.getAddress(),
-            await s.USDC.getAddress(),
-            await s.Bob.getAddress(),
-            strikeBips,//stop limit bips
-            strikeBips,//stop loss bips
-            strikeBips,//swap on fill bips
-            true,//swap on fill
-            data.permitSingle,
-            data.signature,
-            {
-                gasLimit: 1000000 // Setting a higher gas limit to force transaction to be sent
-            }
-        )
-         */
-
-    })
 })
 /**
  * For swap on fill, we expect to receive the same asset we provide
  * In this case, we provide USDC, swap to WETH when the stop limit is filled, 
  * and when the resulting limit order closes, we expect our WETH to be swapped back to USDC
-*/
+**/
 describe("Execute Stop-Limit with swap on fill", () => {
     //0.00029475 => 3,392.70 per ETH
     //0.00029200 => 3424.66
