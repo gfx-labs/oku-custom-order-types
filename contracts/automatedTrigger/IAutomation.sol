@@ -51,7 +51,7 @@ interface IAutomation is AutomationCompatibleInterface {
         IERC20 tokenIn;
         IERC20 tokenOut;
         uint96 orderId;
-        uint96 pendingOrderIdx; //todo idx ==/== orderId in terms of size, only reduce loop size?
+        uint96 pendingOrderIdx;
         uint16 slippage;
         uint256 amountIn;
         uint256 exchangeRate;

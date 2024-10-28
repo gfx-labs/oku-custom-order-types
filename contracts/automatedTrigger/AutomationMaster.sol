@@ -16,9 +16,9 @@ import "../oracle/IOracleRelay.sol";
 contract AutomationMaster is IAutomation, Ownable {
     using SafeERC20 for IERC20;
 
-    uint88 public constant MAX_BIPS = 10000;
+    uint16 public constant MAX_BIPS = 10000;
 
-    uint88 public feeBips;
+    uint16 public feeBips;
 
     uint16 public maxPendingOrders;
 
@@ -30,7 +30,7 @@ contract AutomationMaster is IAutomation, Ownable {
     mapping(IERC20 => IOracleRelay) public oracles;
 
     ///@param _feeBips is the raw bips to determine the fee
-    function setFee(uint88 _feeBips) external onlyOwner {
+    function setFee(uint16 _feeBips) external onlyOwner {
         feeBips = _feeBips;
     }
 

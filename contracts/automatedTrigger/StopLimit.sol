@@ -14,8 +14,6 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../oracle/IOracleRelay.sol";
 
-//testing
-import "hardhat/console.sol";
 
 ///@notice This contract owns and handles all logic associated with STOP_LIMIT orders
 ///STOP_LIMIT orders create a new Bracket order order once filled
@@ -26,11 +24,10 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
     IBracket public immutable BRACKET_CONTRACT;
     IPermit2 public immutable permit2;
 
-    //todo double check this size?
     uint96[] public pendingOrderIds;
 
     //todo adjust order id size?
-    mapping(uint256 => Order) public orders;
+    mapping(uint96 => Order) public orders;
 
     constructor(
         AutomationMaster _master,
@@ -278,13 +275,13 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
     ///@notice contract owner can cancel any order
     ///@notice cancelled orders refund the order recipient
-    function adminCancelOrder(uint256 orderId) external onlyOwner {
+    function adminCancelOrder(uint96 orderId) external onlyOwner {
         _cancelOrder(orderId);
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(uint256 orderId) external {
+    function cancelOrder(uint96 orderId) external {
         Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(orderId), "Order not active");
@@ -343,7 +340,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         emit OrderCreated(orderId);
     }
 
-    function _cancelOrder(uint256 orderId) internal returns (bool) {
+    function _cancelOrder(uint96 orderId) internal returns (bool) {
         Order memory order = orders[orderId];
         for (uint96 i = 0; i < pendingOrderIds.length; i++) {
             if (pendingOrderIds[i] == orderId) {
@@ -402,7 +399,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
     function checkInRange(
         Order memory order
     ) internal view returns (bool inRange, uint256 exchangeRate) {
-        //console.log("CHECK IN RANGE");
         exchangeRate = MASTER.getExchangeRate(order.tokenIn, order.tokenOut);
         if (order.direction) {
             if (exchangeRate <= order.stopLimitPrice) {

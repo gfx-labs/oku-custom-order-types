@@ -28,7 +28,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
 
     uint96[] public pendingOrderIds;
 
-    mapping(uint256 => Order) public orders;
+    mapping(uint96 => Order) public orders;
 
     constructor(
         AutomationMaster _master,
