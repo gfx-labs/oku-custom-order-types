@@ -136,9 +136,9 @@ export class ArbAddresses{
      */
 
     //trigger v2 deployments with permit
-    readonly Master: string = "0x107dA33FdfA0661360D91E134FA5f5D4BEC25e4d"//"0x8a39E39234Bbb0840484c442Af01584DB04801CE"
-    readonly stopLimit: string = "0xCC1c159fcc0a226fd1A24c70454Ec349Deedd97b"//"0x491397f7eb6f5d9B82B15cEcaBFf835bA31f217F"
-    readonly bracket: string = "0x950DDb2F428057F41Ab6639c765EF10eC98F9DCd"//"0xEF52F132746a55f750ecfb3853e29CfECBC5f6E5"
+    readonly Master: string = "0x1d9bDc6838D4D6C5D6Cd89c63784d0Ecc1e3037B"
+    readonly bracket: string = "0x4E9F0494526e1178d4638B925047e4d4C36CbF1F"
+    readonly stopLimit: string = "0x5C71b4c8406E920DcAcF10E85FA0357fFCed70CB"
 
     
     readonly wethFeed: string = "0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612"
@@ -306,9 +306,9 @@ export class OptimisimAddresses {
     readonly nativeUsdcAddress: string = "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"
 
     //automated trigger v2
-    readonly Master: string = "0xf556757ecB7DfeA2eDfe320992e21D68acf670B8"
-    readonly stopLimit: string = "0x3bd3be51634b42B7c1699aDe0Ff726493b378B60"
-    readonly bracket: string = "0x267807b17bBE64Fe7e921E533061131F0f95cc5b"
+    readonly Master: string = "0xaAc8c3609505dAD04c06a61A7ae745B7B397B887"
+    readonly stopLimit: string = "0xEc3f54945D4b6bA9A459f4b4e6E73E780Fc59d52"
+    readonly bracket: string = "0xcE749A2C870cA7d30aca7e5F6479aBa29CfcE7a1"
     readonly permit2: string = "0x000000000022D473030F116dDEE9F6B43aC78BA3"
 
 }

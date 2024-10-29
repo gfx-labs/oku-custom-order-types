@@ -38,7 +38,7 @@ let StopLimit!: StopLimit
 let Bracket!: Bracket
 
 //SET THIS FOR TESTING
-const testingNetwork = "arbitrum"
+const testingNetwork = "op"
 
 let masterKeeper: AutomationMaster
 async function main() {

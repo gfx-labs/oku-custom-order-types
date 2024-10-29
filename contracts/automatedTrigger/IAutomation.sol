@@ -66,7 +66,6 @@ interface IAutomation is AutomationCompatibleInterface {
 ///@notice Stop Limit orders create a new bracket order once filled
 /// the resulting bracket order will have the same unique order ID but will exist on the Bracket contract
 interface IStopLimit is IAutomation {
-    ///@notice emitted when an order is filled
     event StopLimitOrderProcessed(uint256 orderId);
 
     ///@notice StopLimit orders create a new bracket order once @param stopLimitPrice is reached
@@ -190,8 +189,6 @@ interface IBracket is IAutomation {
         bool direction; //true if initial exchange rate > strike price
     }
 
-    
-
     ///@notice Bracket orders are filled when either @param takeProfit or @param stopPrice are reached,
     /// at which time @param tokenIn is swapped for @param tokenOut    ///@param stopLimitPrice execution price to fill the Stop Limit order
     ///@param takeProfit execution price for resulting Bracket order
@@ -235,7 +232,6 @@ interface IBracket is IAutomation {
         bool permit,
         bytes calldata permitPayload
     ) external;
-
 
     ///@param orderId unique id to reference the order being modified
     ///@param takeProfit new execution price for resulting Bracket order

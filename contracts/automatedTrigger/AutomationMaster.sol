@@ -12,34 +12,44 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../oracle/IOracleRelay.sol";
 
 ///@notice This contract owns and handles all of the settings and accounting logic for automated swaps
-///@notice This contract should not hold any user funds, only collected fees 
+///@notice This contract should not hold any user funds, only collected fees
 contract AutomationMaster is IAutomation, Ownable {
     using SafeERC20 for IERC20;
 
+    ///@notice 10k bips == 100% slippage
     uint16 public constant MAX_BIPS = 10000;
 
+    ///@notice protocol fee, taken in the tokenOut of each swap
     uint16 public feeBips;
 
+    ///@notice maximum pending orders that may exist at a time, limiting the compute requriement for checkUpkeep
     uint16 public maxPendingOrders;
 
+    ///@notice minumum USD value required to create a new order, in 1e8 terms
     uint256 public minOrderSize;
 
+    ///sub keeper contracts
     IStopLimit public STOP_LIMIT_CONTRACT;
     IBracket public BRACKET_CONTRACT;
 
+    ///each token must have a registered oracle in order to be tradable
     mapping(IERC20 => IOracleRelay) public oracles;
 
+    ///@notice set the protocol fee
+    ///@notice all fee proceeds are stored on this contract
+    ///@notice no user funds should ever exist on this contract
     ///@param _feeBips is the raw bips to determine the fee
     function setFee(uint16 _feeBips) external onlyOwner {
         feeBips = _feeBips;
     }
 
+    ///@notice register Stop Limit and Bracket order contracts
     function registerSubKeepers(
         IStopLimit stopLimitContract,
-        IBracket stopLossLimitContract
+        IBracket bracketContract
     ) external onlyOwner {
         STOP_LIMIT_CONTRACT = stopLimitContract;
-        BRACKET_CONTRACT = stopLossLimitContract;
+        BRACKET_CONTRACT = bracketContract;
     }
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
@@ -71,7 +81,7 @@ contract AutomationMaster is IAutomation, Ownable {
     }
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
-    ///@return exchangeRate should always be 1e8
+    ///@return exchangeRate should always be in 1e8 terms
     function getExchangeRate(
         IERC20 tokenIn,
         IERC20 tokenOut
@@ -91,11 +101,17 @@ contract AutomationMaster is IAutomation, Ownable {
         return (priceIn * 1e8) / priceOut;
     }
 
+    ///@notice generate a random and unique order id
     function generateOrderId(address sender) public view returns (uint96) {
-        uint256 hashedValue = uint256(keccak256(abi.encodePacked(sender, block.timestamp)));
+        uint256 hashedValue = uint256(
+            keccak256(abi.encodePacked(sender, block.timestamp))
+        );
         return uint96(hashedValue);
     }
 
+    ///@notice compute minumum amount received
+    ///@return minAmountReceived is in @param tokenOut terms
+    ///@param slippageBips is in raw basis points
     function getMinAmountReceived(
         uint256 amountIn,
         IERC20 tokenIn,
@@ -118,6 +134,7 @@ contract AutomationMaster is IAutomation, Ownable {
         return (fairAmountOut * (MAX_BIPS - slippageBips)) / MAX_BIPS;
     }
 
+    ///@notice account for token scale when computing token amounts based on slippage bips
     function adjustForDecimals(
         uint256 amountIn,
         IERC20 tokenIn,
@@ -139,16 +156,20 @@ contract AutomationMaster is IAutomation, Ownable {
 
     ///@notice apply the protocol fee to @param amount
     ///@notice fee is in the form of tokenOut after a successful performUpkeep
-    function applyFee(uint256 amount) external view returns (uint256 feeAmount, uint256 adjustedAmount){
-        if(feeBips != 0){
+    function applyFee(
+        uint256 amount
+    ) external view returns (uint256 feeAmount, uint256 adjustedAmount) {
+        if (feeBips != 0) {
             //determine adjusted amount and fee amount
             adjustedAmount = (amount * (MAX_BIPS - feeBips)) / MAX_BIPS;
             feeAmount = amount - adjustedAmount;
-        }else{
+        } else {
             return (0, amount);
         }
     }
 
+    ///@notice determine if a new order meets the minimum order size requirement
+    ///Value of @param amountIn of @param tokenIn must meed the minimum USD value
     function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) public view {
         uint256 currentPrice = oracles[tokenIn].currentValue();
         uint256 usdValue = (currentPrice * amountIn) /
@@ -157,6 +178,7 @@ contract AutomationMaster is IAutomation, Ownable {
         require(usdValue > minOrderSize, "order too small");
     }
 
+    ///@notice check upkeep on all order types
     function checkUpkeep(
         bytes calldata
     )
@@ -165,21 +187,20 @@ contract AutomationMaster is IAutomation, Ownable {
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        //check stop order
+        //check stop limit order
         (upkeepNeeded, performData) = STOP_LIMIT_CONTRACT.checkUpkeep("0x");
         if (upkeepNeeded) {
             return (true, performData);
         }
 
-        //check stop loss limit order
-        (upkeepNeeded, performData) = BRACKET_CONTRACT.checkUpkeep(
-            "0x"
-        );
+        //check bracket order
+        (upkeepNeeded, performData) = BRACKET_CONTRACT.checkUpkeep("0x");
         if (upkeepNeeded) {
             return (true, performData);
         }
     }
 
+    ///@notice perform upkeep on any order type
     function performUpkeep(bytes calldata performData) external override {
         //decode into masterUpkeepData
         MasterUpkeepData memory data = abi.decode(

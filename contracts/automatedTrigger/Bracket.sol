@@ -15,11 +15,10 @@ import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../oracle/IOracleRelay.sol";
 
 ///@notice This contract owns and handles all logic associated with the following order types:
-/// BRACKET_ORDER - automated fill at strike price AND stop loss, with independant slippapge for each option
-/// LIMIT_ORDER - automated market swap at specified strike price
-/// STOP_LOSS - automated market swap at specified stop price
-/// In order to configure a LIMIT_ORDER or STOP_LOSS order, simply set the strike price or stop price to either 0 for the lower bound or 2^256 - 1 for the upper bound
-///todo example
+/// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independant slippapge for each option
+/// LIMIT_ORDER - automated market swap at specified take profit price
+/// STOP_ORDER - automated market swap at specified stop price
+/// In order to configure a LIMIT_ORDER or STOP_ORDER, simply set the take profit or stop price to either 0 for the lower bound or 2^256 - 1 for the upper bound
 contract Bracket is Ownable, IBracket, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -30,10 +29,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
 
     mapping(uint96 => Order) public orders;
 
-    constructor(
-        AutomationMaster _master,
-        IPermit2 _permit2
-    ) {
+    constructor(AutomationMaster _master, IPermit2 _permit2) {
         MASTER = _master;
         permit2 = _permit2;
     }
@@ -53,7 +49,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     {
         for (uint96 i = 0; i < pendingOrderIds.length; i++) {
             Order memory order = orders[pendingOrderIds[i]];
-            (bool inRange, bool strike, uint256 exchangeRate) = checkInRange(
+            (bool inRange, bool takeProfit, uint256 exchangeRate) = checkInRange(
                 order
             );
             if (inRange) {
@@ -68,9 +64,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                             orderId: order.orderId,
                             tokenIn: order.tokenIn,
                             tokenOut: order.tokenOut,
-                            slippage: strike
+                            slippage: takeProfit
                                 ? order.takeProfitSlippage
-                                : order.stopSlippage, //bips based on strike or stop fill
+                                : order.stopSlippage, //bips based on take profit or stop fill
                             amountIn: order.amountIn,
                             exchangeRate: exchangeRate
                         })
@@ -95,13 +91,13 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             (MasterUpkeepData)
         );
         Order memory order = orders[pendingOrderIds[data.pendingOrderIdx]];
-        //deduce if we are filling stop or strike
-        (bool inRange, bool strike, ) = checkInRange(order);
+        //deduce if we are filling stop or take profit
+        (bool inRange, bool takeProfit, ) = checkInRange(order);
         require(inRange, "order ! in range");
 
         //deduce bips
         uint16 bips;
-        strike ? bips = order.takeProfitSlippage : bips = order.stopSlippage;
+        takeProfit ? bips = order.takeProfitSlippage : bips = order.stopSlippage;
 
         (
             bool success,
@@ -162,8 +158,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint16 stopSlippage,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant{
-        require(msg.sender == address(MASTER.STOP_LIMIT_CONTRACT()), "Only Stop Limit");
+    ) external override nonReentrant {
+        require(
+            msg.sender == address(MASTER.STOP_LIMIT_CONTRACT()),
+            "Only Stop Limit"
+        );
         _initializeOrder(
             swapPayload,
             takeProfit,
@@ -218,7 +217,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint256 _amountInDelta,
         IERC20 _tokenOut,
         address _recipient,
-        uint16 _strikeSlippage,
+        uint16 _takeProfitSlippage,
         uint16 _stopSlippage,
         bool permit,
         bool increasePosition,
@@ -282,7 +281,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             amountIn: newAmountIn,
             tokenIn: order.tokenIn,
             tokenOut: _tokenOut,
-            takeProfitSlippage: _strikeSlippage,
+            takeProfitSlippage: _takeProfitSlippage,
             stopSlippage: _stopSlippage,
             recipient: _recipient,
             direction: MASTER.getExchangeRate(order.tokenIn, _tokenOut) >
@@ -293,6 +292,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         orders[orderId] = newOrder;
     }
 
+    ///@notice allow administrator to cancel any order
+    ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
+    ///@notice only pending orders can be cancelled
     function adminCancelOrder(uint96 orderId) external onlyOwner {
         Order memory order = orders[orderId];
         require(_cancelOrder(order), "Order not active");
@@ -496,14 +498,16 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 //emit event
                 emit OrderCancelled(order.orderId);
 
-                //short circuit loop
                 return true;
             }
         }
         return false;
     }
 
-    ///@notice execute swap via @param txData
+    ///@notice execute swap transaction
+    ///@param target is the contract to which we are sending @param txData to perform the swap
+    ///@param tokenIn is the token to sell for @param tokenOut
+    ///@param bips ensures that we received at least the minimum amount of @param tokenOut after the swap
     function execute(
         address target,
         bytes memory txData,
@@ -548,9 +552,10 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 "Too Little Received"
             );
 
-            swapAmountOut = finalTokenOut - initialTokenOut; //todo change name for swapAmountOut?
+            swapAmountOut = finalTokenOut - initialTokenOut;
             tokenInRefund = amountIn - (initialTokenIn - finalTokenIn);
         } else {
+            //force revert
             revert TransactionFailed(result);
         }
     }
@@ -570,15 +575,14 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         permit2.permit(owner, payload.permitSingle, payload.signature);
         permit2.transferFrom(owner, address(this), amount, token);
     }
-
-    //todo what if direction is true but strike price is invalidly higher than strike price?
-    //Just leads to a bad fill?
+    ///@notice determine @param order order is fillable
+    ///
     function checkInRange(
         Order memory order
-    ) internal view returns (bool inRange, bool strike, uint256 exchangeRate) {
+    ) internal view returns (bool inRange, bool takeProfit, uint256 exchangeRate) {
         exchangeRate = MASTER.getExchangeRate(order.tokenIn, order.tokenOut);
         if (order.direction) {
-            //check for strike price
+            //check for take profit price
             if (exchangeRate <= order.takeProfit) {
                 return (true, true, exchangeRate);
             }
@@ -587,7 +591,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 return (true, false, exchangeRate);
             }
         } else {
-            //check for strike price
+            //check for take profit price
             if (exchangeRate >= order.takeProfit) {
                 return (true, true, exchangeRate);
             }

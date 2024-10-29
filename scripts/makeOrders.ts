@@ -1,7 +1,7 @@
 import hre, { network } from "hardhat";
 import { currentBlock, resetCurrentArb, resetCurrentBase, resetCurrentOP } from "../util/block";
 import { AutomationMaster, AutomationMaster__factory, Bracket, Bracket__factory, IERC20, IERC20__factory, IPermit2__factory, StopLimit, StopLimit__factory, UniswapV3Pool__factory } from "../typechain-types";
-import { Signer } from "ethers";
+import { AbiCoder, Signer } from "ethers";
 import { impersonateAccount } from "../util/impersonator";
 import { setBalance } from "@nomicfoundation/hardhat-network-helpers";
 import { decodeUpkeepData, generateUniTx, generateUniTxData, MasterUpkeepData, permitSingle } from "../util/msc";
@@ -43,7 +43,6 @@ async function main() {
 
     const network = await ethers.provider.getNetwork();
     chainId = Number(network.chainId)
-    console.log("GOT CHAINID: ", chainId)
 
     if (networkName == "hardhat" || networkName == "localhost") {
         networkName = testingNetwork
@@ -89,9 +88,13 @@ async function main() {
     if (networkName == "op") {
 
         if (!mainnet) {
+            console.log("RESETTING TO OP")
             await resetCurrentOP()
             console.log("Testing on OP @", (await currentBlock())?.number)
-
+            chainId = Number(network.chainId)
+            console.log("GOT CI: ", chainId)
+        } else {
+            chainId = 10
         }
         masterAddr = o.Master
         stopLimitAddr = o.stopLimit
@@ -100,6 +103,7 @@ async function main() {
 
         WETH = IERC20__factory.connect(o.wethAddress, signer)
         USDC = IERC20__factory.connect(o.nativeUsdcAddress, signer)
+
     }
 
 
@@ -115,178 +119,97 @@ async function main() {
         await impersonateAccount(await signer.getAddress())
 
     }
+    const delta = ethers.parseUnits("50", 8)
 
-    //await permitTest(signer)
+    //await createStopLimitOrder(signer, delta)
+    //await createStopLimitOrder(signer, delta * 2n)
 
-    //await createStopLimit(signer)
-    //await createStopLimitWithPermit(signer)
-    //await createBracketWithPermit(signer)
-    await createBracketWithSwapAndPermit(signer)
-    //await createLimit(signer)
-    //await checkOrder(signer)
+    await createBracketOrder(signer, delta * 2n)
 
 
 }
 
-const permitTest = async (signer: Signer) => {
-    const PERMIT2 = IPermit2__factory.connect(a.permit2, signer)
-
-
-    const data = await permitSingle(
-        signer,
-        chainId,
-        a.wethAddress,
-        wethAmount,
-        a.stopLimit,
-        a.permit2,
-        4
-    )
-
-    await PERMIT2.connect(signer).permit(await signer.getAddress(), data.permitSingle, data.signature, {
-        gasLimit: 1000000 // Setting a higher gas limit to force transaction to be sent
-    })
-}
-
-const createStopLimitWithPermit = async (signer: Signer) => {
-    //approve max
-    //await WETH.connect(signer).approve(permitAddr, ((2n ** 256n) - 1n))
-
-    //get data
-    const data = await permitSingle(
-        signer,
-        chainId,
-        await WETH.getAddress(),
-        wethAmount,
-        stopLimitAddr,
-        permitAddr,
-        0
-    )
+const createBracketOrder = async (signer: Signer, delta: bigint) => {
     const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
+    await WETH.connect(signer).approve(await Bracket.getAddress(), wethAmount)
 
-    await StopLimit.connect(signer).createOrderWithPermit(
-        currentPrice - stopLimitDelta,
-        (currentPrice - stopLimitDelta) + strikeDelta,
-        (currentPrice - stopLimitDelta) - stopDelta,
+    await Bracket.connect(signer).createOrder(
+        "0x",
+        currentPrice + delta,
+        currentPrice - delta,
         wethAmount,
         await WETH.getAddress(),
         await USDC.getAddress(),
         await signer.getAddress(),
-        testBips,//stop limit bips
-        testBips,//stop loss bips
-        testBips,//swap on fill bips
-        true,//swap on fill
-        data.permitSingle,
-        data.signature
-    )
-
-
-
-
-
-}
-
-const createBracketWithPermit = async (signer: Signer) => {
-    //get data
-    const data = await permitSingle(
-        signer,
-        chainId,
-        await WETH.getAddress(),
-        wethAmount,
-        bracketAddr,
-        permitAddr,
-        0
-    )
-    const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
-
-    await Bracket.connect(signer).createOrderWithPermit(
-        currentPrice + strikeDelta,
-        currentPrice - stopDelta,
-        wethAmount,
-        await WETH.getAddress(),
-        await USDC.getAddress(),
-        await signer.getAddress(),
-        testBips,//stop limit bips
-        testBips,//stop loss bips
-        data.permitSingle,
-        data.signature,
-        {
-            gasLimit: 1000000 // Setting a higher gas limit to force transaction to be sent
-        }
+        500,
+        500,
+        false,
+        "0x" 
     )
 }
 
-const createBracketWithSwapAndPermit = async (signer: Signer) => {
-    //get data
-    const data = await permitSingle(
-        signer,
-        chainId,
-        await WETH.getAddress(),
-        wethAmount,
-        stopLimitAddr,
-        permitAddr,
-        0
-    )
+const createStopLimitOrder = async (signer: Signer, delta: bigint) => {
+
+
     const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
-
-    const pool = UniswapV3Pool__factory.connect("0xc31e54c7a869b9fcbecc14363cf510d1c41fa443", signer)
-
-    const swapInData = await generateUniTxData(
-        WETH,
-        await USDC.getAddress(),
-        wethAmount,
-        a.uniRouter,
-        pool,
-        await Bracket.getAddress(),
-        await Master.getMinAmountReceived(wethAmount, await WETH.getAddress(), await USDC.getAddress(), testBips)
-    )
-    const swapParams: SwapParams = {
-        swapTokenIn: await USDC.getAddress(),
-        swapAmountIn: wethAmount,
-        swapTarget: a.uniRouter,
-        swapBips: testBips,
-        txData: swapInData
-    }
-
-    await Bracket.connect(signer).createOrderWithSwapAndPermit(
-        swapParams,
-        currentPrice + strikeDelta,
-        currentPrice - stopDelta,
-        await WETH.getAddress(),
-        await USDC.getAddress(),
-        await signer.getAddress(),
-        testBips,//stop limit bips
-        testBips,//stop loss bips
-        data.permitSingle,
-        data.signature,
-    )
-
-
-}
-
-const createStopLimit = async (signer: Signer) => {
-    console.log("CREATIGN STOP LIMIT")
-    const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
-    console.log("CURRENT PRICE: ", ethers.formatUnits(currentPrice, 8))
-
-    console.log(ethers.formatEther(await WETH.balanceOf(await signer.getAddress())))
-
-    await WETH.connect(signer).approve(stopLimitAddr, wethAmount)
+    await WETH.connect(signer).approve(await StopLimit.getAddress(), wethAmount)
     await StopLimit.connect(signer).createOrder(
-        currentPrice + stopLimitDelta,
-        (currentPrice + stopLimitDelta) + strikeDelta,
-        (currentPrice + stopLimitDelta) - stopDelta,//no stop loss
+        currentPrice - delta,
+        currentPrice + delta,
+        currentPrice - (delta * 2n),
         wethAmount,
         await WETH.getAddress(),
         await USDC.getAddress(),
         await signer.getAddress(),
-        testBips,//stop limit bips
-        testBips,//stop loss bips
-        testBips,//swap on fill bips
+        500,
+        500,
+        500,
         true,
-        {
-            gasLimit: 1000000 // Setting a higher gas limit to force transaction to be sent
-        }
+        false,
+        "0x"
     )
+
+
+    
+}
+
+const createStopLimitPermit = async (signer: Signer) => {
+
+    const permit = await permitSingle(
+        signer,
+        chainId,
+        await WETH.getAddress(),
+        wethAmount,
+        await StopLimit.getAddress(),
+        o.permit2
+    )
+
+    const abi = new AbiCoder()
+    const encoded = abi.encode(
+        [
+            "tuple(" +
+            "tuple(address token, uint160 amount, uint48 nonce, uint48 expiry) details, " +
+            "address spender, " +
+            "uint48 sigDeadline" +
+            "), " +
+            "bytes"
+        ],
+        [
+            [
+                [
+                    permit.permitSingle.details.token,
+                    permit.permitSingle.details.amount,
+                    permit.permitSingle.details.nonce,
+                    permit.permitSingle.details.expiration
+                ],
+                permit.permitSingle.spender,
+                permit.permitSingle.sigDeadline
+            ],
+            permit.signature
+        ]
+    );
+    //await StopLimit.connect(signer)
+
 }
 
 const checkOrder = async (signer: Signer) => {

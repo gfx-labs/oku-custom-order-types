@@ -14,9 +14,8 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../oracle/IOracleRelay.sol";
 
-
 ///@notice This contract owns and handles all logic associated with STOP_LIMIT orders
-///STOP_LIMIT orders create a new Bracket order order once filled
+///STOP_LIMIT orders create a new Bracket order order with the same order ID once filled
 contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -26,7 +25,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
     uint96[] public pendingOrderIds;
 
-    //todo adjust order id size?
     mapping(uint96 => Order) public orders;
 
     constructor(
