@@ -103,6 +103,7 @@ interface IStopLimit is IAutomation {
     ///@param takeProfit execution price for resulting Bracket order
     ///@param stopPrice execution price for resulting Bracket order
     ///@param amountIn amount of @param tokenIn to sell
+    ///@param feeAmount optional fee, taken in @param tokenIn
     ///@param tokenIn token sold in the swap
     ///@param tokenOut token bought in the swap
     ///@param recipient owner of the order and receiver of the funds once the order is closed
@@ -118,6 +119,7 @@ interface IStopLimit is IAutomation {
         uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
+        uint256 feeAmount,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
@@ -194,6 +196,7 @@ interface IBracket is IAutomation {
     ///@param takeProfit execution price for resulting Bracket order
     ///@param stopPrice execution price for resulting Bracket order
     ///@param amountIn amount of @param tokenIn to sell
+    ///@param feeAmount optional fee, taken in @param tokenIn
     ///@param tokenIn token sold in the swap
     ///@param tokenOut token bought in the swap
     ///@param recipient owner of the order and receiver of the funds once the order is closed
@@ -207,6 +210,7 @@ interface IBracket is IAutomation {
         uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
+        uint256 feeAmount,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,

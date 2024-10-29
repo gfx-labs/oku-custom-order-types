@@ -49,9 +49,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     {
         for (uint96 i = 0; i < pendingOrderIds.length; i++) {
             Order memory order = orders[pendingOrderIds[i]];
-            (bool inRange, bool takeProfit, uint256 exchangeRate) = checkInRange(
-                order
-            );
+            (
+                bool inRange,
+                bool takeProfit,
+                uint256 exchangeRate
+            ) = checkInRange(order);
             if (inRange) {
                 return (
                     true,
@@ -97,7 +99,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
 
         //deduce bips
         uint16 bips;
-        takeProfit ? bips = order.takeProfitSlippage : bips = order.stopSlippage;
+        takeProfit ? bips = order.takeProfitSlippage : bips = order
+            .stopSlippage;
 
         (
             bool success,
@@ -121,18 +124,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 pendingOrderIds
             );
 
-            //apply fee if there is one
-            (uint256 feeAmount, uint256 adjustedAmount) = MASTER.applyFee(
-                swapAmountOut
-            );
-
-            //send fee to master
-            if (feeAmount != 0) {
-                order.tokenOut.safeTransfer(address(MASTER), feeAmount);
-            }
-
             //send tokenOut to recipient
-            order.tokenOut.safeTransfer(order.recipient, adjustedAmount);
+            order.tokenOut.safeTransfer(order.recipient, swapAmountOut);
 
             //refund any unspent tokenIn
             //this should generally be 0 when using exact input for swaps, which is recommended
@@ -168,6 +161,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             takeProfit,
             stopPrice,
             amountIn,
+            0, //no fee
             existingOrderId,
             tokenIn,
             tokenOut,
@@ -185,6 +179,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
+        uint256 feeAmount,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
@@ -198,6 +193,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             takeProfit,
             stopPrice,
             amountIn,
+            feeAmount,
             0, //no existing order id
             tokenIn,
             tokenOut,
@@ -313,6 +309,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
+        uint256 feeAmount,
         uint96 existingOrderId,
         IERC20 tokenIn,
         IERC20 tokenOut,
@@ -343,6 +340,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                     address(this),
                     swapParams.swapAmountIn
                 );
+            }
+
+            //handle fee
+            if (feeAmount != 0) {
+                tokenIn.safeTransfer(address(MASTER), feeAmount);
             }
 
             _createOrderWithSwap(
@@ -579,7 +581,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     ///
     function checkInRange(
         Order memory order
-    ) internal view returns (bool inRange, bool takeProfit, uint256 exchangeRate) {
+    )
+        internal
+        view
+        returns (bool inRange, bool takeProfit, uint256 exchangeRate)
+    {
         exchangeRate = MASTER.getExchangeRate(order.tokenIn, order.tokenOut);
         if (order.direction) {
             //check for take profit price

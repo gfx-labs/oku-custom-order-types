@@ -84,8 +84,6 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         //set min order size 1000000000n
         await s.Master.connect(s.Frank).setMinOrderSize(s.minOrderSize)
 
-        await s.Master.connect(s.Frank).setFee(5)
-
     })
 
     it("Check upkeep", async () => {
@@ -127,6 +125,7 @@ describe("Execute Stop-Limit Upkeep", () => {
             (currentPrice + stopDelta) + strikeDelta,
             (currentPrice - stopDelta) - strikeDelta,
             s.wethAmount,
+            0n,//no fee
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Bob.getAddress(),
@@ -295,6 +294,7 @@ describe("Execute Stop-Limit with swap on fill", () => {
             strikePrice,
             stopLoss,
             s.usdcAmount,
+            0n,//no fee
             await s.USDC.getAddress(),//tokenIn
             await s.WETH.getAddress(),//tokenOut
             await s.Charles.getAddress(),
@@ -517,6 +517,7 @@ describe("Execute Bracket Upkeep", () => {
             currentPrice + strikeDelta,
             currentPrice - stopDelta,
             s.wethAmount,
+            0n,//no fee
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Bob.getAddress(),
@@ -698,6 +699,7 @@ describe("Bracket order with order modification", () => {
             currentPrice + strikeDelta,
             currentPrice - stopDelta,
             s.wethAmount,
+            0n,//no fee
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Bob.getAddress(),

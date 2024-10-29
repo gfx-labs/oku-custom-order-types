@@ -19,9 +19,6 @@ contract AutomationMaster is IAutomation, Ownable {
     ///@notice 10k bips == 100% slippage
     uint16 public constant MAX_BIPS = 10000;
 
-    ///@notice protocol fee, taken in the tokenOut of each swap
-    uint16 public feeBips;
-
     ///@notice maximum pending orders that may exist at a time, limiting the compute requriement for checkUpkeep
     uint16 public maxPendingOrders;
 
@@ -34,14 +31,6 @@ contract AutomationMaster is IAutomation, Ownable {
 
     ///each token must have a registered oracle in order to be tradable
     mapping(IERC20 => IOracleRelay) public oracles;
-
-    ///@notice set the protocol fee
-    ///@notice all fee proceeds are stored on this contract
-    ///@notice no user funds should ever exist on this contract
-    ///@param _feeBips is the raw bips to determine the fee
-    function setFee(uint16 _feeBips) external onlyOwner {
-        feeBips = _feeBips;
-    }
 
     ///@notice register Stop Limit and Bracket order contracts
     function registerSubKeepers(
@@ -152,20 +141,6 @@ contract AutomationMaster is IAutomation, Ownable {
         }
         // If decimals are the same, no adjustment needed
         return amountIn;
-    }
-
-    ///@notice apply the protocol fee to @param amount
-    ///@notice fee is in the form of tokenOut after a successful performUpkeep
-    function applyFee(
-        uint256 amount
-    ) external view returns (uint256 feeAmount, uint256 adjustedAmount) {
-        if (feeBips != 0) {
-            //determine adjusted amount and fee amount
-            adjustedAmount = (amount * (MAX_BIPS - feeBips)) / MAX_BIPS;
-            feeAmount = amount - adjustedAmount;
-        } else {
-            return (0, amount);
-        }
     }
 
     ///@notice determine if a new order meets the minimum order size requirement

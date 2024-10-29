@@ -147,6 +147,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
+        uint256 feeAmount,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
@@ -167,6 +168,11 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         } else {
             //take asset, assume prior approval
             tokenIn.safeTransferFrom(recipient, address(this), amountIn);
+        }
+
+        //handle fee
+        if(feeAmount != 0){
+            tokenIn.safeTransfer(address(MASTER), feeAmount);
         }
 
         _createOrder(
