@@ -125,11 +125,11 @@ describe("Execute Stop-Limit Upkeep", () => {
             (currentPrice + stopDelta) + strikeDelta,
             (currentPrice - stopDelta) - strikeDelta,
             s.wethAmount,
-            0n,//no fee
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Bob.getAddress(),
             strikeBips,
+            5,//5 bips fee
             0,//no stop loss bips
             0,//no swap on fill bips
             false,//no swap on fill
@@ -154,19 +154,12 @@ describe("Execute Stop-Limit Upkeep", () => {
     })
 
     it("Check upkeep", async () => {
-
-        console.log("TESTING")
-        console.log("TESTING")
-        console.log("TESTING")
-
         //should be no upkeep needed yet
         await hardhat_mine_timed(10, 10)
         let initial = await s.Master.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
         initial = await s.StopLimit.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
-
-
 
         //confirm order pricing is correct
         const order = await s.StopLimit.orders(orderId.toString())
@@ -180,8 +173,6 @@ describe("Execute Stop-Limit Upkeep", () => {
         initial = await s.StopLimit.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
 
-
-
         //increase price to over take profit, should not trigger
         await s.wethOracle.setPrice(order.takeProfit + BigInt(ethers.parseUnits("1", 8)))
         await hardhat_mine_timed(10, 10)
@@ -190,13 +181,9 @@ describe("Execute Stop-Limit Upkeep", () => {
         initial = await s.StopLimit.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
 
-
         //reduce price to stop limit price to trigger order
         await s.wethOracle.setPrice(order.stopLimitPrice - BigInt(ethers.parseUnits("1", 8)))
         await hardhat_mine_timed(10, 10)
-        currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
-        console.log("CURRENT: ", currentPrice)
-        console.log("SLPRICE: ", order.stopLimitPrice)
 
         //check upkeep
         let result = await s.Master.checkUpkeep("0x")
@@ -294,10 +281,10 @@ describe("Execute Stop-Limit with swap on fill", () => {
             strikePrice,
             stopLoss,
             s.usdcAmount,
-            0n,//no fee
             await s.USDC.getAddress(),//tokenIn
             await s.WETH.getAddress(),//tokenOut
             await s.Charles.getAddress(),
+            5,//5 bips fee
             strikeBips,
             stopBips,//no stop loss bips
             swapBips,//no swap on fill bips
@@ -517,10 +504,10 @@ describe("Execute Bracket Upkeep", () => {
             currentPrice + strikeDelta,
             currentPrice - stopDelta,
             s.wethAmount,
-            0n,//no fee
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Bob.getAddress(),
+            5,//5 bips fee
             strikeBips,
             stopBips,
             false,//no permit
@@ -699,10 +686,10 @@ describe("Bracket order with order modification", () => {
             currentPrice + strikeDelta,
             currentPrice - stopDelta,
             s.wethAmount,
-            0n,//no fee
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Bob.getAddress(),
+            5,//5 bips fee
             strikeBips,
             stopBips,
             false,
@@ -941,6 +928,17 @@ describe("Bracket order with order modification", () => {
         //check upkeep
         const check = await s.Master.checkUpkeep("0x")
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
+    })
+
+    it("Verify fee", async () =>{
+
+        const usdcBalance = await s.USDC.balanceOf(await s.Master.getAddress())
+        expect(usdcBalance).to.be.gt(0, "USDC fees accumulated")
+
+        await s.Master.connect(s.Frank).sweep(await s.USDC.getAddress())
+
+        expect(await s.USDC.balanceOf(s.Frank)).to.eq(usdcBalance, "Frank received fees")
+
     })
 })
 

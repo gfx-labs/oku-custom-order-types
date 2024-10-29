@@ -14,6 +14,7 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../oracle/IOracleRelay.sol";
 
+
 ///@notice This contract owns and handles all logic associated with the following order types:
 /// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independant slippapge for each option
 /// LIMIT_ORDER - automated market swap at specified take profit price
@@ -124,8 +125,18 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 pendingOrderIds
             );
 
+            //handle fee
+            (uint256 feeAmount, uint256 adjustedAmount) = applyFee(
+                swapAmountOut,
+                order.feeBips
+            );
+
+            if (feeAmount != 0) {
+                order.tokenOut.safeTransfer(address(MASTER), feeAmount);
+            }
+
             //send tokenOut to recipient
-            order.tokenOut.safeTransfer(order.recipient, swapAmountOut);
+            order.tokenOut.safeTransfer(order.recipient, adjustedAmount);
 
             //refund any unspent tokenIn
             //this should generally be 0 when using exact input for swaps, which is recommended
@@ -147,6 +158,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 existingFeeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         bool permit,
@@ -161,11 +173,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             takeProfit,
             stopPrice,
             amountIn,
-            0, //no fee
             existingOrderId,
             tokenIn,
             tokenOut,
             recipient,
+            existingFeeBips,
             takeProfitSlippage,
             stopSlippage,
             permit,
@@ -179,10 +191,10 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
-        uint256 feeAmount,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         bool permit,
@@ -193,11 +205,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             takeProfit,
             stopPrice,
             amountIn,
-            feeAmount,
             0, //no existing order id
             tokenIn,
             tokenOut,
             recipient,
+            feeBips,
             takeProfitSlippage,
             stopSlippage,
             permit,
@@ -277,6 +289,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             amountIn: newAmountIn,
             tokenIn: order.tokenIn,
             tokenOut: _tokenOut,
+            feeBips: order.feeBips,
             takeProfitSlippage: _takeProfitSlippage,
             stopSlippage: _stopSlippage,
             recipient: _recipient,
@@ -309,11 +322,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
-        uint256 feeAmount,
         uint96 existingOrderId,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         bool permit,
@@ -342,11 +355,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 );
             }
 
-            //handle fee
-            if (feeAmount != 0) {
-                tokenIn.safeTransfer(address(MASTER), feeAmount);
-            }
-
             _createOrderWithSwap(
                 swapParams,
                 takeProfit,
@@ -355,6 +363,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 tokenIn,
                 tokenOut,
                 recipient,
+                feeBips,
                 takeProfitSlippage,
                 stopSlippage
             );
@@ -381,6 +390,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 tokenIn,
                 tokenOut,
                 recipient,
+                feeBips,
                 takeProfitSlippage,
                 stopSlippage
             );
@@ -395,13 +405,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage
     ) internal {
-        require(
-            swapParams.swapSlippage <= MASTER.MAX_BIPS(),
-            "Invalid Slippage BIPS"
-        );
+        require(swapParams.swapSlippage <= 10000, "BIPS > 10k");
 
         //execute the swap
         (, , uint256 swapAmountOut, uint256 tokenInRefund) = execute(
@@ -421,6 +429,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             tokenIn,
             tokenOut,
             recipient,
+            feeBips,
             takeProfitSlippage,
             stopSlippage
         );
@@ -439,6 +448,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage
     ) internal {
@@ -453,9 +463,10 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             "Max Order Count Reached"
         );
         require(
-            stopSlippage <= MASTER.MAX_BIPS() &&
-                takeProfitSlippage <= MASTER.MAX_BIPS(),
-            "Invalid Slippage BIPS"
+            stopSlippage <= 10000 &&
+                takeProfitSlippage <= 10000 &&
+                feeBips <= 10000,
+            "BIPS > 10k"
         );
 
         MASTER.checkMinOrderSize(tokenIn, amountIn);
@@ -475,6 +486,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             tokenOut: tokenOut,
             recipient: recipient,
             takeProfitSlippage: takeProfitSlippage,
+            feeBips: feeBips,
             stopSlippage: stopSlippage,
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) > takeProfit //exchangeRate in/out > takeProfit
         });
@@ -605,6 +617,21 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             if (exchangeRate <= order.stopPrice) {
                 return (true, false, exchangeRate);
             }
+        }
+    }
+
+    ///@notice apply the protocol fee to @param amount
+    ///@notice fee is in the form of tokenOut after a successful performUpkeep
+    function applyFee(
+        uint256 amount,
+        uint16 feeBips
+    ) internal pure returns (uint256 feeAmount, uint256 adjustedAmount) {
+        if (feeBips != 0) {
+            //determine adjusted amount and fee amount
+            adjustedAmount = (amount * (10000 - feeBips)) / 10000;
+            feeAmount = amount - adjustedAmount;
+        } else {
+            return (0, amount);
         }
     }
 }

@@ -77,6 +77,7 @@ interface IStopLimit is IAutomation {
     ///@param tokenIn token sold in the swap
     ///@param tokenOut token bought in the swap
     ///@param recipient owner of the order and receiver of the funds once the order is closed
+    ///@param feeBips optional fee, raw basis points, taken in @param tokenOut
     ///@param takeProfitSlippage raw bips used to determine slippage for resulting Bracket order once @param takeProfit is reached
     ///@param stopSlippage raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
     ///@param swapSlippage raw bips used to determine slippage for resulting swap if @param swapOnFill is true
@@ -91,6 +92,7 @@ interface IStopLimit is IAutomation {
         IERC20 tokenIn;
         IERC20 tokenOut;
         address recipient;
+        uint16 feeBips;
         uint16 takeProfitSlippage;
         uint16 stopSlippage;
         uint16 swapSlippage;
@@ -103,7 +105,7 @@ interface IStopLimit is IAutomation {
     ///@param takeProfit execution price for resulting Bracket order
     ///@param stopPrice execution price for resulting Bracket order
     ///@param amountIn amount of @param tokenIn to sell
-    ///@param feeAmount optional fee, taken in @param tokenIn
+    ///@param feeBips optional fee, raw basis points, taken in @param tokenOut
     ///@param tokenIn token sold in the swap
     ///@param tokenOut token bought in the swap
     ///@param recipient owner of the order and receiver of the funds once the order is closed
@@ -119,10 +121,10 @@ interface IStopLimit is IAutomation {
         uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
-        uint256 feeAmount,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         uint16 swapSlippage,
@@ -175,6 +177,7 @@ interface IBracket is IAutomation {
     ///@param tokenIn token sold in the swap
     ///@param tokenOut token bought in the swap
     ///@param recipient owner of the order and receiver of the funds once the order is closed
+    ///@param feeBips optional fee, raw basis points, taken in @param tokenOut
     ///@param takeProfitSlippage raw bips used to determine slippage for resulting Bracket order once @param takeProfit is reached
     ///@param stopSlippage raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
     ///@param direction determines the expected direction of price movement
@@ -186,6 +189,7 @@ interface IBracket is IAutomation {
         IERC20 tokenIn;
         IERC20 tokenOut;
         address recipient; //addr to receive swap results
+        uint16 feeBips;
         uint16 takeProfitSlippage; //slippage if order is filled
         uint16 stopSlippage; //slippage of stop price is reached
         bool direction; //true if initial exchange rate > strike price
@@ -196,7 +200,7 @@ interface IBracket is IAutomation {
     ///@param takeProfit execution price for resulting Bracket order
     ///@param stopPrice execution price for resulting Bracket order
     ///@param amountIn amount of @param tokenIn to sell
-    ///@param feeAmount optional fee, taken in @param tokenIn
+    ///@param feeBips optional fee, raw basis points, taken in @param tokenOut
     ///@param tokenIn token sold in the swap
     ///@param tokenOut token bought in the swap
     ///@param recipient owner of the order and receiver of the funds once the order is closed
@@ -210,10 +214,10 @@ interface IBracket is IAutomation {
         uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
-        uint256 feeAmount,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         bool permit,
@@ -231,6 +235,7 @@ interface IBracket is IAutomation {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 existingFeeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         bool permit,

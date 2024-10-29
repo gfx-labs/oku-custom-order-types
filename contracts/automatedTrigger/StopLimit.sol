@@ -75,7 +75,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
                 );
             }
         }
-    }   
+    }
 
     function performUpkeep(
         bytes calldata performData
@@ -132,6 +132,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             tokenIn,
             tokenOut,
             order.recipient,
+            order.feeBips,
             order.takeProfitSlippage,
             order.stopSlippage,
             false, //permit
@@ -147,10 +148,10 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         uint256 takeProfit,
         uint256 stopPrice,
         uint256 amountIn,
-        uint256 feeAmount,
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         uint16 swapSlippage,
@@ -170,11 +171,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             tokenIn.safeTransferFrom(recipient, address(this), amountIn);
         }
 
-        //handle fee
-        if(feeAmount != 0){
-            tokenIn.safeTransfer(address(MASTER), feeAmount);
-        }
-
         _createOrder(
             stopLimitPrice,
             takeProfit,
@@ -183,6 +179,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             tokenIn,
             tokenOut,
             recipient,
+            feeBips,
             takeProfitSlippage,
             stopSlippage,
             swapSlippage,
@@ -244,6 +241,14 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
                 //refund position partially
                 order.tokenIn.safeTransfer(order.recipient, _amountInDelta);
+
+                //check slippage
+                require(
+                    _takeProfitSlippage <= 10000 &&
+                        _stopSlippage <= 10000 &&
+                        _swapSlippage <= 10000,
+                    "BIPS > 10k"
+                );
             }
         }
 
@@ -264,6 +269,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             amountIn: newAmountIn,
             tokenIn: order.tokenIn,
             tokenOut: _tokenOut,
+            feeBips: order.feeBips,
             takeProfitSlippage: _takeProfitSlippage,
             stopSlippage: _stopSlippage,
             swapSlippage: _swapSlippage,
@@ -299,6 +305,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         uint16 swapSlippage,
@@ -315,9 +322,11 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             "Max Order Count Reached"
         );
         require(
-            takeProfitSlippage <= MASTER.MAX_BIPS() &&
-                stopSlippage <= MASTER.MAX_BIPS(),
-            "invalid slippage"
+            takeProfitSlippage <= 10000 &&
+                stopSlippage <= 10000 &&
+                swapSlippage <= 10000 &&
+                feeBips <= 10000,
+            "BIPS > 10k"
         );
 
         MASTER.checkMinOrderSize(tokenIn, amountIn);
@@ -333,10 +342,12 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             tokenIn: tokenIn,
             tokenOut: tokenOut,
             takeProfitSlippage: takeProfitSlippage,
+            feeBips: feeBips,
             stopSlippage: stopSlippage,
             swapSlippage: swapSlippage,
             recipient: recipient,
-            direction: MASTER.getExchangeRate(tokenIn, tokenOut) > stopLimitPrice, //compare to stop price for this order's direction
+            direction: MASTER.getExchangeRate(tokenIn, tokenOut) >
+                stopLimitPrice, //compare to stop price for this order's direction
             swapOnFill: swapOnFill
         });
         pendingOrderIds.push(uint96(orderId));

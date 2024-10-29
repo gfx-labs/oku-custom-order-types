@@ -46,10 +46,10 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             currentPrice + steveStrikeDelta,
             currentPrice - steveStrikeDelta,
             s.wethAmount,
-            0n,//no fee
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Steve.getAddress(),
+            5,//5 bips fee
             smallSlippage,
             smallSlippage,
             false,
@@ -125,10 +125,10 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             currentPrice + steveStrikeDelta,
             currentPrice - steveStrikeDelta,
             veryLargeWethAmount,
-            0n,//no fee
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Steve.getAddress(),
+            5,//5 bips fee
             smallSlippage,
             smallSlippage,
             false,
@@ -147,10 +147,10 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             currentPrice + steveStrikeDelta,
             currentPrice - steveStrikeDelta,
             s.wethAmount,
-            0n,//no fee
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Steve.getAddress(),
+            5,//5 bips fee
             steveBips,
             steveBips,
             false,
