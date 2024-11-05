@@ -121,10 +121,12 @@ async function main() {
     }
     const delta = ethers.parseUnits("50", 8)
 
-    //await createStopLimitOrder(signer, delta)
-    //await createStopLimitOrder(signer, delta * 2n)
-
+    await createStopLimitOrder(signer, delta)
+    await createStopLimitOrder(signer, delta * 2n)
+    await createStopLimitOrder(signer, delta * 3n)
+    await createBracketOrder(signer, delta)
     await createBracketOrder(signer, delta * 2n)
+    await createBracketOrder(signer, delta * 3n)
 
 
 }
@@ -141,6 +143,7 @@ const createBracketOrder = async (signer: Signer, delta: bigint) => {
         await WETH.getAddress(),
         await USDC.getAddress(),
         await signer.getAddress(),
+        5,
         500,
         500,
         false,
@@ -161,6 +164,7 @@ const createStopLimitOrder = async (signer: Signer, delta: bigint) => {
         await WETH.getAddress(),
         await USDC.getAddress(),
         await signer.getAddress(),
+        5,
         500,
         500,
         500,

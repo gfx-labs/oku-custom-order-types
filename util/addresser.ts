@@ -306,9 +306,9 @@ export class OptimisimAddresses {
     readonly nativeUsdcAddress: string = "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"
 
     //automated trigger v2
-    readonly Master: string = "0xaAc8c3609505dAD04c06a61A7ae745B7B397B887"
-    readonly stopLimit: string = "0xEc3f54945D4b6bA9A459f4b4e6E73E780Fc59d52"
-    readonly bracket: string = "0xcE749A2C870cA7d30aca7e5F6479aBa29CfcE7a1"
+    readonly Master: string = "0x09f1e409F5A90bAC73b2485BbE8f4f88AAd2e800"
+    readonly stopLimit: string = "0x5320E49BDCF83683dfA1923AEfA20dec01E29aB2"
+    readonly bracket: string = "0xA90307cF7EE55eb6DEA5f55F37101c02b0a55acE"
     readonly permit2: string = "0x000000000022D473030F116dDEE9F6B43aC78BA3"
 
 }

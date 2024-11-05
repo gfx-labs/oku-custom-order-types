@@ -244,6 +244,15 @@ describe("Execute Stop-Limit Upkeep", () => {
         await s.Bracket.connect(s.Bob).cancelOrder(orderId.toString())
     })
 })
+
+describe("Permit Check", () => {
+    it("Permit Check", async () => {
+        
+    })
+})
+
+
+
 /**
  * For swap on fill, we expect to receive the same asset we provide
  * In this case, we provide USDC, swap to WETH when the stop limit is filled, 

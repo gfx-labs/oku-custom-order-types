@@ -48,12 +48,12 @@ describe("Test for failure - STOP LIMIT", () => {
             currentPrice + steveStrikeDelta,
             0,
             veryLargeWethAmount,
-            0n,//no fee
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Steve.getAddress(),
             smallSlippage,
             smallSlippage,
+            5n,//fee
             0,
             false,
             false,//no permit

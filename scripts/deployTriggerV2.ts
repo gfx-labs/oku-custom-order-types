@@ -141,6 +141,10 @@ async function main() {
   console.log("DONE")
 }
 
+const deployOpOracles = async (signer: Signer) => {
+
+}
+
 const deployOracles = async (signer: Signer) => {
 
   const wethOracle: IOracleRelay = await DeployContract(new OracleRelay__factory(signer), signer, wethAddress, wethFeedAddr)
@@ -204,11 +208,6 @@ const register = async (signer: Signer) => {
   tx = await Master.connect(signer).setMinOrderSize(ethers.parseUnits("0.25", 8))
   await tx.wait()
   console.log("SET MIN ORDER SIZE")
-
-  tx = await Master.connect(signer).setFee(5n)
-  await tx.wait()
-  console.log("SET FEE TO 5 BIPS")
-
 }
 
 const deployEverything = async (signer: Signer) => {
