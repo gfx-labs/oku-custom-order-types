@@ -14,7 +14,6 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../oracle/IOracleRelay.sol";
 
-
 ///@notice This contract owns and handles all logic associated with the following order types:
 /// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independant slippapge for each option
 /// LIMIT_ORDER - automated market swap at specified take profit price
@@ -29,6 +28,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     uint96[] public pendingOrderIds;
 
     mapping(uint96 => Order) public orders;
+
+    ///@notice determine if an order is filled, and by how much
+    mapping(uint96 => uint256) public filledAmount;
 
     constructor(AutomationMaster _master, IPermit2 _permit2) {
         MASTER = _master;
@@ -135,6 +137,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 order.tokenOut.safeTransfer(address(MASTER), feeAmount);
             }
 
+            //mark order as filled
+            filledAmount[order.orderId] = adjustedAmount;
+
             //send tokenOut to recipient
             order.tokenOut.safeTransfer(order.recipient, adjustedAmount);
 
@@ -199,22 +204,23 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint16 stopSlippage,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant {
-        _initializeOrder(
-            swapPayload,
-            takeProfit,
-            stopPrice,
-            amountIn,
-            0, //no existing order id
-            tokenIn,
-            tokenOut,
-            recipient,
-            feeBips,
-            takeProfitSlippage,
-            stopSlippage,
-            permit,
-            permitPayload
-        );
+    ) external override nonReentrant returns (uint96 orderId) {
+        return
+            _initializeOrder(
+                swapPayload,
+                takeProfit,
+                stopPrice,
+                amountIn,
+                0, //no existing order id
+                tokenIn,
+                tokenOut,
+                recipient,
+                feeBips,
+                takeProfitSlippage,
+                stopSlippage,
+                permit,
+                permitPayload
+            );
     }
 
     ///@notice see @IBracket
@@ -331,7 +337,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint16 stopSlippage,
         bool permit,
         bytes calldata permitPayload
-    ) internal {
+    ) internal returns (uint96 orderId) {
         //determine if we are doing a swap first
         if (swapPayload.length != 0) {
             SwapParams memory swapParams = abi.decode(
@@ -355,18 +361,19 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 );
             }
 
-            _createOrderWithSwap(
-                swapParams,
-                takeProfit,
-                stopPrice,
-                existingOrderId,
-                tokenIn,
-                tokenOut,
-                recipient,
-                feeBips,
-                takeProfitSlippage,
-                stopSlippage
-            );
+            return
+                _createOrderWithSwap(
+                    swapParams,
+                    takeProfit,
+                    stopPrice,
+                    existingOrderId,
+                    tokenIn,
+                    tokenOut,
+                    recipient,
+                    feeBips,
+                    takeProfitSlippage,
+                    stopSlippage
+                );
         } else {
             //no swap
             //procure tokens
@@ -382,18 +389,19 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
             }
 
-            _createOrder(
-                takeProfit,
-                stopPrice,
-                amountIn,
-                existingOrderId,
-                tokenIn,
-                tokenOut,
-                recipient,
-                feeBips,
-                takeProfitSlippage,
-                stopSlippage
-            );
+            return
+                _createOrder(
+                    takeProfit,
+                    stopPrice,
+                    amountIn,
+                    existingOrderId,
+                    tokenIn,
+                    tokenOut,
+                    recipient,
+                    feeBips,
+                    takeProfitSlippage,
+                    stopSlippage
+                );
         }
     }
 
@@ -408,7 +416,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage
-    ) internal {
+    ) internal returns (uint96 orderId) {
         require(swapParams.swapSlippage <= 10000, "BIPS > 10k");
 
         //execute the swap
@@ -421,7 +429,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             swapParams.swapSlippage
         );
 
-        _createOrder(
+        orderId = _createOrder(
             takeProfit,
             stopPrice,
             swapAmountOut,
@@ -451,7 +459,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage
-    ) internal {
+    ) internal returns (uint96) {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
             address(MASTER.oracles(tokenIn)) != address(0x0) &&
@@ -495,6 +503,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         pendingOrderIds.push(existingOrderId);
 
         emit OrderCreated(existingOrderId);
+
+        return existingOrderId;
     }
 
     function _cancelOrder(Order memory order) internal returns (bool) {

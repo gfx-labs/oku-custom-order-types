@@ -131,7 +131,7 @@ interface IStopLimit is IAutomation {
         bool swapOnFill,
         bool permit,
         bytes calldata permitPayload
-    ) external;
+    ) external returns (uint96 orderId);
 
     ///@param orderId unique id to reference the order being modified
     ///@param stopLimitPrice new execution price to fill the Stop Limit order
@@ -222,7 +222,7 @@ interface IBracket is IAutomation {
         uint16 stopSlippage,
         bool permit,
         bytes calldata permitPayload
-    ) external;
+    ) external returns (uint96 orderId);
 
     ///@notice create a new Bracket order as a Stop Limit order is filled
     ///@notice @param existingOrderId allows the use of the same orderId for the resulting Bracket order

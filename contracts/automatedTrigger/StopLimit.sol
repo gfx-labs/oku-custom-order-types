@@ -23,8 +23,10 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
     IBracket public immutable BRACKET_CONTRACT;
     IPermit2 public immutable permit2;
 
+    ///@notice actively pending orders
     uint96[] public pendingOrderIds;
 
+    ///@notice all orders
     mapping(uint96 => Order) public orders;
 
     constructor(
@@ -158,7 +160,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         bool swapOnFill,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant {
+    ) external override nonReentrant returns (uint96 orderId) {
         if (permit) {
             handlePermit(
                 recipient,
@@ -171,20 +173,21 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             tokenIn.safeTransferFrom(recipient, address(this), amountIn);
         }
 
-        _createOrder(
-            stopLimitPrice,
-            takeProfit,
-            stopPrice,
-            amountIn,
-            tokenIn,
-            tokenOut,
-            recipient,
-            feeBips,
-            takeProfitSlippage,
-            stopSlippage,
-            swapSlippage,
-            swapOnFill
-        );
+        return
+            _createOrder(
+                stopLimitPrice,
+                takeProfit,
+                stopPrice,
+                amountIn,
+                tokenIn,
+                tokenOut,
+                recipient,
+                feeBips,
+                takeProfitSlippage,
+                stopSlippage,
+                swapSlippage,
+                swapOnFill
+            );
     }
 
     ///@notice see @IStopLimit
@@ -310,7 +313,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         uint16 stopSlippage,
         uint16 swapSlippage,
         bool swapOnFill
-    ) internal {
+    ) internal returns (uint96 orderId) {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
             address(MASTER.oracles(tokenIn)) != address(0x0) &&
@@ -331,7 +334,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
         MASTER.checkMinOrderSize(tokenIn, amountIn);
 
-        uint96 orderId = MASTER.generateOrderId(msg.sender);
+        orderId = MASTER.generateOrderId(msg.sender);
 
         orders[orderId] = Order({
             orderId: orderId,
