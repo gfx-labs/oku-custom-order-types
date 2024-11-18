@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 import "./IAutomation.sol";
 import "./AutomationMaster.sol";
 import "../libraries/ArrayMutation.sol";
-import "../interfaces/ILimitOrderRegistry.sol";
 import "../interfaces/uniswapV3/UniswapV3Pool.sol";
 import "../interfaces/uniswapV3/IPermit2.sol";
 import "../interfaces/uniswapV3/ISwapRouter02.sol";
@@ -103,6 +102,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         takeProfit ? bips = order.takeProfitSlippage : bips = order
             .stopSlippage;
 
+        //todo remove redundant success check
         (
             bool success,
             bytes memory result,
@@ -222,7 +222,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint96 orderId,
         uint256 _takeProfit,
         uint256 _stopPrice,
-        uint256 _amountInDelta,
+        uint256 amountInDelta,
         IERC20 _tokenOut,
         address _recipient,
         uint16 _takeProfitSlippage,
@@ -239,15 +239,15 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
 
         //deduce any amountIn changes
         uint256 newAmountIn = order.amountIn;
-        if (_amountInDelta != 0) {
+        if (amountInDelta != 0) {
             if (increasePosition) {
-                newAmountIn += _amountInDelta;
+                newAmountIn += amountInDelta;
                 //take funds via permit2
                 if (permit) {
                     handlePermit(
                         order.recipient,
                         permitPayload,
-                        uint160(_amountInDelta),
+                        uint160(amountInDelta),
                         address(order.tokenIn)
                     );
                 } else {
@@ -255,21 +255,21 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                     order.tokenIn.safeTransferFrom(
                         order.recipient,
                         address(this),
-                        _amountInDelta
+                        amountInDelta
                     );
                 }
             } else {
                 //ensure delta is valid
-                require(_amountInDelta < order.amountIn, "invalid delta");
+                require(amountInDelta < order.amountIn, "invalid delta");
 
                 //set new amountIn for accounting
-                newAmountIn -= _amountInDelta;
+                newAmountIn -= amountInDelta;
 
                 //check min order size for new amount
                 MASTER.checkMinOrderSize(order.tokenIn, newAmountIn);
 
                 //refund position partially
-                order.tokenIn.safeTransfer(order.recipient, _amountInDelta);
+                order.tokenIn.safeTransfer(order.recipient, amountInDelta);
             }
         }
 

@@ -9,6 +9,7 @@ import "../interfaces/uniswapV3/ISwapRouter02.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
+import "../interfaces/pyth/IPyth.sol";
 import "../oracle/IOracleRelay.sol";
 
 ///@notice This contract owns and handles all of the settings and accounting logic for automated swaps
@@ -31,6 +32,7 @@ contract AutomationMaster is IAutomation, Ownable {
 
     ///each token must have a registered oracle in order to be tradable
     mapping(IERC20 => IOracleRelay) public oracles;
+    mapping(IERC20 => bytes32) public pythIds; 
 
     ///@notice register Stop Limit and Bracket order contracts
     function registerSubKeepers(

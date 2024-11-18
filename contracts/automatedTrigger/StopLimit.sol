@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 import "./IAutomation.sol";
 import "./AutomationMaster.sol";
 import "../libraries/ArrayMutation.sol";
-import "../interfaces/ILimitOrderRegistry.sol";
 import "../interfaces/uniswapV3/UniswapV3Pool.sol";
 import "../interfaces/uniswapV3/ISwapRouter02.sol";
 import "../interfaces/uniswapV3/IPermit2.sol";

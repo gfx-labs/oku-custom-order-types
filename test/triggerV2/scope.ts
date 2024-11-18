@@ -32,6 +32,7 @@ export class TestScope {
     Bob!: Signer
     Charles!: Signer//test swap-on-fill
     Ian!: Signer //isolated testing
+    Oscar!: Signer //Oracle-less testing
 
     abi = new AbiCoder()
 

@@ -58,9 +58,9 @@ interface IAutomation is AutomationCompatibleInterface {
         bytes txData;
     }
 
-    event OrderProcessed(uint256 orderId, bool success, bytes result);
-    event OrderCreated(uint256 orderId);
-    event OrderCancelled(uint256 orderId);
+    event OrderProcessed(uint96 orderId, bool success, bytes result);
+    event OrderCreated(uint96 orderId);
+    event OrderCancelled(uint96 orderId);
 }
 
 ///@notice Stop Limit orders create a new bracket order once filled
@@ -267,5 +267,54 @@ interface IBracket is IAutomation {
         bool permit,
         bool increasePosition,
         bytes calldata permitPayload
+    ) external;
+}
+
+interface IOracleLess {
+    event OrderCreated(uint96 orderId);
+    event OrderCancelled(uint96 orderId);
+    event OrderProcessed(uint96 orderId);
+
+    ///@notice force a revert if the external call fails
+    error TransactionFailed(bytes reason);
+
+    struct Order {
+        uint96 orderId;
+        IERC20 tokenIn;
+        IERC20 tokenOut;
+        uint256 amountIn;
+        uint256 minAmountOut;
+        address recipient;
+        uint16 feeBips;
+    }
+
+    function createOrder(
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        uint256 amountIn,
+        uint256 minAmountOut,
+        address recipient,
+        uint16 feeBips,
+        bool permit,
+        bytes calldata permitPayload
+    ) external returns (uint96);
+
+    function cancelOrder(uint96 orderId) external;
+
+    function modifyOrder(
+        uint96 orderId,
+        IERC20 _tokenOut,
+        uint256 amountInDelta,
+        uint256 _minAmountOut,
+        address _recipient,
+        bool increasePosition,
+        bool permit,
+        bytes calldata permitPayload
+    ) external;
+
+    function fillOrder(
+        uint96 pendingOrderIdx,
+        address target,
+        bytes calldata txData
     ) external;
 }

@@ -1,4 +1,4 @@
-import { AutomationMaster__factory, Bracket__factory, IERC20__factory, IPermit2__factory, PlaceholderOracle__factory, StopLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
+import { AutomationMaster__factory, Bracket__factory, IERC20__factory, IPermit2__factory, OracleLess, OracleLess__factory, PlaceholderOracle__factory, StopLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
 import { currentBlock, hardhat_mine, hardhat_mine_timed, resetCurrentArbBlock } from "../../util/block"
 import { expect } from "chai"
 import { stealMoney } from "../../util/money"
@@ -28,6 +28,7 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         s.Bob = s.signers[2]
         s.Charles = s.signers[3]
         s.Steve = s.signers[4]
+        s.Oscar = s.signers[5]
 
 
         s.UniPool = UniswapV3Pool__factory.connect(s.pool, s.Frank)
@@ -247,7 +248,7 @@ describe("Execute Stop-Limit Upkeep", () => {
 
 describe("Permit Check", () => {
     it("Permit Check", async () => {
-        
+
     })
 })
 
@@ -939,7 +940,7 @@ describe("Bracket order with order modification", () => {
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
     })
 
-    it("Verify fee", async () =>{
+    it("Verify fee", async () => {
 
         const usdcBalance = await s.USDC.balanceOf(await s.Master.getAddress())
         expect(usdcBalance).to.be.gt(0, "USDC fees accumulated")
@@ -949,6 +950,121 @@ describe("Bracket order with order modification", () => {
         expect(await s.USDC.balanceOf(s.Frank)).to.eq(usdcBalance, "Frank received fees")
 
     })
+})
+
+describe("Oracle Less", () => {
+    let OracleLess: OracleLess
+    const expectedAmountOut = 5600885752n
+    const minAmountOut = expectedAmountOut - 50n
+    let orderId: bigint
+    before(async () => {
+        OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2)
+        await stealMoney(s.wethWhale, await s.Oscar.getAddress(), await s.WETH.getAddress(), s.wethAmount)
+    })
+
+    it("Create Order", async () => {
+
+        await s.WETH.connect(s.Oscar).approve(await OracleLess.getAddress(), s.wethAmount)
+        await OracleLess.connect(s.Oscar).createOrder(
+            await s.WETH.getAddress(),
+            await s.USDC.getAddress(),
+            s.wethAmount,
+            minAmountOut,
+            await s.Oscar.getAddress(),
+            25,
+            false,
+            "0x"
+        )
+        const filter = OracleLess.filters.OrderCreated
+        const events = await OracleLess.queryFilter(filter, -1)
+        const event = events[0].args
+        expect(Number(event[0])).to.not.eq(0, "New order")
+        orderId = (event[0])
+    })
+    it("Modify Amount In", async () => {
+        const order = await OracleLess.orders(orderId)
+        const delta = 10000000n
+        const initialWeth = await s.WETH.balanceOf(await s.Oscar.getAddress())
+
+        //decrease amount
+        await OracleLess.connect(s.Oscar).modifyOrder(
+            orderId,
+            order.tokenOut,
+            delta,
+            order.minAmountOut,
+            order.recipient,
+            false,
+            false,
+            "0x"
+        )
+        //check for refund
+        expect(await s.WETH.balanceOf(await s.Oscar.getAddress()))
+
+        //increase back to original
+
+
+
+    })
+
+    it("Modify Amount Received", async () => {
+
+        const order = await OracleLess.orders(orderId)
+        //increase min amount down
+        await OracleLess.connect(s.Oscar).modifyOrder(
+            orderId,
+            order.tokenOut,
+            0n,
+            expectedAmountOut + 50n,
+            order.recipient,
+            false,
+            false,
+            "0x"
+        )
+
+        const txData = await generateUniTxData(
+            s.WETH,
+            await s.USDC.getAddress(),
+            s.wethAmount,
+            s.router02,
+            s.UniPool,
+            await OracleLess.getAddress(),
+            0n//pendingOrders[0].minAmountOut//5600885752
+        )
+        expect(OracleLess.fillOrder(0n, s.router02, txData)).to.be.revertedWith("Too Little Received")
+
+        //reset
+        await s.WETH.connect
+        await OracleLess.connect(s.Oscar).modifyOrder(
+            orderId,
+            order.tokenOut,
+            0n,
+            minAmountOut,
+            order.recipient,
+            false,
+            false,
+            "0x"
+        )
+    })
+
+
+    it("Fill Order", async () => {
+
+        const pendingOrders = await OracleLess.getPendingOrders()
+        const txData = await generateUniTxData(
+            s.WETH,
+            await s.USDC.getAddress(),
+            s.wethAmount,
+            s.router02,
+            s.UniPool,
+            await OracleLess.getAddress(),
+            pendingOrders[0].minAmountOut//5600885752
+        )
+
+        await OracleLess.fillOrder(0n, s.router02, txData)
+    })
+
+
+
 })
 
 
