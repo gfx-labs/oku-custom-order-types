@@ -91,6 +91,12 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             (MasterUpkeepData)
         );
         Order memory order = orders[pendingOrderIds[data.pendingOrderIdx]];
+
+        require(
+            order.orderId == pendingOrderIds[data.pendingOrderIdx],
+            "Order Fill Mismatch"
+        );
+
         //deduce if we are filling stop or take profit
         (bool inRange, bool takeProfit, ) = checkInRange(order);
         require(inRange, "order ! in range");

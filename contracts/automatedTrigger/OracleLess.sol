@@ -132,11 +132,17 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
 
     function fillOrder(
         uint96 pendingOrderIdx,
+        uint96 orderId,
         address target,
         bytes calldata txData
     ) external override{
         //fetch order
-        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
+        Order memory order = orders[orderId];
+
+        require(
+            order.orderId == pendingOrderIds[pendingOrderIdx],
+            "Order Fill Mismatch"
+        );
 
         //perform swap
         (uint256 amountOut, uint256 tokenInRefund) = execute(

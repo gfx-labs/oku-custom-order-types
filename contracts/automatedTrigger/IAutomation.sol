@@ -86,8 +86,6 @@ interface IAutomationMaster is IAutomation {
     ) external view returns (uint256 minAmountReceived);
 
     function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) external view;
-
-
 }
 
 ///@notice Stop Limit orders create a new bracket order once filled
@@ -339,6 +337,7 @@ interface IOracleLess {
 
     function fillOrder(
         uint96 pendingOrderIdx,
+        uint96 orderId,
         address target,
         bytes calldata txData
     ) external;

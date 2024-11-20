@@ -81,6 +81,11 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         );
         Order memory order = orders[pendingOrderIds[data.pendingOrderIdx]];
 
+        require(
+            order.orderId == pendingOrderIds[data.pendingOrderIdx],
+            "Order Fill Mismatch"
+        );
+
         //confirm order is in range to prevent improper fill
         (bool inRange, ) = checkInRange(order);
         require(inRange, "order ! in range");
@@ -133,7 +138,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             false, //permit
             "0x" //permitPayload
         );
-        
+
         emit OrderProcessed(order.orderId);
     }
 
