@@ -34,7 +34,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
 
     function createOrder(
         IERC20 tokenIn,
-        IERC20 tokenOut,
+        IERC20 tokenOut,    
         uint256 amountIn,
         uint256 minAmountOut,
         address recipient,
@@ -144,7 +144,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             txData,
             order
         );
-        
+
         //handle accounting
         //remove from array
         pendingOrderIds = ArrayMutation.removeFromArray(
@@ -157,7 +157,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             amountOut,
             order.feeBips
         );
-
         if (feeAmount != 0) {
             order.tokenOut.safeTransfer(address(MASTER), feeAmount);
         }

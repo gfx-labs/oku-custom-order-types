@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import "./IAutomation.sol";
-import "./AutomationMaster.sol";
 import "../libraries/ArrayMutation.sol";
 import "../interfaces/uniswapV3/UniswapV3Pool.sol";
 import "../interfaces/uniswapV3/IPermit2.sol";
@@ -13,7 +12,6 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../oracle/IOracleRelay.sol";
 
-
 ///@notice This contract owns and handles all logic associated with the following order types:
 /// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independant slippapge for each option
 /// LIMIT_ORDER - automated market swap at specified take profit price
@@ -22,14 +20,14 @@ import "../oracle/IOracleRelay.sol";
 contract Bracket is Ownable, IBracket, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    AutomationMaster public immutable MASTER;
+    IAutomationMaster public immutable MASTER;
     IPermit2 public immutable permit2;
 
     uint96[] public pendingOrderIds;
 
     mapping(uint96 => Order) public orders;
 
-    constructor(AutomationMaster _master, IPermit2 _permit2) {
+    constructor(IAutomationMaster _master, IPermit2 _permit2) {
         MASTER = _master;
         permit2 = _permit2;
     }
@@ -102,51 +100,43 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         takeProfit ? bips = order.takeProfitSlippage : bips = order
             .stopSlippage;
 
-        //todo remove redundant success check
-        (
-            bool success,
-            bytes memory result,
-            uint256 swapAmountOut,
-            uint256 tokenInRefund
-        ) = execute(
-                data.target,
-                data.txData,
-                order.amountIn,
-                order.tokenIn,
-                order.tokenOut,
-                bips
-            );
+        (uint256 swapAmountOut, uint256 tokenInRefund) = execute(
+            data.target,
+            data.txData,
+            order.amountIn,
+            order.tokenIn,
+            order.tokenOut,
+            bips
+        );
 
         //handle accounting
-        if (success) {
-            //remove from pending array
-            pendingOrderIds = ArrayMutation.removeFromArray(
-                data.pendingOrderIdx,
-                pendingOrderIds
-            );
+        //remove from pending array
+        pendingOrderIds = ArrayMutation.removeFromArray(
+            data.pendingOrderIdx,
+            pendingOrderIds
+        );
 
-            //handle fee
-            (uint256 feeAmount, uint256 adjustedAmount) = applyFee(
-                swapAmountOut,
-                order.feeBips
-            );
+        //handle fee
+        (uint256 feeAmount, uint256 adjustedAmount) = applyFee(
+            swapAmountOut,
+            order.feeBips
+        );
 
-            if (feeAmount != 0) {
-                order.tokenOut.safeTransfer(address(MASTER), feeAmount);
-            }
+        if (feeAmount != 0) {
+            order.tokenOut.safeTransfer(address(MASTER), feeAmount);
+        }
 
-            //send tokenOut to recipient
-            order.tokenOut.safeTransfer(order.recipient, adjustedAmount);
+        //send tokenOut to recipient
+        order.tokenOut.safeTransfer(order.recipient, adjustedAmount);
 
-            //refund any unspent tokenIn
-            //this should generally be 0 when using exact input for swaps, which is recommended
-            if (tokenInRefund != 0) {
-                order.tokenIn.safeTransfer(order.recipient, tokenInRefund);
-            }
+        //refund any unspent tokenIn
+        //this should generally be 0 when using exact input for swaps, which is recommended
+        if (tokenInRefund != 0) {
+            order.tokenIn.safeTransfer(order.recipient, tokenInRefund);
         }
 
         //emit
-        emit OrderProcessed(order.orderId, success, result);
+        emit OrderProcessed(order.orderId);
     }
 
     function fillStopLimitOrder(
@@ -412,7 +402,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         require(swapParams.swapSlippage <= 10000, "BIPS > 10k");
 
         //execute the swap
-        (, , uint256 swapAmountOut, uint256 tokenInRefund) = execute(
+        (uint256 swapAmountOut, uint256 tokenInRefund) = execute(
             swapParams.swapTarget,
             swapParams.txData,
             swapParams.swapAmountIn,
@@ -529,15 +519,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         IERC20 tokenIn,
         IERC20 tokenOut,
         uint16 bips
-    )
-        internal
-        returns (
-            bool success,
-            bytes memory result,
-            uint256 swapAmountOut,
-            uint256 tokenInRefund
-        )
-    {
+    ) internal returns (uint256 swapAmountOut, uint256 tokenInRefund) {
         //update accounting
         uint256 initialTokenIn = tokenIn.balanceOf(address(this));
         uint256 initialTokenOut = tokenOut.balanceOf(address(this));
@@ -546,7 +528,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         tokenIn.safeApprove(target, amountIn);
 
         //perform the call
-        (success, result) = target.call(txData);
+        (bool success, bytes memory result) = target.call(txData);
 
         if (success) {
             uint256 finalTokenIn = tokenIn.balanceOf(address(this));

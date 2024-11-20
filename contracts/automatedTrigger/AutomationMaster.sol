@@ -14,11 +14,8 @@ import "../oracle/IOracleRelay.sol";
 
 ///@notice This contract owns and handles all of the settings and accounting logic for automated swaps
 ///@notice This contract should not hold any user funds, only collected fees
-contract AutomationMaster is IAutomation, Ownable {
+contract AutomationMaster is IAutomationMaster, Ownable {
     using SafeERC20 for IERC20;
-
-    ///@notice 10k bips == 100% slippage
-    uint16 public constant MAX_BIPS = 10000;
 
     ///@notice maximum pending orders that may exist at a time, limiting the compute requriement for checkUpkeep
     uint16 public maxPendingOrders;
@@ -32,7 +29,7 @@ contract AutomationMaster is IAutomation, Ownable {
 
     ///each token must have a registered oracle in order to be tradable
     mapping(IERC20 => IOracleRelay) public oracles;
-    mapping(IERC20 => bytes32) public pythIds; 
+    mapping(IERC20 => bytes32) public pythIds;
 
     ///@notice register Stop Limit and Bracket order contracts
     function registerSubKeepers(
@@ -76,7 +73,7 @@ contract AutomationMaster is IAutomation, Ownable {
     function getExchangeRate(
         IERC20 tokenIn,
         IERC20 tokenOut
-    ) external view returns (uint256 exchangeRate) {
+    ) external view override returns (uint256 exchangeRate) {
         return _getExchangeRate(tokenIn, tokenOut);
     }
 
@@ -93,7 +90,7 @@ contract AutomationMaster is IAutomation, Ownable {
     }
 
     ///@notice generate a random and unique order id
-    function generateOrderId(address sender) public view returns (uint96) {
+    function generateOrderId(address sender) external view override returns (uint96) {
         uint256 hashedValue = uint256(
             keccak256(abi.encodePacked(sender, block.timestamp))
         );
@@ -108,7 +105,7 @@ contract AutomationMaster is IAutomation, Ownable {
         IERC20 tokenIn,
         IERC20 tokenOut,
         uint96 slippageBips
-    ) external view returns (uint256 minAmountReceived) {
+    ) external view override returns (uint256 minAmountReceived) {
         uint256 exchangeRate = _getExchangeRate(tokenIn, tokenOut);
 
         // Adjust for decimal differences between tokens
@@ -121,8 +118,8 @@ contract AutomationMaster is IAutomation, Ownable {
         // Calculate the fair amount out without slippage
         uint256 fairAmountOut = (adjustedAmountIn * exchangeRate) / 1e8;
 
-        // Apply slippage (MAX_BIPS is 10000, representing 100%)
-        return (fairAmountOut * (MAX_BIPS - slippageBips)) / MAX_BIPS;
+        // Apply slippage - 10000 bips is equivilant to 100% slippage
+        return (fairAmountOut * (10000 - slippageBips)) / 10000;
     }
 
     ///@notice account for token scale when computing token amounts based on slippage bips
@@ -147,7 +144,7 @@ contract AutomationMaster is IAutomation, Ownable {
 
     ///@notice determine if a new order meets the minimum order size requirement
     ///Value of @param amountIn of @param tokenIn must meed the minimum USD value
-    function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) public view {
+    function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) external view override {
         uint256 currentPrice = oracles[tokenIn].currentValue();
         uint256 usdValue = (currentPrice * amountIn) /
             (10 ** ERC20(address(tokenIn)).decimals());

@@ -29,6 +29,7 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         s.Charles = s.signers[3]
         s.Steve = s.signers[4]
         s.Oscar = s.signers[5]
+        s.Gary = s.signers[6]
 
 
         s.UniPool = UniswapV3Pool__factory.connect(s.pool, s.Frank)
@@ -214,7 +215,7 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(await s.StopLimit.pendingOrderIds.length).to.eq(0, "no pending orders left")
 
         //stop-limit order filled event
-        const Filter = s.StopLimit.filters.StopLimitOrderProcessed
+        const Filter = s.StopLimit.filters.OrderProcessed
         const Events = await s.StopLimit.queryFilter(Filter, -1)
         const Event = Events[0].args
         expect(Event.orderId).to.eq(orderId, "Order Id correct")
@@ -614,7 +615,6 @@ describe("Execute Bracket Upkeep", () => {
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         expect(event.orderId).to.eq(orderId, "Order Id correct")
-        expect(event.success).to.eq(true, "Swap succeeded")
 
         //no tokens left on contract
         expect(await s.WETH.balanceOf(await s.Bracket.getAddress())).to.eq(0n, "0 s.WETH left on contract")
@@ -929,7 +929,6 @@ describe("Bracket order with order modification", () => {
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         expect(event.orderId).to.eq(orderId, "Order Id correct")
-        expect(event.success).to.eq(true, "Swap succeeded")
 
         //no tokens left on contract
         expect(await s.WETH.balanceOf(await s.Bracket.getAddress())).to.eq(0n, "0 s.WETH left on contract")
@@ -953,19 +952,18 @@ describe("Bracket order with order modification", () => {
 })
 
 describe("Oracle Less", () => {
-    let OracleLess: OracleLess
     const expectedAmountOut = 5600885752n
     const minAmountOut = expectedAmountOut - 50n
     let orderId: bigint
     before(async () => {
-        OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2)
+        s.OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2)
         await stealMoney(s.wethWhale, await s.Oscar.getAddress(), await s.WETH.getAddress(), s.wethAmount)
     })
 
     it("Create Order", async () => {
 
-        await s.WETH.connect(s.Oscar).approve(await OracleLess.getAddress(), s.wethAmount)
-        await OracleLess.connect(s.Oscar).createOrder(
+        await s.WETH.connect(s.Oscar).approve(await s.OracleLess.getAddress(), s.wethAmount)
+        await s.OracleLess.connect(s.Oscar).createOrder(
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             s.wethAmount,
@@ -975,19 +973,31 @@ describe("Oracle Less", () => {
             false,
             "0x"
         )
-        const filter = OracleLess.filters.OrderCreated
-        const events = await OracleLess.queryFilter(filter, -1)
+        const filter = s.OracleLess.filters.OrderCreated
+        const events = await s.OracleLess.queryFilter(filter, -1)
         const event = events[0].args
         expect(Number(event[0])).to.not.eq(0, "New order")
         orderId = (event[0])
     })
     it("Modify Amount In", async () => {
-        const order = await OracleLess.orders(orderId)
+        const order = await s.OracleLess.orders(orderId)
         const delta = 10000000n
         const initialWeth = await s.WETH.balanceOf(await s.Oscar.getAddress())
 
+        //imposter
+        expect(s.OracleLess.connect(s.Bob).modifyOrder(
+            orderId,
+            order.tokenOut,
+            delta,
+            order.minAmountOut,
+            order.recipient,
+            false,
+            false,
+            "0x"
+        )).to.be.revertedWith("only order owner")
+
         //decrease amount
-        await OracleLess.connect(s.Oscar).modifyOrder(
+        await s.OracleLess.connect(s.Oscar).modifyOrder(
             orderId,
             order.tokenOut,
             delta,
@@ -998,19 +1008,29 @@ describe("Oracle Less", () => {
             "0x"
         )
         //check for refund
-        expect(await s.WETH.balanceOf(await s.Oscar.getAddress()))
+        expect(await s.WETH.balanceOf(await s.Oscar.getAddress())).to.eq(initialWeth + delta, "WETH received")
 
         //increase back to original
-
-
+        await s.WETH.connect(s.Oscar).approve(await s.OracleLess.getAddress(), delta)
+        await s.OracleLess.connect(s.Oscar).modifyOrder(
+            orderId,
+            order.tokenOut,
+            delta,
+            order.minAmountOut,
+            order.recipient,
+            true,
+            false,
+            "0x"
+        )
+        expect(await s.WETH.balanceOf(await s.Oscar.getAddress())).to.eq(initialWeth, "WETH spent")
 
     })
 
     it("Modify Amount Received", async () => {
 
-        const order = await OracleLess.orders(orderId)
+        const order = await s.OracleLess.orders(orderId)
         //increase min amount down
-        await OracleLess.connect(s.Oscar).modifyOrder(
+        await s.OracleLess.connect(s.Oscar).modifyOrder(
             orderId,
             order.tokenOut,
             0n,
@@ -1027,14 +1047,14 @@ describe("Oracle Less", () => {
             s.wethAmount,
             s.router02,
             s.UniPool,
-            await OracleLess.getAddress(),
+            await s.OracleLess.getAddress(),
             0n//pendingOrders[0].minAmountOut//5600885752
         )
-        expect(OracleLess.fillOrder(0n, s.router02, txData)).to.be.revertedWith("Too Little Received")
+        expect(s.OracleLess.fillOrder(0n, s.router02, txData)).to.be.revertedWith("Too Little Received")
 
         //reset
         await s.WETH.connect
-        await OracleLess.connect(s.Oscar).modifyOrder(
+        await s.OracleLess.connect(s.Oscar).modifyOrder(
             orderId,
             order.tokenOut,
             0n,
@@ -1049,21 +1069,19 @@ describe("Oracle Less", () => {
 
     it("Fill Order", async () => {
 
-        const pendingOrders = await OracleLess.getPendingOrders()
+        const pendingOrders = await s.OracleLess.getPendingOrders()
         const txData = await generateUniTxData(
             s.WETH,
             await s.USDC.getAddress(),
             s.wethAmount,
             s.router02,
             s.UniPool,
-            await OracleLess.getAddress(),
+            await s.OracleLess.getAddress(),
             pendingOrders[0].minAmountOut//5600885752
         )
 
-        await OracleLess.fillOrder(0n, s.router02, txData)
+        await s.OracleLess.fillOrder(0n, s.router02, txData)
     })
-
-
 
 })
 

@@ -4,6 +4,8 @@ pragma solidity ^0.8.19;
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "../interfaces/uniswapV3/IPermit2.sol";
+import "../oracle/IOracleRelay.sol";
+
 
 interface IAutomation is AutomationCompatibleInterface {
     ///@notice force a revert if the external call fails
@@ -58,16 +60,39 @@ interface IAutomation is AutomationCompatibleInterface {
         bytes txData;
     }
 
-    event OrderProcessed(uint96 orderId, bool success, bytes result);
+    event OrderProcessed(uint96 orderId);
     event OrderCreated(uint96 orderId);
     event OrderCancelled(uint96 orderId);
+}
+
+interface IAutomationMaster is IAutomation {
+
+    function STOP_LIMIT_CONTRACT() external view returns (IStopLimit);
+    function oracles(IERC20 token) external view returns (IOracleRelay);
+    function maxPendingOrders() external view returns (uint16);
+
+    function getExchangeRate(
+        IERC20 tokenIn,
+        IERC20 tokenOut
+    ) external view returns (uint256 exchangeRate);
+
+    function generateOrderId(address sender) external view returns (uint96);
+
+    function getMinAmountReceived(
+        uint256 amountIn,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        uint96 slippageBips
+    ) external view returns (uint256 minAmountReceived);
+
+    function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) external view;
+
+
 }
 
 ///@notice Stop Limit orders create a new bracket order once filled
 /// the resulting bracket order will have the same unique order ID but will exist on the Bracket contract
 interface IStopLimit is IAutomation {
-    event StopLimitOrderProcessed(uint256 orderId);
-
     ///@notice StopLimit orders create a new bracket order once @param stopLimitPrice is reached
     ///@param stopLimitPrice execution price to fill the Stop Limit order
     ///@param takeProfit execution price for resulting Bracket order
