@@ -10,7 +10,6 @@ import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
-import "../oracle/IOracleRelay.sol";
 
 ///@notice This contract owns and handles all logic associated with the following order types:
 /// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independant slippapge for each option

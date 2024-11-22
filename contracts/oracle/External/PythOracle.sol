@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import "../IOracleRelay.sol";
+import "../IPythRelay.sol";
 import "../../interfaces/chainlink/IAggregator.sol";
 import "../../interfaces/pyth/IPyth.sol";
-//import "../../interfaces/openzeppelin/ERC20.sol";
 
 
-
-contract PythOracle is IOracleRelay {
+contract PythOracle is IPythRelay {
     IPyth public immutable pythOracle;
     bytes32 public immutable tokenId;
     uint256 public immutable noOlderThan;
@@ -37,21 +35,21 @@ contract PythOracle is IOracleRelay {
 
     function updatePrice(
         bytes[] calldata priceUpdate
-    ) external payable returns (uint256) {
-        //check if price is unsafe
-        IPyth.Price memory price = pythOracle.getPriceUnsafe(tokenId);
+    ) external payable override returns (uint256 updatedPrice) {
+        // Submit a priceUpdate to the Pyth contract to update the on-chain price.
+        // Updating the price requires paying the fee returned by getUpdateFee.
+        // WARNING: These lines are required to ensure the getPriceNoOlderThan call below succeeds. If you remove them, transactions may fail with "0x19abf40e" error.
+        uint fee = pythOracle.getUpdateFee(priceUpdate);
+        pythOracle.updatePriceFeeds{value: fee}(priceUpdate);
 
-        if (price.publishTime < block.timestamp - noOlderThan) {
-            // Submit a priceUpdate to the Pyth contract to update the on-chain price.
-            // Updating the price requires paying the fee returned by getUpdateFee.
-            // WARNING: These lines are required to ensure the getPriceNoOlderThan call below succeeds. If you remove them, transactions may fail with "0x19abf40e" error.
-            uint fee = pythOracle.getUpdateFee(priceUpdate);
-            pythOracle.updatePriceFeeds{value: fee}(priceUpdate);
+        IPyth.Price memory price = pythOracle.getPriceNoOlderThan(
+            tokenId,
+            uint256(uint64(noOlderThan))
+        );
+        updatedPrice = uint256(uint64(price.price));
+    }
 
-            price = pythOracle.getPriceNoOlderThan(tokenId, uint256(uint64(noOlderThan)));
-        }
-
-        //scale price and return
-        return uint256(uint64(price.price));
+    function getUpdateFee(bytes[] calldata priceUpdate) external view override returns (uint fee){
+        return pythOracle.getUpdateFee(priceUpdate);
     }
 }

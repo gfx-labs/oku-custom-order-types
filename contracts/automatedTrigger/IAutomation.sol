@@ -4,8 +4,7 @@ pragma solidity ^0.8.19;
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "../interfaces/uniswapV3/IPermit2.sol";
-import "../oracle/IOracleRelay.sol";
-
+import "../oracle/IPythRelay.sol";
 
 interface IAutomation is AutomationCompatibleInterface {
     ///@notice force a revert if the external call fails
@@ -62,13 +61,13 @@ interface IAutomation is AutomationCompatibleInterface {
 
     event OrderProcessed(uint96 orderId);
     event OrderCreated(uint96 orderId);
+    event OrderModified(uint96 orderId);
     event OrderCancelled(uint96 orderId);
 }
 
 interface IAutomationMaster is IAutomation {
-
     function STOP_LIMIT_CONTRACT() external view returns (IStopLimit);
-    function oracles(IERC20 token) external view returns (IOracleRelay);
+    function oracles(IERC20 token) external view returns (IPythRelay);
     function maxPendingOrders() external view returns (uint16);
 
     function getExchangeRate(
@@ -296,6 +295,7 @@ interface IBracket is IAutomation {
 interface IOracleLess {
     event OrderCreated(uint96 orderId);
     event OrderCancelled(uint96 orderId);
+    event OrderModified(uint96 orderId);
     event OrderProcessed(uint96 orderId);
 
     ///@notice force a revert if the external call fails

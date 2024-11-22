@@ -7,7 +7,6 @@ import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "./AutomationMaster.sol";
 import "../libraries/ArrayMutation.sol";
 
-
 contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     AutomationMaster public immutable MASTER;
@@ -24,9 +23,13 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
 
     ///@return pendingOrders a full list of all pending orders with full order details
     ///@notice this should not be called in a write function due to gas usage
-    function getPendingOrders() external view returns (Order[] memory pendingOrders){
-        pendingOrders =  new Order[] (pendingOrderIds.length);
-        for(uint96 i = 0; i < pendingOrderIds.length; i++){
+    function getPendingOrders()
+        external
+        view
+        returns (Order[] memory pendingOrders)
+    {
+        pendingOrders = new Order[](pendingOrderIds.length);
+        for (uint96 i = 0; i < pendingOrderIds.length; i++) {
             Order memory order = orders[pendingOrderIds[i]];
             pendingOrders[i] = order;
         }
@@ -34,14 +37,14 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
 
     function createOrder(
         IERC20 tokenIn,
-        IERC20 tokenOut,    
+        IERC20 tokenOut,
         uint256 amountIn,
         uint256 minAmountOut,
         address recipient,
         uint16 feeBips,
         bool permit,
         bytes calldata permitPayload
-    ) external override returns (uint96 orderId){
+    ) external override returns (uint96 orderId) {
         //procure tokens
         procureTokens(tokenIn, amountIn, recipient, permit, permitPayload);
 
@@ -68,7 +71,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         require(_cancelOrder(order), "Order not active");
     }
 
-    function cancelOrder(uint96 orderId) external override{
+    function cancelOrder(uint96 orderId) external override {
         Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(order), "Order not active");
@@ -84,50 +87,17 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         bool permit,
         bytes calldata permitPayload
     ) external override {
-        //fetch order
-        Order memory order = orders[orderId];
-
-        require(msg.sender == order.recipient, "only order owner");
-
-        //deduce any amountIn changes
-        uint256 newAmountIn = order.amountIn;
-        if (amountInDelta != 0) {
-            if (increasePosition) {
-                //take more tokens from order recipient
-                newAmountIn += amountInDelta;
-                procureTokens(
-                    order.tokenIn,
-                    amountInDelta,
-                    order.recipient,
-                    permit,
-                    permitPayload
-                );
-            } else {
-                //refund some tokens
-                //ensure delta is valid
-                require(amountInDelta < order.amountIn, "invalid delta");
-
-                //set new amountIn for accounting
-                newAmountIn -= amountInDelta;
-
-                //refund position partially
-                order.tokenIn.safeTransfer(order.recipient, amountInDelta);
-            }
-        }
-
-        //construct new order
-        Order memory newOrder = Order({
-            orderId: orderId,
-            tokenIn: order.tokenIn,
-            tokenOut: _tokenOut,
-            amountIn: newAmountIn,
-            minAmountOut: _minAmountOut,
-            feeBips: order.feeBips,
-            recipient: _recipient
-        });
-
-        //store new order
-        orders[orderId] = newOrder;
+        _modifyOrder(
+            orderId,
+            _tokenOut,
+            amountInDelta,
+            _minAmountOut,
+            _recipient,
+            increasePosition,
+            permit,
+            permitPayload
+        );
+        emit OrderModified(orderId);
     }
 
     function fillOrder(
@@ -135,7 +105,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint96 orderId,
         address target,
         bytes calldata txData
-    ) external override{
+    ) external override {
         //fetch order
         Order memory order = orders[orderId];
 
@@ -196,6 +166,62 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             }
         }
         return false;
+    }
+
+    function _modifyOrder(
+        uint96 orderId,
+        IERC20 _tokenOut,
+        uint256 amountInDelta,
+        uint256 _minAmountOut,
+        address _recipient,
+        bool increasePosition,
+        bool permit,
+        bytes calldata permitPayload
+    ) internal {
+        //fetch order
+        Order memory order = orders[orderId];
+
+        require(msg.sender == order.recipient, "only order owner");
+
+        //deduce any amountIn changes
+        uint256 newAmountIn = order.amountIn;
+        if (amountInDelta != 0) {
+            if (increasePosition) {
+                //take more tokens from order recipient
+                newAmountIn += amountInDelta;
+                procureTokens(
+                    order.tokenIn,
+                    amountInDelta,
+                    order.recipient,
+                    permit,
+                    permitPayload
+                );
+            } else {
+                //refund some tokens
+                //ensure delta is valid
+                require(amountInDelta < order.amountIn, "invalid delta");
+
+                //set new amountIn for accounting
+                newAmountIn -= amountInDelta;
+
+                //refund position partially
+                order.tokenIn.safeTransfer(order.recipient, amountInDelta);
+            }
+        }
+
+        //construct new order
+        Order memory newOrder = Order({
+            orderId: orderId,
+            tokenIn: order.tokenIn,
+            tokenOut: _tokenOut,
+            amountIn: newAmountIn,
+            minAmountOut: _minAmountOut,
+            feeBips: order.feeBips,
+            recipient: _recipient
+        });
+
+        //store new order
+        orders[orderId] = newOrder;
     }
 
     function execute(

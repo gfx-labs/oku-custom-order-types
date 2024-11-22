@@ -10,7 +10,7 @@ import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/pyth/IPyth.sol";
-import "../oracle/IOracleRelay.sol";
+import "../oracle/IPythRelay.sol";
 
 ///@notice This contract owns and handles all of the settings and accounting logic for automated swaps
 ///@notice This contract should not hold any user funds, only collected fees
@@ -28,7 +28,7 @@ contract AutomationMaster is IAutomationMaster, Ownable {
     IBracket public BRACKET_CONTRACT;
 
     ///each token must have a registered oracle in order to be tradable
-    mapping(IERC20 => IOracleRelay) public oracles;
+    mapping(IERC20 => IPythRelay) public oracles;
     mapping(IERC20 => bytes32) public pythIds;
 
     ///@notice register Stop Limit and Bracket order contracts
@@ -43,7 +43,7 @@ contract AutomationMaster is IAutomationMaster, Ownable {
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
     function registerOracle(
         IERC20[] calldata _tokens,
-        IOracleRelay[] calldata _oracles
+        IPythRelay[] calldata _oracles
     ) external onlyOwner {
         require(_tokens.length == _oracles.length, "Array Length Mismatch");
         for (uint i = 0; i < _tokens.length; i++) {
