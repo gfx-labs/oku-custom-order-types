@@ -11,6 +11,9 @@ import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 
+//testing
+import "hardhat/console.sol";
+
 ///@notice This contract owns and handles all logic associated with the following order types:
 /// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independant slippapge for each option
 /// LIMIT_ORDER - automated market swap at specified take profit price
@@ -30,6 +33,27 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         MASTER = _master;
         permit2 = _permit2;
     }
+
+    //testing
+    function decodePermit(bytes calldata permitPayload)external view{
+
+        IPermit2.PermitSingle memory single = abi.decode(
+            permitPayload,
+            (IPermit2.PermitSingle)
+        );
+        console.log("DECODED SINGLE");
+
+
+        console.log("DECODING FULL PAYLOAD");
+
+        Permit2Payload memory payload = abi.decode(
+            permitPayload,
+            (Permit2Payload)
+        );
+        console.log("DECODED");
+
+    }
+    //testing
 
     function getPendingOrders() external view returns (uint96[] memory) {
         return pendingOrderIds;

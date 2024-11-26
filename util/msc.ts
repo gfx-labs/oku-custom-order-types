@@ -178,13 +178,7 @@ export const permitSingle = async (
     if (expiration == undefined) {
         expiration = Math.floor(Date.now() / 1000) + 60 * 60 // 1 hour from now
     }
-    
-    const networkName = hre.network.name
-    if(networkName == "hardhat"|| networkName== "localhost"){
-        console.log("IMPERSONATING", await signer.getAddress())
-        signer = await ethers.getSigner(await signer.getAddress())
-        await impersonateAccount(await signer.getAddress())
-    }
+
 
     const PERMIT = IPermit2__factory.connect(permit2, signer)
 

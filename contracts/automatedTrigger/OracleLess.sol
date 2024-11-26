@@ -100,6 +100,44 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         emit OrderModified(orderId);
     }
 
+    function partialFill(
+        uint96 pendingOrderIdx,
+        uint96 orderId,
+        address target,
+        bytes calldata txData
+    ) external {
+        //fetch order
+        Order memory order = orders[orderId];
+
+        require(
+            order.orderId == pendingOrderIds[pendingOrderIdx],
+            "Order Fill Mismatch"
+        );
+
+        //perform swap
+        (uint256 amountOut, uint256 tokenInRefund) = execute(
+            target,
+            txData,
+            order
+        );
+
+        //deduce expected exchange rate
+        //x number of tokenIn for y number of token out
+        //245 tokenIn for 7251 tokenOut => exchange rate of 29.5959 tokenIns for each tokenOut
+        //meaning that if I do a partial fill of 200 tokenIns, I should get ~5,919.18 or better tokenOuts
+        //If I fill 200 and only receive 5900 then the rate is 29.5
+
+        uint256 expectedExchangeRate = order.minAmountOut / order.amountIn;
+        uint256 exchangeRateReceived = amountOut / tokenInRefund;
+        require(expectedExchangeRate <= exchangeRateReceived, "Invalid Fill Price");
+
+        //execute
+        //determine if the amount of tokens received matches the expected exchange rate or better
+        //accounting
+        //modify order
+    }
+
+    ///@notice fill entire order
     function fillOrder(
         uint96 pendingOrderIdx,
         uint96 orderId,
@@ -120,6 +158,8 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             txData,
             order
         );
+
+        require(amountOut > order.minAmountOut, "Too Little Received");
 
         //handle accounting
         //remove from array
@@ -246,11 +286,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint256 finalTokenIn = order.tokenIn.balanceOf(address(this));
         require(finalTokenIn >= initialTokenIn - order.amountIn, "over spend");
         uint256 finalTokenOut = order.tokenOut.balanceOf(address(this));
-
-        require(
-            finalTokenOut - initialTokenOut > order.minAmountOut,
-            "Too Little Received"
-        );
 
         amountOut = finalTokenOut - initialTokenOut;
         tokenInRefund = order.amountIn - (initialTokenIn - finalTokenIn);

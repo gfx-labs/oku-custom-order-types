@@ -1,12 +1,14 @@
 import hre, { network } from "hardhat";
 import { currentBlock, resetCurrentArb, resetCurrentBase, resetCurrentOP } from "../util/block";
 import { AutomationMaster, AutomationMaster__factory, Bracket, Bracket__factory, IERC20, IERC20__factory, IPermit2__factory, StopLimit, StopLimit__factory, UniswapV3Pool__factory } from "../typechain-types";
-import { AbiCoder, Signer } from "ethers";
+import { AbiCoder, Signer, TypedDataDomain } from "ethers";
 import { impersonateAccount } from "../util/impersonator";
 import { setBalance } from "@nomicfoundation/hardhat-network-helpers";
 import { decodeUpkeepData, generateUniTx, generateUniTxData, MasterUpkeepData, permitSingle } from "../util/msc";
 import { a, b, o } from "../util/addresser";
 import { s, SwapParams } from "../test/triggerV2/scope";
+import { DeployContract } from "../util/deploy";
+import { AllowanceTransfer, PermitDetails, PermitSingle } from "@uniswap/permit2-sdk";
 const { ethers } = require("hardhat");
 
 
@@ -112,21 +114,26 @@ async function main() {
     Bracket = Bracket__factory.connect(bracketAddr, signer)
 
     if (!mainnet) {
-        signer = await ethers.getSigner(userAddr)
 
         //testing does not scale tx cost correctly 
         await setBalance(await signer.getAddress(), ethers.parseEther("1"))
         await impersonateAccount(await signer.getAddress())
+        signer = await ethers.getSigner(userAddr)
+        console.log("IMPERSONATED")
 
     }
     const delta = ethers.parseUnits("50", 8)
 
+    /**
     await createStopLimitOrder(signer, delta)
     await createStopLimitOrder(signer, delta * 2n)
     await createStopLimitOrder(signer, delta * 3n)
     await createBracketOrder(signer, delta)
     await createBracketOrder(signer, delta * 2n)
     await createBracketOrder(signer, delta * 3n)
+     */
+    //await createBracketPermit(signer)
+    await testDecode()
 
 
 }
@@ -147,7 +154,7 @@ const createBracketOrder = async (signer: Signer, delta: bigint) => {
         500,
         500,
         false,
-        "0x" 
+        "0x"
     )
 }
 
@@ -174,25 +181,259 @@ const createStopLimitOrder = async (signer: Signer, delta: bigint) => {
     )
 
 
-    
+
 }
 
-const createStopLimitPermit = async (signer: Signer) => {
+const testDecode = async () => {
 
-    const permit = await permitSingle(
+    //clean slate
+    await resetCurrentOP()
+    const signer = await ethers.getSigner(userAddr)
+
+    await setBalance(await signer.getAddress(), ethers.parseEther("1"))
+    await impersonateAccount(await signer.getAddress())
+    console.log("IMPERSONATED", await signer.getAddress())
+
+    let newBracket: Bracket
+    newBracket = await DeployContract(new Bracket__factory(signer), signer, masterAddr, o.permit2)
+
+    const abi = new AbiCoder()
+    const permit = {
+        signature: '0xa60d1e049b3f3444bbf564b25dfe8f27e6110ccdb24088c260926e2d3e4e7f0f7ee32c681d1536b1c6a839c7993035bc0726f3ba1b4e296ffe98929a65d5389f1b',
+        permitSingle: {
+            details: {
+                token: '0x4200000000000000000000000000000000000006',
+                amount: '500000000000000',
+                expiration: '1732572972',
+                nonce: '0'
+            },
+            spender: '0xA90307cF7EE55eb6DEA5f55F37101c02b0a55acE',
+            sigDeadline: '1732659372'
+        }
+    }
+
+    const types = [
+        "(address,uint160,uint48,uint48)",
+        "address",
+        "uint256"
+    ];
+
+    const values = [
+        [
+            permit.permitSingle.details.token,
+            permit.permitSingle.details.amount,
+            permit.permitSingle.details.expiration,
+            permit.permitSingle.details.nonce
+        ],
+        permit.permitSingle.spender,
+        permit.permitSingle.sigDeadline
+    ];
+
+    const encoded = abi.encode(types, values)
+
+    await newBracket.decodePermit(encoded)
+
+    /**
+    const types = [
+        "tuple(tuple(address token, uint160 amount, uint48 expiration, uint48 nonce) details, address spender, uint256 sigDeadline)"
+    ];
+     */
+
+
+
+
+
+
+}
+
+const encode = (permit: any) => {
+    const bigTuple = "tuple(" +
+        "tuple(address token, uint160 amount, uint48 expiration, uint48 nonce) details, " +
+        "address spender, " +
+        "uint48 sigDeadline" +
+        ") permitSingle"
+
+
+    const abi = new AbiCoder()
+    const types = [
+        "tuple(tuple(address token, uint160 amount, uint48 expiration, uint48 nonce) details, address spender, uint256 sigDeadline)"
+    ];
+    const values = [
+        [
+            permit.details.token,
+            permit.details.amount,
+            permit.details.expiration,
+            permit.details.nonce,
+        ],
+        permit.spender,
+        permit.sigDeadline,
+    ];
+
+    const encoded = abi.encode(types, values)
+
+    /**
+    const encoded = abi.encode(
+        [
+            bigTuple,
+            "bytes"
+        ],
+        [
+            [
+                [
+                    permit.permitSingle.details.token,
+                    permit.permitSingle.details.amount,
+                    permit.permitSingle.details.expiration,
+                    permit.permitSingle.details.nonce
+                ],
+                permit.permitSingle.spender,
+                permit.permitSingle.sigDeadline
+            ],
+            permit.signature
+        ]
+    );
+     */
+
+    return encoded
+}
+
+const createBracketPermit = async (signer: Signer) => {
+
+
+    //determine if permit2 is approved already
+    const allowance = await WETH.allowance(await signer.getAddress(), o.permit2)
+    console.log("ALLOWANCE: ", allowance)
+    if (allowance < wethAmount) {
+        await WETH.connect(signer).approve(o.permit2, wethAmount * 5000n)
+    }
+
+    //get permitSingle
+    let permit = await permitSingle(
         signer,
         chainId,
         await WETH.getAddress(),
         wethAmount,
-        await StopLimit.getAddress(),
+        await Bracket.getAddress(),
         o.permit2
     )
+
+    console.log("Got permit")
+    console.log(permit)
+
+    const bigTuple = "tuple(" +
+        "tuple(address token, uint160 amount, uint48 expiration, uint48 nonce) details, " +
+        "address spender, " +
+        "uint48 sigDeadline" +
+        ") permitSingle"
+
 
     const abi = new AbiCoder()
     const encoded = abi.encode(
         [
+            bigTuple,
+            "bytes"
+        ],
+        [
+            [
+                [
+                    permit.permitSingle.details.token,
+                    permit.permitSingle.details.amount,
+                    permit.permitSingle.details.expiration,
+                    permit.permitSingle.details.nonce
+                ],
+                permit.permitSingle.spender,
+                permit.permitSingle.sigDeadline
+            ],
+            permit.signature
+        ]
+    );
+
+
+
+    /**
+     * 
+    const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
+    const delta = ethers.parseUnits("50", 8)
+    const populatedTx = await newBracket.connect(signer).createOrder.populateTransaction(
+        "0x",
+        currentPrice + delta,
+        currentPrice - (delta * 2n),
+        wethAmount,
+        await WETH.getAddress(),
+        await USDC.getAddress(),
+        await signer.getAddress(),
+        5,
+        500,
+        500,
+        true,
+        encoded
+    )
+    
+    console.log("Populated TX: ", "from: ", await signer.getAddress(), populatedTx)
+
+    await newBracket.connect(signer).createOrder(
+        "0x",
+        currentPrice + delta,
+        currentPrice - (delta * 2n),
+        wethAmount,
+        await WETH.getAddress(),
+        await USDC.getAddress(),
+        await signer.getAddress(),
+        5,
+        500,
+        500,
+        true,
+        encoded
+    )
+     */
+
+
+
+    /**
+    // Flatten the `permitSingle` structure
+    const details = permit.permitSingle.details;
+    const permitSingleFlattened = [
+        details.token,
+        BigInt(details.amount), // Ensure `amount` is a BigInt
+        parseInt(details.expiration), // Parse to correct type
+        parseInt(details.nonce), // Parse to correct type
+        permit.permitSingle.spender,
+        BigInt(permit.permitSingle.sigDeadline),
+    ];
+
+    const encoded = abi.encode(
+        [
+            "(address,uint160,uint48,uint48,address,uint256)", // Flattened `PermitSingle`
+            "bytes", // Signature
+        ],
+        [permitSingleFlattened, permit.signature]
+    );
+     */
+
+
+
+    /**
+    const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
+    const delta = ethers.parseUnits("50", 8)   
+    await Bracket.connect(signer).createOrder(
+        "0x",
+        currentPrice + delta,
+        currentPrice - (delta * 2n),
+        wethAmount,
+        await WETH.getAddress(),
+        await USDC.getAddress(),
+        await signer.getAddress(),
+        5,
+        500,
+        500,
+        true,
+        encoded
+    )
+     */
+    /**
+    const encoded = abi.encode(
+        [
             "tuple(" +
-            "tuple(address token, uint160 amount, uint48 nonce, uint48 expiry) details, " +
+            "tuple(address token, uint160 amount, uint48 nonce, uint48 expiration) details, " +
             "address spender, " +
             "uint48 sigDeadline" +
             "), " +
@@ -212,8 +453,7 @@ const createStopLimitPermit = async (signer: Signer) => {
             permit.signature
         ]
     );
-    //await StopLimit.connect(signer)
-
+     */
 }
 
 const checkOrder = async (signer: Signer) => {

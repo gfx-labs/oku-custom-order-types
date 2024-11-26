@@ -303,7 +303,7 @@ const deployEverything = async (signer: Signer) => {
   //stop loss limit
   Bracket = await DeployContract(new Bracket__factory(signer), signer, masterAddr, permit2Addr)
   bracketAddr = await Bracket.getAddress()
-  console.log("DEPLOYED STOP_LOSS_LIMIT: ", await Bracket.getAddress())
+  console.log("DEPLOYED BRACKET: ", await Bracket.getAddress())
   await Bracket.deploymentTransaction()
   //await new Promise(f => setTimeout(f, 5000));
 
