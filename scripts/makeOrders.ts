@@ -132,8 +132,8 @@ async function main() {
     await createBracketOrder(signer, delta * 2n)
     await createBracketOrder(signer, delta * 3n)
      */
-    //await createBracketPermit(signer)
-    await testDecode()
+    await createBracketPermit(signer)
+    //await testDecode()
 
 
 }
@@ -211,25 +211,28 @@ const testDecode = async () => {
             sigDeadline: '1732659372'
         }
     }
-
     const types = [
-        "(address,uint160,uint48,uint48)",
-        "address",
-        "uint256"
+        "(((address,uint160,uint48,uint48),address,uint256),bytes)"
     ];
 
     const values = [
         [
-            permit.permitSingle.details.token,
-            permit.permitSingle.details.amount,
-            permit.permitSingle.details.expiration,
-            permit.permitSingle.details.nonce
-        ],
-        permit.permitSingle.spender,
-        permit.permitSingle.sigDeadline
+            [
+                [
+                    permit.permitSingle.details.token,
+                    permit.permitSingle.details.amount,
+                    permit.permitSingle.details.expiration,
+                    permit.permitSingle.details.nonce
+                ],
+                permit.permitSingle.spender,
+                permit.permitSingle.sigDeadline
+            ],
+            permit.signature
+        ]
     ];
 
-    const encoded = abi.encode(types, values)
+    const encoded = encode(permit)
+    console.log(encoded)
 
     await newBracket.decodePermit(encoded)
 
@@ -247,36 +250,11 @@ const testDecode = async () => {
 }
 
 const encode = (permit: any) => {
-    const bigTuple = "tuple(" +
-        "tuple(address token, uint160 amount, uint48 expiration, uint48 nonce) details, " +
-        "address spender, " +
-        "uint48 sigDeadline" +
-        ") permitSingle"
-
-
-    const abi = new AbiCoder()
     const types = [
-        "tuple(tuple(address token, uint160 amount, uint48 expiration, uint48 nonce) details, address spender, uint256 sigDeadline)"
+        "(((address,uint160,uint48,uint48),address,uint256),bytes)"
     ];
+
     const values = [
-        [
-            permit.details.token,
-            permit.details.amount,
-            permit.details.expiration,
-            permit.details.nonce,
-        ],
-        permit.spender,
-        permit.sigDeadline,
-    ];
-
-    const encoded = abi.encode(types, values)
-
-    /**
-    const encoded = abi.encode(
-        [
-            bigTuple,
-            "bytes"
-        ],
         [
             [
                 [
@@ -290,8 +268,9 @@ const encode = (permit: any) => {
             ],
             permit.signature
         ]
-    );
-     */
+    ];
+    const abi = new AbiCoder()
+    const encoded = abi.encode(types, values)
 
     return encoded
 }
@@ -316,104 +295,9 @@ const createBracketPermit = async (signer: Signer) => {
         o.permit2
     )
 
-    console.log("Got permit")
-    console.log(permit)
-
-    const bigTuple = "tuple(" +
-        "tuple(address token, uint160 amount, uint48 expiration, uint48 nonce) details, " +
-        "address spender, " +
-        "uint48 sigDeadline" +
-        ") permitSingle"
-
-
-    const abi = new AbiCoder()
-    const encoded = abi.encode(
-        [
-            bigTuple,
-            "bytes"
-        ],
-        [
-            [
-                [
-                    permit.permitSingle.details.token,
-                    permit.permitSingle.details.amount,
-                    permit.permitSingle.details.expiration,
-                    permit.permitSingle.details.nonce
-                ],
-                permit.permitSingle.spender,
-                permit.permitSingle.sigDeadline
-            ],
-            permit.signature
-        ]
-    );
-
-
-
-    /**
-     * 
+    const encodedPayload = encode(permit)
     const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
     const delta = ethers.parseUnits("50", 8)
-    const populatedTx = await newBracket.connect(signer).createOrder.populateTransaction(
-        "0x",
-        currentPrice + delta,
-        currentPrice - (delta * 2n),
-        wethAmount,
-        await WETH.getAddress(),
-        await USDC.getAddress(),
-        await signer.getAddress(),
-        5,
-        500,
-        500,
-        true,
-        encoded
-    )
-    
-    console.log("Populated TX: ", "from: ", await signer.getAddress(), populatedTx)
-
-    await newBracket.connect(signer).createOrder(
-        "0x",
-        currentPrice + delta,
-        currentPrice - (delta * 2n),
-        wethAmount,
-        await WETH.getAddress(),
-        await USDC.getAddress(),
-        await signer.getAddress(),
-        5,
-        500,
-        500,
-        true,
-        encoded
-    )
-     */
-
-
-
-    /**
-    // Flatten the `permitSingle` structure
-    const details = permit.permitSingle.details;
-    const permitSingleFlattened = [
-        details.token,
-        BigInt(details.amount), // Ensure `amount` is a BigInt
-        parseInt(details.expiration), // Parse to correct type
-        parseInt(details.nonce), // Parse to correct type
-        permit.permitSingle.spender,
-        BigInt(permit.permitSingle.sigDeadline),
-    ];
-
-    const encoded = abi.encode(
-        [
-            "(address,uint160,uint48,uint48,address,uint256)", // Flattened `PermitSingle`
-            "bytes", // Signature
-        ],
-        [permitSingleFlattened, permit.signature]
-    );
-     */
-
-
-
-    /**
-    const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
-    const delta = ethers.parseUnits("50", 8)   
     await Bracket.connect(signer).createOrder(
         "0x",
         currentPrice + delta,
@@ -426,34 +310,8 @@ const createBracketPermit = async (signer: Signer) => {
         500,
         500,
         true,
-        encoded
+        encodedPayload
     )
-     */
-    /**
-    const encoded = abi.encode(
-        [
-            "tuple(" +
-            "tuple(address token, uint160 amount, uint48 nonce, uint48 expiration) details, " +
-            "address spender, " +
-            "uint48 sigDeadline" +
-            "), " +
-            "bytes"
-        ],
-        [
-            [
-                [
-                    permit.permitSingle.details.token,
-                    permit.permitSingle.details.amount,
-                    permit.permitSingle.details.nonce,
-                    permit.permitSingle.details.expiration
-                ],
-                permit.permitSingle.spender,
-                permit.permitSingle.sigDeadline
-            ],
-            permit.signature
-        ]
-    );
-     */
 }
 
 const checkOrder = async (signer: Signer) => {

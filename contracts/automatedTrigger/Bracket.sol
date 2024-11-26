@@ -37,11 +37,14 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     //testing
     function decodePermit(bytes calldata permitPayload)external view{
 
+        /**
         IPermit2.PermitSingle memory single = abi.decode(
             permitPayload,
             (IPermit2.PermitSingle)
         );
         console.log("DECODED SINGLE");
+        console.log(single.sigDeadline);
+         */
 
 
         console.log("DECODING FULL PAYLOAD");
@@ -50,7 +53,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             permitPayload,
             (Permit2Payload)
         );
-        console.log("DECODED");
+        console.logBytes(payload.signature);
 
     }
     //testing
