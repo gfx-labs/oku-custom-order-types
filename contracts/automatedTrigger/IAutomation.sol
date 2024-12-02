@@ -296,8 +296,10 @@ interface IOracleLess {
     event OrderCreated(uint96 orderId);
     event OrderCancelled(uint96 orderId);
     event OrderModified(uint96 orderId);
-    event OrderProcessed(uint96 orderId);
+    event OrderFilled(uint96 orderId);
+    event OrderPartiallyFilled(uint96 orderId);
 
+    
     ///@notice force a revert if the external call fails
     error TransactionFailed(bytes reason);
 
@@ -307,6 +309,7 @@ interface IOracleLess {
         IERC20 tokenOut;
         uint256 amountIn;
         uint256 minAmountOut;
+        uint256 exchangeRate;
         address recipient;
         uint16 feeBips;
     }

@@ -7,6 +7,9 @@ import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "./AutomationMaster.sol";
 import "../libraries/ArrayMutation.sol";
 
+//testing 
+import "hardhat/console.sol";
+
 contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     AutomationMaster public immutable MASTER;
@@ -56,6 +59,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             tokenOut: tokenOut,
             amountIn: amountIn,
             minAmountOut: minAmountOut,
+            exchangeRate: deduceExchangeRate(amountIn, minAmountOut),
             recipient: recipient,
             feeBips: feeBips
         });
@@ -87,7 +91,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         bool permit,
         bytes calldata permitPayload
     ) external override {
-        _modifyOrder(
+        (Order memory order, uint256 newAmountIn) = _settleModifiedOrder(
             orderId,
             _tokenOut,
             amountInDelta,
@@ -97,46 +101,12 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             permit,
             permitPayload
         );
+        _modifyOrder(order, _tokenOut, newAmountIn, _minAmountOut, _recipient);
+
         emit OrderModified(orderId);
     }
 
-    function partialFill(
-        uint96 pendingOrderIdx,
-        uint96 orderId,
-        address target,
-        bytes calldata txData
-    ) external {
-        //fetch order
-        Order memory order = orders[orderId];
-
-        require(
-            order.orderId == pendingOrderIds[pendingOrderIdx],
-            "Order Fill Mismatch"
-        );
-
-        //perform swap
-        (uint256 amountOut, uint256 tokenInRefund) = execute(
-            target,
-            txData,
-            order
-        );
-
-        //deduce expected exchange rate
-        //x number of tokenIn for y number of token out
-        //245 tokenIn for 7251 tokenOut => exchange rate of 29.5959 tokenIns for each tokenOut
-        //meaning that if I do a partial fill of 200 tokenIns, I should get ~5,919.18 or better tokenOuts
-        //If I fill 200 and only receive 5900 then the rate is 29.5
-
-        uint256 expectedExchangeRate = order.minAmountOut / order.amountIn;
-        uint256 exchangeRateReceived = amountOut / tokenInRefund;
-        require(expectedExchangeRate <= exchangeRateReceived, "Invalid Fill Price");
-
-        //execute
-        //determine if the amount of tokens received matches the expected exchange rate or better
-        //accounting
-        //modify order
-    }
-
+    //todo nonreentrant
     ///@notice fill entire order
     function fillOrder(
         uint96 pendingOrderIdx,
@@ -146,6 +116,8 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
     ) external override {
         //fetch order
         Order memory order = orders[orderId];
+        console.log("tokenIn: ", address(order.tokenIn));
+        console.log("tokenOut: ", address(order.tokenOut));
 
         require(
             order.orderId == pendingOrderIds[pendingOrderIdx],
@@ -158,15 +130,40 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             txData,
             order
         );
-
-        require(amountOut > order.minAmountOut, "Too Little Received");
-
-        //handle accounting
-        //remove from array
-        pendingOrderIds = ArrayMutation.removeFromArray(
-            pendingOrderIdx,
-            pendingOrderIds
+        //verify exchange rate
+        uint256 effectiveExchangeRate = deduceExchangeRate(
+            order.amountIn - tokenInRefund,
+            amountOut
         );
+        require(
+            effectiveExchangeRate >= order.exchangeRate,
+            "Too little received"
+        );
+
+        if (amountOut >= order.minAmountOut) {
+            //fill and close
+            pendingOrderIds = ArrayMutation.removeFromArray(
+                pendingOrderIdx,
+                pendingOrderIds
+            );
+
+            //refund any unspent tokenIn
+            //this should generally be 0 when using exact input for swaps, which is recommended
+            if (tokenInRefund != 0) {
+                order.tokenIn.safeTransfer(order.recipient, tokenInRefund);
+            }
+            emit OrderFilled(order.orderId);
+        } else if (amountOut < order.minAmountOut) {
+            //partial fill - modify order
+            _modifyOrder(
+                order,
+                order.tokenOut,
+                (order.amountIn - tokenInRefund),
+                (order.minAmountOut - amountOut),
+                order.recipient
+            );
+            emit OrderPartiallyFilled(order.orderId);
+        }
 
         //handle fee
         (uint256 feeAmount, uint256 adjustedAmount) = applyFee(
@@ -179,12 +176,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
 
         //send tokenOut to recipient
         order.tokenOut.safeTransfer(order.recipient, adjustedAmount);
-
-        //refund any unspent tokenIn
-        //this should generally be 0 when using exact input for swaps, which is recommended
-        if (tokenInRefund != 0) {
-            order.tokenIn.safeTransfer(order.recipient, tokenInRefund);
-        }
     }
 
     function _cancelOrder(Order memory order) internal returns (bool) {
@@ -208,7 +199,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         return false;
     }
 
-    function _modifyOrder(
+    function _settleModifiedOrder(
         uint96 orderId,
         IERC20 _tokenOut,
         uint256 amountInDelta,
@@ -217,14 +208,14 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         bool increasePosition,
         bool permit,
         bytes calldata permitPayload
-    ) internal {
+    ) internal returns (Order memory order, uint256 newAmountIn) {
         //fetch order
-        Order memory order = orders[orderId];
+        order = orders[orderId];
 
         require(msg.sender == order.recipient, "only order owner");
 
         //deduce any amountIn changes
-        uint256 newAmountIn = order.amountIn;
+        newAmountIn = order.amountIn;
         if (amountInDelta != 0) {
             if (increasePosition) {
                 //take more tokens from order recipient
@@ -248,20 +239,30 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
                 order.tokenIn.safeTransfer(order.recipient, amountInDelta);
             }
         }
+        _modifyOrder(order, _tokenOut, newAmountIn, _minAmountOut, _recipient);
+    }
 
+    function _modifyOrder(
+        Order memory order,
+        IERC20 _tokenOut,
+        uint256 newAmountIn,
+        uint256 _minAmountOut,
+        address _recipient
+    ) internal {
         //construct new order
         Order memory newOrder = Order({
-            orderId: orderId,
+            orderId: order.orderId,
             tokenIn: order.tokenIn,
             tokenOut: _tokenOut,
             amountIn: newAmountIn,
             minAmountOut: _minAmountOut,
+            exchangeRate: deduceExchangeRate(newAmountIn, _minAmountOut),
             feeBips: order.feeBips,
             recipient: _recipient
         });
 
         //store new order
-        orders[orderId] = newOrder;
+        orders[order.orderId] = newOrder;
     }
 
     function execute(
@@ -278,7 +279,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
 
         //perform the call
         (bool success, bytes memory reason) = target.call(txData);
-
+        console.log("SUCCESS: ", success);
         if (!success) {
             revert TransactionFailed(reason);
         }
@@ -289,6 +290,16 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
 
         amountOut = finalTokenOut - initialTokenOut;
         tokenInRefund = order.amountIn - (initialTokenIn - finalTokenIn);
+    }
+
+    /**
+    3000 USDCs in for 1 eth out = 3000 / 1 or 3k USDC per ETH
+     */
+    function deduceExchangeRate(
+        uint256 amountIn,
+        uint256 amountOut
+    ) internal pure returns (uint256 exchangeRate) {
+        exchangeRate = amountIn / amountOut;
     }
 
     function procureTokens(

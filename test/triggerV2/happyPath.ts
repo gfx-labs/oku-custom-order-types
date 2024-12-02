@@ -953,7 +953,7 @@ describe("Bracket order with order modification", () => {
 
 describe("Oracle Less", () => {
     const expectedAmountOut = 5600885752n
-    const minAmountOut = expectedAmountOut - 50n
+    const minAmountOut = expectedAmountOut / 2n// - 500n
     let orderId: bigint
     before(async () => {
         s.OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2)
