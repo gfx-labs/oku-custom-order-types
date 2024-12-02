@@ -953,7 +953,7 @@ describe("Bracket order with order modification", () => {
 
 describe("Oracle Less", () => {
     const expectedAmountOut = 5600885752n
-    const minAmountOut = expectedAmountOut / 2n// - 500n
+    const minAmountOut = expectedAmountOut - 10n
     let orderId: bigint
     before(async () => {
         s.OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2)
@@ -983,7 +983,6 @@ describe("Oracle Less", () => {
         const order = await s.OracleLess.orders(orderId)
         const delta = 10000000n
         const initialWeth = await s.WETH.balanceOf(await s.Oscar.getAddress())
-
         //imposter
         expect(s.OracleLess.connect(s.Bob).modifyOrder(
             orderId,
@@ -1007,6 +1006,7 @@ describe("Oracle Less", () => {
             false,
             "0x"
         )
+
         //check for refund
         expect(await s.WETH.balanceOf(await s.Oscar.getAddress())).to.eq(initialWeth + delta, "WETH received")
 
@@ -1023,6 +1023,8 @@ describe("Oracle Less", () => {
             "0x"
         )
         expect(await s.WETH.balanceOf(await s.Oscar.getAddress())).to.eq(initialWeth, "WETH spent")
+
+
 
     })
 
@@ -1041,6 +1043,7 @@ describe("Oracle Less", () => {
             "0x"
         )
 
+
         const txData = await generateUniTxData(
             s.WETH,
             await s.USDC.getAddress(),
@@ -1050,10 +1053,9 @@ describe("Oracle Less", () => {
             await s.OracleLess.getAddress(),
             0n//pendingOrders[0].minAmountOut//5600885752
         )
-        expect(s.OracleLess.fillOrder(0n, orderId, s.router02, txData)).to.be.revertedWith("Too Little Received")
+        expect(s.OracleLess.fillOrder(0n, orderId, s.router02, txData)).to.be.revertedWith("Insufficient Price")
 
         //reset
-        await s.WETH.connect
         await s.OracleLess.connect(s.Oscar).modifyOrder(
             orderId,
             order.tokenOut,
@@ -1064,11 +1066,12 @@ describe("Oracle Less", () => {
             false,
             "0x"
         )
+
+
     })
 
 
     it("Fill Order", async () => {
-
         const pendingOrders = await s.OracleLess.getPendingOrders()
         const txData = await generateUniTxData(
             s.WETH,

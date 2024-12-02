@@ -7,7 +7,7 @@ import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "./AutomationMaster.sol";
 import "../libraries/ArrayMutation.sol";
 
-//testing 
+//testing
 import "hardhat/console.sol";
 
 contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
@@ -91,6 +91,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         bool permit,
         bytes calldata permitPayload
     ) external override {
+
         (Order memory order, uint256 newAmountIn) = _settleModifiedOrder(
             orderId,
             _tokenOut,
@@ -101,9 +102,10 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             permit,
             permitPayload
         );
-        _modifyOrder(order, _tokenOut, newAmountIn, _minAmountOut, _recipient);
 
-        emit OrderModified(orderId);
+        _modifyOrder(order, _tokenOut, newAmountIn, _minAmountOut, _recipient);
+        
+                emit OrderModified(orderId);
     }
 
     //todo nonreentrant
@@ -116,8 +118,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
     ) external override {
         //fetch order
         Order memory order = orders[orderId];
-        console.log("tokenIn: ", address(order.tokenIn));
-        console.log("tokenOut: ", address(order.tokenOut));
 
         require(
             order.orderId == pendingOrderIds[pendingOrderIdx],
@@ -135,13 +135,20 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             order.amountIn - tokenInRefund,
             amountOut
         );
+        console.log("EFFECTIVE ER: ", effectiveExchangeRate);
+        console.log("EXPECTED  ER: ", order.exchangeRate);
+
         require(
-            effectiveExchangeRate >= order.exchangeRate,
-            "Too little received"
+            effectiveExchangeRate <= order.exchangeRate,
+            "Insufficient Price"
         );
 
         if (amountOut >= order.minAmountOut) {
-            //fill and close
+
+            //redundant confirmation of minAmountReceived
+            require(amountOut > order.minAmountOut, "Too little received");
+
+
             pendingOrderIds = ArrayMutation.removeFromArray(
                 pendingOrderIdx,
                 pendingOrderIds
@@ -211,7 +218,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
     ) internal returns (Order memory order, uint256 newAmountIn) {
         //fetch order
         order = orders[orderId];
-
         require(msg.sender == order.recipient, "only order owner");
 
         //deduce any amountIn changes
@@ -279,7 +285,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
 
         //perform the call
         (bool success, bytes memory reason) = target.call(txData);
-        console.log("SUCCESS: ", success);
         if (!success) {
             revert TransactionFailed(reason);
         }
