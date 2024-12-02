@@ -91,7 +91,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         bool permit,
         bytes calldata permitPayload
     ) external override {
-
         (Order memory order, uint256 newAmountIn) = _settleModifiedOrder(
             orderId,
             _tokenOut,
@@ -104,8 +103,8 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         );
 
         _modifyOrder(order, _tokenOut, newAmountIn, _minAmountOut, _recipient);
-        
-                emit OrderModified(orderId);
+
+        emit OrderModified(orderId);
     }
 
     //todo nonreentrant
@@ -125,52 +124,25 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         );
 
         //perform swap
-        (uint256 amountOut, uint256 tokenInRefund) = execute(
+        (uint256 amountOut, uint256 tokenInRemain) = execute(
             target,
             txData,
             order
         );
         //verify exchange rate
         uint256 effectiveExchangeRate = deduceExchangeRate(
-            order.amountIn - tokenInRefund,
+            order.amountIn - tokenInRemain,
             amountOut
         );
-        console.log("EFFECTIVE ER: ", effectiveExchangeRate);
-        console.log("EXPECTED  ER: ", order.exchangeRate);
-
+        
+        /**
+        If we are swapping WETH => USDC, then less USDC per ETH means a higher exchange rate
+        So the effective exchange rate needs to be the expected or less, which indicates a better price than expected
+         */
         require(
             effectiveExchangeRate <= order.exchangeRate,
             "Insufficient Price"
         );
-
-        if (amountOut >= order.minAmountOut) {
-
-            //redundant confirmation of minAmountReceived
-            require(amountOut > order.minAmountOut, "Too little received");
-
-
-            pendingOrderIds = ArrayMutation.removeFromArray(
-                pendingOrderIdx,
-                pendingOrderIds
-            );
-
-            //refund any unspent tokenIn
-            //this should generally be 0 when using exact input for swaps, which is recommended
-            if (tokenInRefund != 0) {
-                order.tokenIn.safeTransfer(order.recipient, tokenInRefund);
-            }
-            emit OrderFilled(order.orderId);
-        } else if (amountOut < order.minAmountOut) {
-            //partial fill - modify order
-            _modifyOrder(
-                order,
-                order.tokenOut,
-                (order.amountIn - tokenInRefund),
-                (order.minAmountOut - amountOut),
-                order.recipient
-            );
-            emit OrderPartiallyFilled(order.orderId);
-        }
 
         //handle fee
         (uint256 feeAmount, uint256 adjustedAmount) = applyFee(
@@ -179,6 +151,46 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         );
         if (feeAmount != 0) {
             order.tokenOut.safeTransfer(address(MASTER), feeAmount);
+        }
+
+        if (amountOut >= order.minAmountOut) {
+            //redundant confirmation of minAmountReceived
+            require(amountOut > order.minAmountOut, "Too little received");
+
+            pendingOrderIds = ArrayMutation.removeFromArray(
+                pendingOrderIdx,
+                pendingOrderIds
+            );
+
+            //refund any unspent tokenIn
+            //this should generally be 0 when using exact input for swaps, which is recommended
+            if (tokenInRemain != 0) {
+                order.tokenIn.safeTransfer(order.recipient, tokenInRemain);
+            }
+            emit OrderFilled(order.orderId);
+        } else if (amountOut < order.minAmountOut) {
+            //decrement amount in
+            uint256 newAmountIn = order.amountIn - tokenInRemain;
+
+            //compute new minAmountOut based on og exchange rate
+            uint256 newMinAmtout = newAmountIn / order.exchangeRate;
+
+            //partial fill - modify order
+            _modifyOrder(
+                order,
+                order.tokenOut,
+                newAmountIn,
+                newMinAmtout,
+                order.recipient
+            );
+
+            //revoke remaining allowance
+            order.tokenIn.safeDecreaseAllowance(
+                target,
+                order.tokenIn.allowance(address(this), target)
+            );
+
+            emit OrderPartiallyFilled(order.orderId);
         }
 
         //send tokenOut to recipient
@@ -275,7 +287,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         address target,
         bytes calldata txData,
         Order memory order
-    ) internal returns (uint256 amountOut, uint256 tokenInRefund) {
+    ) internal returns (uint256 amountOut, uint256 tokenInRemain) {
         //update accounting
         uint256 initialTokenIn = order.tokenIn.balanceOf(address(this));
         uint256 initialTokenOut = order.tokenOut.balanceOf(address(this));
@@ -294,7 +306,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint256 finalTokenOut = order.tokenOut.balanceOf(address(this));
 
         amountOut = finalTokenOut - initialTokenOut;
-        tokenInRefund = order.amountIn - (initialTokenIn - finalTokenIn);
+        tokenInRemain = order.amountIn - (initialTokenIn - finalTokenIn);
     }
 
     /**

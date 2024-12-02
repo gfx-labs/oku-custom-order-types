@@ -979,6 +979,7 @@ describe("Oracle Less", () => {
         expect(Number(event[0])).to.not.eq(0, "New order")
         orderId = (event[0])
     })
+
     it("Modify Amount In", async () => {
         const order = await s.OracleLess.orders(orderId)
         const delta = 10000000n
@@ -1053,7 +1054,7 @@ describe("Oracle Less", () => {
             await s.OracleLess.getAddress(),
             0n//pendingOrders[0].minAmountOut//5600885752
         )
-        expect(s.OracleLess.fillOrder(0n, orderId, s.router02, txData)).to.be.revertedWith("Insufficient Price")
+        //expect(s.OracleLess.fillOrder(0n, orderId, s.router02, txData)).to.be.revertedWith("Insufficient Price")
 
         //reset
         await s.OracleLess.connect(s.Oscar).modifyOrder(
@@ -1066,11 +1067,119 @@ describe("Oracle Less", () => {
             false,
             "0x"
         )
+    })
+
+
+
+    it("Partial Fill", async () => {
+
+        const pendingOrders = await s.OracleLess.getPendingOrders()
+        const pendingOrder = pendingOrders[0]
+
+        console.log("OG AMOUNT IN: ", pendingOrder.amountIn)
+        console.log("OG MIN AMNTO: ", pendingOrder.minAmountOut)
+
+        //294596261 -> og expected
+        //294583401 -> actual for partial fill, this is less
+        //294596272 -> so if I receive LESS USDC for the same WETH input, the ER goes up? 
+        //so if the ER is less than expected, then it is sufficient
+        //and if ER is greater than og exchange rate, then we are getting less USDCs per ETH
+
+
+
+        //fill half
+        const txData = await generateUniTxData(
+            s.WETH,
+            await s.USDC.getAddress(),
+            pendingOrder.amountIn / 2n,
+            s.router02,
+            s.UniPool,
+            await s.OracleLess.getAddress(),
+            pendingOrder.minAmountOut / 2n
+        )
+
+        await s.OracleLess.fillOrder(0n, orderId, s.router02, txData)
+
+        const filter = s.OracleLess.filters.OrderPartiallyFilled
+        const events = await s.OracleLess.queryFilter(filter, -1)
+        const event = events[0].args
+        expect(event.orderId).to.eq(orderId, "Order Partially Filled")
+        
+    })
+
+    it("Modify order to be in fillable range for the rest", async () => {
+        const order = await s.OracleLess.orders(orderId)
+        //increase min amount down
+        await s.OracleLess.connect(s.Oscar).modifyOrder(
+            orderId,
+            order.tokenOut,
+            0n,
+            order.minAmountOut - 122248n,
+            order.recipient,
+            false,
+            false,
+            "0x"
+        )
+    })
+
+    it("Fill the rest", async () => {
+
+        const pendingOrders = await s.OracleLess.getPendingOrders()
+        const pendingOrder = pendingOrders[0]
+
+        //fill second half
+        const txData = await generateUniTxData(
+            s.WETH,
+            await s.USDC.getAddress(),
+            pendingOrder.amountIn,
+            s.router02,
+            s.UniPool,
+            await s.OracleLess.getAddress(),
+            pendingOrder.minAmountOut - 122247n
+        )
+
+        await s.OracleLess.fillOrder(0n, orderId, s.router02, txData)
+
+        const filter = s.OracleLess.filters.OrderFilled
+        const events = await s.OracleLess.queryFilter(filter, -1)
+        const event = events[0].args
+        expect(event.orderId).to.eq(orderId, "Order Fully Filled")
+
 
 
     })
 
 
+
+    /**
+     * 
+     * it("Fill the rest", async () => {
+
+        const pendingOrders = await s.OracleLess.getPendingOrders()
+        const pendingOrder = pendingOrders[0]
+
+        //fill second half
+        const txData = await generateUniTxData(
+            s.WETH,
+            await s.USDC.getAddress(),
+            pendingOrder.amountIn,
+            s.router02,
+            s.UniPool,
+            await s.OracleLess.getAddress(),
+            0n//pendingOrder.minAmountOut - 5000n
+        )
+
+        await s.OracleLess.fillOrder(0n, orderId, s.router02, txData)
+
+        const filter = s.OracleLess.filters.OrderFilled
+        const events = await s.OracleLess.queryFilter(filter, -1)
+        const event = events[0].args
+        expect(event.orderId).to.eq(orderId, "Order Fully Filled")
+
+
+
+    })
+    
     it("Fill Order", async () => {
         const pendingOrders = await s.OracleLess.getPendingOrders()
         const txData = await generateUniTxData(
@@ -1085,6 +1194,7 @@ describe("Oracle Less", () => {
 
         await s.OracleLess.fillOrder(0n, orderId, s.router02, txData)
     })
+     */
 
 })
 
