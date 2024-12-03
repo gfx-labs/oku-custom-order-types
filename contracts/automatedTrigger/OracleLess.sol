@@ -44,7 +44,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint16 feeBips,
         bool permit,
         bytes calldata permitPayload
-    ) external override returns (uint96 orderId) {
+    ) external override nonReentrant returns (uint96 orderId) {
         //procure tokens
         procureTokens(tokenIn, amountIn, recipient, permit, permitPayload);
 
@@ -86,7 +86,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         bool increasePosition,
         bool permit,
         bytes calldata permitPayload
-    ) external override {
+    ) external override nonReentrant{
         _modifyOrder(
             orderId,
             _tokenOut,
@@ -105,7 +105,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint96 orderId,
         address target,
         bytes calldata txData
-    ) external override {
+    ) external override nonReentrant{
         //fetch order
         Order memory order = orders[orderId];
 
