@@ -2,7 +2,6 @@
 pragma solidity ^0.8.9;
 
 import "../IPythRelay.sol";
-import "../../interfaces/chainlink/IAggregator.sol";
 import "../../interfaces/pyth/IPyth.sol";
 
 

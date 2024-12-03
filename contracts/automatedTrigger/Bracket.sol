@@ -312,6 +312,31 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         require(_cancelOrder(order), "Order not active");
     }
 
+    function procureTokens(
+        IERC20 token,
+        uint256 amount,
+        address owner,
+        bool permit,
+        bytes calldata permitPayload
+    ) internal {
+        if (permit) {
+            IAutomation.Permit2Payload memory payload = abi.decode(
+                permitPayload,
+                (IAutomation.Permit2Payload)
+            );
+
+            permit2.permit(owner, payload.permitSingle, payload.signature);
+            permit2.transferFrom(
+                owner,
+                address(this),
+                uint160(amount),
+                address(token)
+            );
+        } else {
+            token.safeTransferFrom(owner, address(this), amount);
+        }
+    }
+
     function _initializeOrder(
         bytes calldata swapPayload,
         uint256 takeProfit,
@@ -334,21 +359,13 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 (SwapParams)
             );
             //procure swap token in
-            if (permit) {
-                handlePermit(
-                    msg.sender,
-                    permitPayload,
-                    uint160(swapParams.swapAmountIn),
-                    address(swapParams.swapTokenIn)
-                );
-            } else {
-                //take asset, assume prior approval
-                swapParams.swapTokenIn.safeTransferFrom(
-                    msg.sender,
-                    address(this),
-                    swapParams.swapAmountIn
-                );
-            }
+            procureTokens(
+                swapParams.swapTokenIn,
+                swapParams.swapAmountIn,
+                msg.sender,
+                permit,
+                permitPayload
+            );
 
             _createOrderWithSwap(
                 swapParams,
@@ -364,18 +381,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             );
         } else {
             //no swap
-            //procure tokens
-            if (permit) {
-                handlePermit(
-                    msg.sender,
-                    permitPayload,
-                    uint160(amountIn),
-                    address(tokenIn)
-                );
-            } else {
-                //assume prior approval
-                tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
-            }
+            procureTokens(tokenIn, amountIn, msg.sender, permit, permitPayload);
 
             _createOrder(
                 takeProfit,
