@@ -13,8 +13,8 @@ import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 
 ///@notice This contract owns and handles all logic associated with the following order types:
 /// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independant slippapge for each option
-/// LIMIT_ORDER - automated market swap at specified take profit price
-/// STOP_ORDER - automated market swap at specified stop price
+/// LIMIT_ORDER - BRACKET_ORDER at specified take profit price, with STOP set to 0
+/// STOP_ORDER - BRACKET_ORDER at specified stop price, with take profit set to 2 ** 256 - 1
 /// In order to configure a LIMIT_ORDER or STOP_ORDER, simply set the take profit or stop price to either 0 for the lower bound or 2^256 - 1 for the upper bound
 contract Bracket is Ownable, IBracket, ReentrancyGuard {
     using SafeERC20 for IERC20;
