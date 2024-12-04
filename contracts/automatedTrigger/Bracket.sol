@@ -456,7 +456,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
             address(MASTER.oracles(tokenIn)) != address(0x0) &&
-                address(MASTER.oracles(tokenIn)) != address(0x0),
+                address(MASTER.oracles(tokenOut)) != address(0x0),
             "Oracle !exist"
         );
         require(
