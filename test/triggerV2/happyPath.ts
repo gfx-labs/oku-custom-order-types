@@ -958,6 +958,9 @@ describe("Oracle Less", () => {
     before(async () => {
         s.OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2)
         await stealMoney(s.wethWhale, await s.Oscar.getAddress(), await s.WETH.getAddress(), s.wethAmount)
+
+        //register
+        await s.OracleLess.registerTokens([await s.WETH.getAddress(), await s.USDC.getAddress()], [10000000000000000n, 1000000n])
     })
 
     it("Create Order", async () => {

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.19;
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
+import "../interfaces/openzeppelin/ERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "./AutomationMaster.sol";
@@ -15,6 +16,8 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
     uint96[] public pendingOrderIds;
 
     mapping(uint96 => Order) public orders;
+
+    mapping(address => uint256) public registeredTokens;
 
     constructor(AutomationMaster _master, IPermit2 _permit2) {
         MASTER = _master;
@@ -35,6 +38,17 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         }
     }
 
+    function registerTokens(
+        address[] calldata _tokens,
+        uint256[] calldata _minAmounts
+    ) external onlyOwner {
+        require(_tokens.length == _minAmounts.length, "Array Mismatch");
+
+        for (uint i = 0; i < _tokens.length; i++) {
+            registeredTokens[_tokens[i]] = _minAmounts[i];
+        }
+    }
+
     function createOrder(
         IERC20 tokenIn,
         IERC20 tokenOut,
@@ -45,6 +59,9 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         bool permit,
         bytes calldata permitPayload
     ) external override nonReentrant returns (uint96 orderId) {
+        //verify token registy
+        verifyMinAmount(tokenIn, amountIn);
+
         //procure tokens
         procureTokens(tokenIn, amountIn, recipient, permit, permitPayload);
 
@@ -86,7 +103,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         bool increasePosition,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant{
+    ) external override nonReentrant {
         _modifyOrder(
             orderId,
             _tokenOut,
@@ -105,7 +122,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint96 orderId,
         address target,
         bytes calldata txData
-    ) external override nonReentrant{
+    ) external override nonReentrant {
         //fetch order
         Order memory order = orders[orderId];
 
@@ -209,6 +226,9 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             }
         }
 
+        //verify token registy
+        verifyMinAmount(order.tokenIn, newAmountIn);
+
         //construct new order
         Order memory newOrder = Order({
             orderId: orderId,
@@ -294,5 +314,11 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         } else {
             return (0, amount);
         }
+    }
+
+    function verifyMinAmount(IERC20 token, uint256 amount) internal view {
+        uint256 min = registeredTokens[address(token)];
+        require(min != 0, "Token Not Registered");
+        require(amount > min, "Insufficient Amount");
     }
 }
