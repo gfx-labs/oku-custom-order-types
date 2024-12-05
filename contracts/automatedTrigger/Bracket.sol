@@ -35,8 +35,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     }
 
     //testing
-    function decodePermit(bytes calldata permitPayload)external view{
-
+    function decodePermit(bytes calldata permitPayload) external view {
         /**
         IPermit2.PermitSingle memory single = abi.decode(
             permitPayload,
@@ -46,7 +45,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         console.log(single.sigDeadline);
          */
 
-
         console.log("DECODING FULL PAYLOAD");
 
         Permit2Payload memory payload = abi.decode(
@@ -54,7 +52,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             (Permit2Payload)
         );
         console.logBytes(payload.signature);
-
     }
     //testing
 
@@ -294,6 +291,12 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 order.tokenIn.safeTransfer(order.recipient, amountInDelta);
             }
         }
+
+        //check slippage
+        require(
+            _takeProfitSlippage <= 10000 && _stopSlippage <= 10000,
+            "BIPS > 10k"
+        );
 
         //check for oracles
         if (_tokenOut != order.tokenOut) {

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.19;
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
+import "../interfaces/openzeppelin/ERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "./AutomationMaster.sol";
@@ -18,6 +19,8 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
     uint96[] public pendingOrderIds;
 
     mapping(uint96 => Order) public orders;
+
+    mapping(address => uint256) public registeredTokens;
 
     constructor(AutomationMaster _master, IPermit2 _permit2) {
         MASTER = _master;
@@ -38,6 +41,17 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         }
     }
 
+    function registerTokens(
+        address[] calldata _tokens,
+        uint256[] calldata _minAmounts
+    ) external onlyOwner {
+        require(_tokens.length == _minAmounts.length, "Array Mismatch");
+
+        for (uint i = 0; i < _tokens.length; i++) {
+            registeredTokens[_tokens[i]] = _minAmounts[i];
+        }
+    }
+
     function createOrder(
         IERC20 tokenIn,
         IERC20 tokenOut,
@@ -48,6 +62,12 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         bool permit,
         bytes calldata permitPayload
     ) external override returns (uint96 orderId) {
+        //verify token registy
+        require(
+            registeredTokens[address(tokenIn)] < amountIn,
+            "Insufficent Amount"
+        );
+
         //procure tokens
         procureTokens(tokenIn, amountIn, recipient, permit, permitPayload);
 
@@ -59,7 +79,12 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             tokenOut: tokenOut,
             amountIn: amountIn,
             minAmountOut: minAmountOut,
-            exchangeRate: deduceExchangeRate(amountIn, minAmountOut),
+            exchangeRate: deduceExchangeRate(
+                amountIn,
+                minAmountOut,
+                ERC20(address(tokenIn)),
+                ERC20(address(tokenOut))
+            ),
             recipient: recipient,
             feeBips: feeBips
         });
@@ -132,9 +157,11 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         //verify exchange rate
         uint256 effectiveExchangeRate = deduceExchangeRate(
             order.amountIn - tokenInRemain,
-            amountOut
+            amountOut,
+            ERC20(address(order.tokenIn)),
+            ERC20(address(order.tokenOut))
         );
-        
+
         /**
         If we are swapping WETH => USDC, then less USDC per ETH means a higher exchange rate
         So the effective exchange rate needs to be the expected or less, which indicates a better price than expected
@@ -267,6 +294,12 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint256 _minAmountOut,
         address _recipient
     ) internal {
+        //verify token registy
+        require(
+            registeredTokens[address(order.tokenIn)] < newAmountIn,
+            "Insufficent Amount"
+        );
+
         //construct new order
         Order memory newOrder = Order({
             orderId: order.orderId,
@@ -274,7 +307,12 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             tokenOut: _tokenOut,
             amountIn: newAmountIn,
             minAmountOut: _minAmountOut,
-            exchangeRate: deduceExchangeRate(newAmountIn, _minAmountOut),
+            exchangeRate: deduceExchangeRate(
+                newAmountIn,
+                _minAmountOut,
+                ERC20(address(order.tokenIn)),
+                ERC20(address(_tokenOut))
+            ),
             feeBips: order.feeBips,
             recipient: _recipient
         });
@@ -314,9 +352,23 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
      */
     function deduceExchangeRate(
         uint256 amountIn,
-        uint256 amountOut
-    ) internal pure returns (uint256 exchangeRate) {
-        exchangeRate = amountIn / amountOut;
+        uint256 amountOut,
+        ERC20 tokenIn,
+        ERC20 tokenOut
+    ) public view returns (uint256 exchangeRate) {
+        require(amountIn > 0, "Amount in must be greater than 0");
+        require(amountOut > 0, "Amount out must be greater than 0");
+
+        // Get the decimals of each token
+        uint8 decimalsIn = tokenIn.decimals();
+        uint8 decimalsOut = tokenOut.decimals();
+
+        // Normalize amounts to a common scale (18 decimals for simplicity)
+        uint256 scaledAmountIn = amountIn * (10 ** (18 - decimalsIn));
+        uint256 scaledAmountOut = amountOut * (10 ** (18 - decimalsOut));
+
+        // Calculate the exchange rate as output tokens per input token
+        exchangeRate = (scaledAmountOut * 1e18) / scaledAmountIn;
     }
 
     function procureTokens(

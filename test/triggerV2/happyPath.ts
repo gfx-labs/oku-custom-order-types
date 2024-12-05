@@ -1149,6 +1149,23 @@ describe("Oracle Less", () => {
 
     })
 
+    it("EXCHANGE RATE TEST", async () => {
+
+        const wethAmount = ethers.parseEther("1")
+        const usdcAmount = ethers.parseUnits("3000", 6)
+
+        //exchange rate should give the amount of output token for 1 input token
+        //so for 1 eth the output shoudl be 3k usdc in usdc terms
+        console.log("")
+        console.log("We are swapping 1 eth for 3k usdc")
+        const exchangeRate = await s.OracleLess.exchangeRateTest(wethAmount, usdcAmount)
+        console.log(exchangeRate)
+        console.log(`${wethAmount} WETH => ${usdcAmount} USDC ===>>> ${ethers.formatUnits(exchangeRate, 6)} USDC per ETH`)
+    
+
+
+    })
+
 
 
     /**
