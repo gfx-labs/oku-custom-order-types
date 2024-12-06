@@ -214,7 +214,7 @@ interface IBracket is IAutomation {
         uint16 feeBips;
         uint16 takeProfitSlippage; //slippage if order is filled
         uint16 stopSlippage; //slippage of stop price is reached
-        bool direction; //true if initial exchange rate > strike price
+        bool direction; //true if initial exchange rate > takeProfit price
     }
 
     ///@notice Bracket orders are filled when either @param takeProfit or @param stopPrice are reached,
