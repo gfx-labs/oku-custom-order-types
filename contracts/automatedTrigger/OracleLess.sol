@@ -61,12 +61,9 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint16 feeBips,
         bool permit,
         bytes calldata permitPayload
-    ) external override returns (uint96 orderId) {
+    ) external override nonReentrant returns (uint96 orderId) {
         //verify token registy
-        require(
-            registeredTokens[address(tokenIn)] < amountIn,
-            "Insufficent Amount"
-        );
+        verifyMinAmount(tokenIn, amountIn);
 
         //procure tokens
         procureTokens(tokenIn, amountIn, recipient, permit, permitPayload);
@@ -139,7 +136,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint96 orderId,
         address target,
         bytes calldata txData
-    ) external override {
+    ) external override nonReentrant {
         //fetch order
         Order memory order = orders[orderId];
 
@@ -300,6 +297,9 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             "Insufficent Amount"
         );
 
+        //verify token registy
+        verifyMinAmount(order.tokenIn, newAmountIn);
+
         //construct new order
         Order memory newOrder = Order({
             orderId: order.orderId,
@@ -368,7 +368,10 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint256 scaledAmountOut = amountOut * (10 ** (18 - decimalsOut));
 
         // Calculate the exchange rate as output tokens per input token
-        exchangeRate = (scaledAmountOut * 1e18) / scaledAmountIn;
+        uint256 rawExchangeRate = (scaledAmountOut * 1e18) / scaledAmountIn;
+
+        // Scale the result back to the output token's decimals
+        exchangeRate = rawExchangeRate / (10 ** (18 - decimalsOut));
     }
 
     function procureTokens(
@@ -409,5 +412,11 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         } else {
             return (0, amount);
         }
+    }
+
+    function verifyMinAmount(IERC20 token, uint256 amount) internal view {
+        uint256 min = registeredTokens[address(token)];
+        require(min != 0, "Token Not Registered");
+        require(amount > min, "Insufficient Amount");
     }
 }

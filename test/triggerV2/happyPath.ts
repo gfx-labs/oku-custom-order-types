@@ -958,6 +958,39 @@ describe("Oracle Less", () => {
     before(async () => {
         s.OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2)
         await stealMoney(s.wethWhale, await s.Oscar.getAddress(), await s.WETH.getAddress(), s.wethAmount)
+
+        await s.OracleLess.registerTokens([await s.WETH.getAddress(), await s.USDC.getAddress()], [10000000000000000n, 1000000n])
+    })
+    it("EXCHANGE RATE TEST", async () => {
+
+        const wethAmount = ethers.parseEther("1")
+        const wstethAmount = ethers.parseEther("0.98")
+        const usdcAmount = ethers.parseUnits("3000", 6)
+
+        //exchange rate should give the amount of output token for 1 input token
+        //so for 1 eth the output shoudl be 3k usdc in usdc terms
+        console.log("")
+        console.log("We are swapping 1 eth for 3k usdc")
+        let exchangeRate = await s.OracleLess.deduceExchangeRate(wethAmount, usdcAmount, await s.WETH.getAddress(), await s.USDC.getAddress())
+        console.log("Raw ExchangeRate: ", exchangeRate)
+        console.log("Frm ExchangeRate: ", ethers.formatUnits(exchangeRate, 6))
+
+        console.log("")
+        console.log("We are swapping 3k USDC for 1 eth")
+        exchangeRate = await s.OracleLess.deduceExchangeRate(usdcAmount, wethAmount, await s.USDC.getAddress(), await s.WETH.getAddress())
+        console.log("Raw ExchangeRate: ", exchangeRate)
+        console.log("Frm ExchangeRate: ", ethers.formatUnits(exchangeRate, 18))
+
+        console.log("")
+        console.log("We are swapping 1 weth for 0.98 wsteth")
+        exchangeRate = await s.OracleLess.deduceExchangeRate(wethAmount, wstethAmount, await s.WETH.getAddress(), a.wstethAddress)
+        console.log("Raw ExchangeRate: ", exchangeRate)
+        console.log("Frm ExchangeRate: ", ethers.formatUnits(exchangeRate, 18))
+
+        //console.log(`${wethAmount} WETH => ${usdcAmount} USDC ===>>> ${ethers.formatUnits(exchangeRate, 6)} USDC per ETH`)
+
+
+
     })
 
     it("Create Order", async () => {
@@ -1104,7 +1137,7 @@ describe("Oracle Less", () => {
         const events = await s.OracleLess.queryFilter(filter, -1)
         const event = events[0].args
         expect(event.orderId).to.eq(orderId, "Order Partially Filled")
-        
+
     })
 
     it("Modify order to be in fillable range for the rest", async () => {
@@ -1148,70 +1181,6 @@ describe("Oracle Less", () => {
 
 
     })
-
-    it("EXCHANGE RATE TEST", async () => {
-
-        const wethAmount = ethers.parseEther("1")
-        const usdcAmount = ethers.parseUnits("3000", 6)
-
-        //exchange rate should give the amount of output token for 1 input token
-        //so for 1 eth the output shoudl be 3k usdc in usdc terms
-        console.log("")
-        console.log("We are swapping 1 eth for 3k usdc")
-        const exchangeRate = await s.OracleLess.exchangeRateTest(wethAmount, usdcAmount)
-        console.log(exchangeRate)
-        console.log(`${wethAmount} WETH => ${usdcAmount} USDC ===>>> ${ethers.formatUnits(exchangeRate, 6)} USDC per ETH`)
-    
-
-
-    })
-
-
-
-    /**
-     * 
-     * it("Fill the rest", async () => {
-
-        const pendingOrders = await s.OracleLess.getPendingOrders()
-        const pendingOrder = pendingOrders[0]
-
-        //fill second half
-        const txData = await generateUniTxData(
-            s.WETH,
-            await s.USDC.getAddress(),
-            pendingOrder.amountIn,
-            s.router02,
-            s.UniPool,
-            await s.OracleLess.getAddress(),
-            0n//pendingOrder.minAmountOut - 5000n
-        )
-
-        await s.OracleLess.fillOrder(0n, orderId, s.router02, txData)
-
-        const filter = s.OracleLess.filters.OrderFilled
-        const events = await s.OracleLess.queryFilter(filter, -1)
-        const event = events[0].args
-        expect(event.orderId).to.eq(orderId, "Order Fully Filled")
-
-
-
-    })
-    
-    it("Fill Order", async () => {
-        const pendingOrders = await s.OracleLess.getPendingOrders()
-        const txData = await generateUniTxData(
-            s.WETH,
-            await s.USDC.getAddress(),
-            s.wethAmount,
-            s.router02,
-            s.UniPool,
-            await s.OracleLess.getAddress(),
-            pendingOrders[0].minAmountOut//5600885752
-        )
-
-        await s.OracleLess.fillOrder(0n, orderId, s.router02, txData)
-    })
-     */
 
 })
 
