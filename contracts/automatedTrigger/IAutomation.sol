@@ -75,7 +75,7 @@ interface IAutomationMaster is IAutomation {
         IERC20 tokenOut
     ) external view returns (uint256 exchangeRate);
 
-    function generateOrderId(address sender) external view returns (uint96);
+    function generateOrderId(address sender) external returns (uint96);
 
     function getMinAmountReceived(
         uint256 amountIn,

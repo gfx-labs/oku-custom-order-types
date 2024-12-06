@@ -4,7 +4,6 @@ pragma solidity ^0.8.9;
 import "../IPythRelay.sol";
 import "../../interfaces/pyth/IPyth.sol";
 
-
 contract PythOracle is IPythRelay {
     IPyth public immutable pythOracle;
     bytes32 public immutable tokenId;
@@ -26,7 +25,7 @@ contract PythOracle is IPythRelay {
     function currentValue() external view override returns (uint256) {
         IPyth.Price memory price = pythOracle.getPriceUnsafe(tokenId);
         require(
-            price.publishTime < block.timestamp - noOlderThan,
+            price.publishTime >= block.timestamp - noOlderThan,
             "Stale Price"
         );
         return uint256(uint64(price.price));
@@ -48,7 +47,9 @@ contract PythOracle is IPythRelay {
         updatedPrice = uint256(uint64(price.price));
     }
 
-    function getUpdateFee(bytes[] calldata priceUpdate) external view override returns (uint fee){
+    function getUpdateFee(
+        bytes[] calldata priceUpdate
+    ) external view override returns (uint fee) {
         return pythOracle.getUpdateFee(priceUpdate);
     }
 }

@@ -27,6 +27,8 @@ contract AutomationMaster is IAutomationMaster, Ownable {
     ///each token must have a registered oracle in order to be tradable
     mapping(IERC20 => IPythRelay) public oracles;
     mapping(IERC20 => bytes32) public pythIds;
+    mapping(address => uint96) private nonces;
+
 
     ///@notice register Stop Limit and Bracket order contracts
     function registerSubKeepers(
@@ -87,9 +89,14 @@ contract AutomationMaster is IAutomationMaster, Ownable {
     }
 
     ///@notice generate a random and unique order id
-    function generateOrderId(address sender) external view override returns (uint96) {
+    function generateOrderId(
+        address sender
+    ) external override returns (uint96) {
+        uint96 nonce = nonces[sender]++;
         uint256 hashedValue = uint256(
-            keccak256(abi.encodePacked(sender, block.timestamp))
+            keccak256(
+                abi.encodePacked(sender, nonce, blockhash(block.number - 1))
+            )
         );
         return uint96(hashedValue);
     }
@@ -141,7 +148,10 @@ contract AutomationMaster is IAutomationMaster, Ownable {
 
     ///@notice determine if a new order meets the minimum order size requirement
     ///Value of @param amountIn of @param tokenIn must meed the minimum USD value
-    function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) external view override {
+    function checkMinOrderSize(
+        IERC20 tokenIn,
+        uint256 amountIn
+    ) external view override {
         uint256 currentPrice = oracles[tokenIn].currentValue();
         uint256 usdValue = (currentPrice * amountIn) /
             (10 ** ERC20(address(tokenIn)).decimals());
