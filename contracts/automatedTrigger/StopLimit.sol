@@ -331,7 +331,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
         MASTER.checkMinOrderSize(tokenIn, amountIn);
 
-        uint96 orderId = MASTER.generateOrderId(msg.sender);
+        uint96 orderId = MASTER.generateOrderId(recipient);
 
         orders[orderId] = Order({
             orderId: orderId,
