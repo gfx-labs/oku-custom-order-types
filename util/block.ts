@@ -48,6 +48,19 @@ export const nextBlockTime = async (blockTime: number) => {
     await network.provider.send("evm_setNextBlockTimestamp", [blockTime + 1])
 }
 
+export const resetGeneric = async (url: string) => {
+    await network.provider.request({
+        method: 'hardhat_reset',
+        params: [
+            {
+                forking: {
+                    jsonRpcUrl: url
+                }
+            }
+        ]
+    })
+}
+
 //reset to a current block on mainnet
 export const resetCurrent = async () => {
     await network.provider.request({
@@ -74,7 +87,7 @@ export const resetCurrentOP = async () => {
     });
 }
 
-export const resetCurrentOPblock = async (blockNumber:number) => {
+export const resetCurrentOPblock = async (blockNumber: number) => {
     await network.provider.request({
         method: "hardhat_reset",
         params: [
@@ -113,7 +126,7 @@ export const resetCurrentArb = async () => {
         ],
     });
 }
-export const resetCurrentArbBlock = async (blockNumber:number) => {
+export const resetCurrentArbBlock = async (blockNumber: number) => {
     await network.provider.request({
         method: "hardhat_reset",
         params: [
