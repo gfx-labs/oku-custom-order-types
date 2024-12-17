@@ -101,37 +101,34 @@ const bulkDeployOracles = async (signer: Signer, config: ChainConfig, addresses:
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i]
-    //do nothing if relay exists
-    if (token.relay != '') { continue }
-    //can't deploy without a feed
-    if (token.feed == '') {
-      console.log("No feed for: ", token.symbol, "on chain ", config.name)
-      //need both a feed and a token address
-      if (token.token == '') {
-        console.log("No address for: ", token.symbol, "on chain ", config.name)
-      }
+
+    let oraclePair: OraclePair = {
+      token: token.token,
+      oracle: token.relay
+    }
+
+    //can't do anything if there is no token addr
+    if (token.token == '') {
+      console.log(`No token addr for ${token.symbol} on ${config.name}`)
       continue
     }
 
-    if (token.relay == '' && token.token != '') {
-      //deploy
+    //if we have a feed
+    if (token.relay != '') {
+      console.log(`Found relay for ${token.symbol} on ${config.name} @ ${token.relay}`)
+      oracles.push(oraclePair)
+      continue
+    }
+
+    //if there is no relay and we have a feed, deploy a relay
+    if (token.relay == '' && token.feed != '') {
       const oracle = await DeployContract(new OracleRelay__factory(signer), signer, token.token, token.feed)
       await oracle!.deploymentTransaction()
       console.log(`${token.symbol} Oracle Deployed to ${config.name} @ ${await oracle!.getAddress()}`)
       console.log(`${token.symbol} PRICE: `, await oracle!.currentValue())
-      const oraclePair: OraclePair = {
-        token: token.token,
-        oracle: await oracle.getAddress()
-      }
+      oraclePair.oracle = await oracle.getAddress()
       oracles.push(oraclePair)
 
-    } else {
-      console.log(`Found existing ${token.symbol} oracle on ${config.name} @${token.relay}`)
-      const oraclePair: OraclePair = {
-        token: token.token,
-        oracle: token.relay
-      }
-      oracles.push(oraclePair)
     }
 
   }

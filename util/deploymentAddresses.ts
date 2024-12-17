@@ -37,7 +37,7 @@ export class MainnetAddresses extends ChainAddresses {
         { symbol: "AAVE", token: "0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9", feed: "0x547a514d5e3769680Ce22B2361c10Ea13619e8a9", relay: "" },
         { symbol: "MKR", token: "0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2", feed: "0xec1D1B3b0443256cc3860e24a46F108e699484Aa", relay: "" },
         { symbol: "TRIBE", token: "0xc7283b66eb1eb5fb86327f08e1b5816b0720212b", feed: "", relay: "" },
-        { symbol: "POLYGON", token: "0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0", feed: "0x7bAC85A8a13A4BcD8abb3eB7d6b4d632c5a57676", relay: "" },
+        { symbol: "MATIC", token: "0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0", feed: "0x7bAC85A8a13A4BcD8abb3eB7d6b4d632c5a57676", relay: "" },
         { symbol: "LDO", token: "0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32", feed: "", relay: "" },
         { symbol: "BAL", token: "0xba100000625a3754423978a60c9317c58a424e3D", feed: "0xdF2917806E30300537aEB49A7663062F4d1F2b5F", relay: "" },
         { symbol: "RETH", token: "0xae78736Cd615f374D3085123A210448E74Fc6393", feed: "", relay: "" },
@@ -716,7 +716,13 @@ export class OptimisimAddresses extends ChainAddresses {
         { symbol: "BAL", token: "0xfe8b128ba8c78aabc59d4c64cee7ff28e9379921", feed: "0x30D9d31C1ac29Bc2c2c312c1bCa9F8b3D60e2376", relay: "0xe6daa90Bae9cAB1c171eefA561fF9b381ee5C19A" },
         { symbol: "KNC", token: "0xa00e3a3511aac35ca78530c85007afcd31753819", feed: "0xCB24d22aF35986aC1feb8874AdBbDF68f6dC2e96", relay: "0x328397E6BcFFFFDebED68b3841283DEfb0116A4d" },
         { symbol: "VELO", token: "0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db", feed: "0x0f2Ed59657e391746C1a097BDa98F2aBb94b1120", relay: "" },
-        { symbol: "USDC", token: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", feed: "0x16a9FA2FDa030272Ce99B29CF780dFA30361E0f3", relay: "0x8B5AbFbdC5Ec4B88A4e94afBf9f22b81F71a25a9" }
+        { symbol: "USDC", token: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", feed: "0x16a9FA2FDa030272Ce99B29CF780dFA30361E0f3", relay: "0x8B5AbFbdC5Ec4B88A4e94afBf9f22b81F71a25a9" },
+        { symbol: "LINK", token: "0x350a791bfc2c21f9ed5d10980dad2e2638ffa7f6", feed: "0xCc232dcFAAE6354cE191Bd574108c1aD03f86450s", relay: "" },
+        { symbol: "CRV", token: "0x0994206dfE8De6Ec6920FF4D779B0d950605Fb53s", feed: "0xbD92C6c284271c227a1e0bF1786F468b539f51D9", relay: "" },
+        { symbol: "STG", token: "0x296F55F8Fb28E498B858d0BcDA06D955B2Cb3f97", feed: "", relay: "" },
+        { symbol: "KNC", token: "0xa00E3A3511aAC35cA78530c85007AFCd31753819", feed: "0xCB24d22aF35986aC1feb8874AdBbDF68f6dC2e96", relay: "" },
+        { symbol: "CBETH", token: "0xadDb6A0412DE1BA0F936DCaeb8Aaa24578dcF3B2", feed: "0x138b809B8472fF09Cd3E075E6EcbB2e42D41d870", relay: "" },
+        { symbol: "PEPE", token: "0x12ff4a259e14D4DCd239C447D23C9b00F7781d8F", feed: "0x64Ecf089a6594Be781908D5a26FC8fA6CB08A2C7", relay: "" }
     ]
 
 
@@ -1384,6 +1390,8 @@ const symbolToMinAmount: Record<string, bigint> = {
     "MKR": ethers.parseUnits((0.000477).toString(), 18),
     "TRIBE": ethers.parseUnits((1.5).toString(), 18),
     "POLYGON": ethers.parseUnits((1.62).toString(), 18),
+    "MATIC": ethers.parseUnits((1.62).toString(), 18),
+    "POL": ethers.parseUnits((1.62).toString(), 18),
     "LDO": ethers.parseUnits((0.46).toString(), 18),
     "BAL": ethers.parseUnits((0.2825).toString(), 18),
     "RETH": ethers.parseUnits((0.0002285).toString(), 18),
