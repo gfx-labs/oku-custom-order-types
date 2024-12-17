@@ -253,8 +253,14 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint256 initialTokenIn = order.tokenIn.balanceOf(address(this));
         uint256 initialTokenOut = order.tokenOut.balanceOf(address(this));
 
+        //approve 0
+        order.tokenIn.safeDecreaseAllowance(
+            target,
+            (order.tokenIn.allowance(address(this), target))
+        );
+
         //approve
-        order.tokenIn.safeApprove(target, order.amountIn);
+        order.tokenIn.safeIncreaseAllowance(target, order.amountIn);
 
         //perform the call
         (bool success, bytes memory reason) = target.call(txData);
@@ -262,6 +268,12 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         if (!success) {
             revert TransactionFailed(reason);
         }
+
+        //approve 0
+        order.tokenIn.safeDecreaseAllowance(
+            target,
+            (order.tokenIn.allowance(address(this), target))
+        );
 
         uint256 finalTokenIn = order.tokenIn.balanceOf(address(this));
         require(finalTokenIn >= initialTokenIn - order.amountIn, "over spend");

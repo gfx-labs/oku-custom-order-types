@@ -535,8 +535,14 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint256 initialTokenIn = tokenIn.balanceOf(address(this));
         uint256 initialTokenOut = tokenOut.balanceOf(address(this));
 
+        //approve 0
+        tokenIn.safeDecreaseAllowance(
+            target,
+            (tokenIn.allowance(address(this), target))
+        );
+
         //approve
-        tokenIn.safeApprove(target, amountIn);
+        tokenIn.safeIncreaseAllowance(target, amountIn);
 
         //perform the call
         (bool success, bytes memory result) = target.call(txData);
@@ -565,6 +571,12 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             //force revert
             revert TransactionFailed(result);
         }
+
+        //approve 0
+        tokenIn.safeDecreaseAllowance(
+            target,
+            (tokenIn.allowance(address(this), target))
+        );
     }
 
     ///@notice handle signature and acquisition of asset with permit2
