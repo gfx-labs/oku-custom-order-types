@@ -77,10 +77,18 @@ async function main() {
 
 const deployAndSetup = async (signer: Signer, config: ChainConfig, a: ChainAddresses) => {
 
-  const oracles = await bulkDeployOracles(signer, config, a)
+  let oracles: OraclePair[] = []
+  if (config.chainlink) {
+    oracles = await bulkDeployOracles(signer, config, a)
+  }
+
 
   //deploy and setup contracts
   const coreDeployments = await deployContracts(signer, config, a, oracles)
+  console.log("")
+  console.log("Core Deployments for: ", config.name)
+  console.log(coreDeployments)
+  console.log("")
 
 
 }
@@ -105,7 +113,7 @@ const bulkDeployOracles = async (signer: Signer, config: ChainConfig, addresses:
       continue
     }
 
-    if (token.relay == '') {
+    if (token.relay == '' && token.token != '') {
       //deploy
       const oracle = await DeployContract(new OracleRelay__factory(signer), signer, token.token, token.feed)
       await oracle!.deploymentTransaction()
@@ -195,7 +203,7 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
 
   if (coreDeployments.bracket == '') {
     let permit2 = addresses.permit2
-    if(permit2 == ""){
+    if (permit2 == "") {
       permit2 = zaddr
     }
     //deploy
@@ -237,6 +245,7 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
     const oracleLess: OracleLess = await DeployContract(new OracleLess__factory(signer), signer, coreDeployments.master, addresses.permit2)
     await oracleLess.deploymentTransaction()
     console.log(`OracleLess deployed to ${config.name} @ ${await oracleLess.getAddress()}`)
+    coreDeployments.oracleLess = await oracleLess.getAddress()
 
     //register tokens
     let tokens: string[] = []

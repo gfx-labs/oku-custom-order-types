@@ -197,6 +197,180 @@ export class ArbAddresses extends ChainAddresses {
             feed: '0x50834F3163758fcC1Df9973b6e91f0F0F0434aD3',
             relay: '0x9BDb5575E24EEb2DCA7Ba6CE367d609Bdeb38246',
         },
+        {
+            symbol: '1INCH',
+            token: '',
+            feed: '0x4bC735Ef24bf286983024CAd5D03f0738865Aaef',
+            relay: '',
+        },
+        {
+            symbol: 'AAVE',
+            token: '',
+            feed: '0xaD1d5344AaDE45F43E596773Bcc4c423EAbdD034',
+            relay: '',
+        },
+        {
+            symbol: 'ARB',
+            token: '',
+            feed: '0xb2A824043730FE05F3DA2efaFa1CBbe83fa548D6',
+            relay: '',
+        },
+        {
+            symbol: 'AVAX',
+            token: '',
+            feed: '0x8bf61728eeDCE2F32c456454d87B5d6eD6150208',
+            relay: '',
+        },
+        {
+            symbol: 'BAL',
+            token: '',
+            feed: '0xBE5eA816870D11239c543F84b71439511D70B94f',
+            relay: '',
+        },
+        {
+            symbol: 'LINK',
+            token: '',
+            feed: '0x86E53CF1B870786351Da77A57575e79CB55812CB',
+            relay: '',
+        },
+        {
+            symbol: 'UNI',
+            token: '',
+            feed: '0x9C917083fDb403ab5ADbEC26Ee294f6EcAda2720',
+            relay: '',
+        },
+        {
+            symbol: 'CRV',
+            token: '',
+            feed: '0xaebDA2c976cfd1eE1977Eac079B4382acb849325',
+            relay: '',
+        },
+        {
+            symbol: 'LDO',
+            token: '',
+            feed: '0xA43A34030088E6510FecCFb77E88ee5e7ed0fE64',
+            relay: '',
+        },
+        {
+            symbol: 'SUSHI',
+            token: '',
+            feed: '0xb2A8BA74cbca38508BA1632761b56C897060147C',
+            relay: '',
+        },
+        {
+            symbol: 'DAI',
+            token: '',
+            feed: '0xc5C8E77B397E531B8EC06BFb0048328B30E9eCfB',
+            relay: '',
+        },
+        {
+            symbol: 'MKR',
+            token: '',
+            feed: '0xdE9f0894670c4EFcacF370426F10C3AD2Cdf147e',
+            relay: '',
+        },
+        {
+            symbol: 'GRT',
+            token: '',
+            feed: '0x0F38D86FceF4955B705F35c9e41d1A16e0637c73s',
+            relay: '',
+        },
+        {
+            symbol: 'XAI',
+            token: '',
+            feed: '0x806c532D543352e7C344ba6C7F3F00Bfbd309Af1',
+            relay: '',
+        },
+        {
+            symbol: 'COMP',
+            token: '',
+            feed: '0xe7C53FFd03Eb6ceF7d208bC4C13446c76d1E5884',
+            relay: '',
+        },
+        {
+            symbol: 'LPT',
+            token: '0x289ba1701C2F088cf0faf8B3705246331cB8A839',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'TUSD',
+            token: '0x4D15a3A2286D883AF0AA1B3f21367843FAc63E07',
+            feed: '0x6fAbee62266Da6686EE2744C6f15bb8352d2f28D',
+            relay: '',
+        },
+        {
+            symbol: 'YFI',
+            token: '0x82e3A8F066a6989666b031d916c43672085b1582',
+            feed: '0x745Ab5b69E01E2BE1104Ca84937Bb71f96f5fB21',
+            relay: '',
+        },
+        {
+            symbol: 'MAGIC',
+            token: '0x539bdE0d7Dbd336b79148AA742883198BBF60342',
+            feed: '0x47E55cCec6582838E173f252D08Afd8116c2202d',
+            relay: '',
+        },
+        {
+            symbol: 'GMX',
+            token: '0xfc5a1a6eb076a2c7ad06ed22c90d7e710e35ad0a',
+            feed: '0xDB98056FecFff59D032aB628337A4887110df3dB',
+            relay: '',
+        },
+        {
+            symbol: 'RDNT',
+            token: '0x3082CC23568eA640225c2467653dB90e9250AaA0',
+            feed: '0x20d0Fcab0ECFD078B036b6CAf1FaC69A6453b352',
+            relay: '',
+        },
+        {
+            symbol: 'WOO',
+            token: '0xcafcd85d8ca7ad1e1c6f82f651fa15e33aefd07b',
+            feed: '0x5e2b5C5C07cCA3437c4D724225Bb42c7E55d1597',
+            relay: '',
+        },
+        {
+            symbol: 'STG',
+            token: '0x6694340fc020c5e6b96567843da2df01b2ce1eb6',
+            feed: '0xe74d69E233faB0d8F48921f2D93aDfDe44cEb3B7',
+            relay: '',
+        },
+        {
+            symbol: 'FXS',
+            token: '0x9d2f299715d94d8a7e6f5eaa8e654e8c74a988a7',
+            feed: '0x36a121448D74Fa81450c992A1a44B9b7377CD3a5',
+            relay: '',
+        },
+        {
+            symbol: 'KNC',
+            token: '0xe4dddfe67e7164b0fe14e218d80dc4c08edc01cb',
+            feed: '0xbF539d4c2106dd4D9AB6D56aed3d9023529Db145',
+            relay: '',
+        },
+        {
+            symbol: 'DODO',
+            token: '0x69Eb4FA4a2fbd498C257C57Ea8b7655a2559A581',
+            feed: '0xA33a06c119EC08F92735F9ccA37e07Af08C4f281',
+            relay: '',
+        },
+        {
+            symbol: 'JOE',
+            token: '0x371c7ec6D8039ff7933a2AA28EB827Ffe1F52f07',
+            feed: '0x04180965a782E487d0632013ABa488A472243542',
+            relay: '',
+        },
+        {
+            symbol: 'SPELL',
+            token: '0x3e6648c5a70a150a88bce65f4ad4d506fe15d2af',
+            feed: '0x383b3624478124697BEF675F07cA37570b73992f',
+            relay: '',
+        },
+        {
+            symbol: 'GNS',
+            token: '0x18c11FD286C5EC11c3b683Caa813B77f5163A122',
+            feed: '0xE89E98CE4E19071E59Ed4780E0598b541CE76486',
+            relay: '',
+        }
     ];
 
     readonly coreDeployments = {
@@ -234,6 +408,114 @@ export class BaseAddresses extends ChainAddresses {
             symbol: 'USDT',
             token: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2',
             feed: '0xf19d560eB8d2ADf07BD6D13ed03e1D11215721F9',
+            relay: '',
+        },
+        {
+            symbol: 'VIRTUAL',
+            token: '0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'DEGEN',
+            token: '0x4ed4e862860bed51a9570b96d89af5e1b0efefed',
+            feed: '0xE62BcE5D7CB9d16AB8b4D622538bc0A50A5799c2',
+            relay: '',
+        },
+        {
+            symbol: 'MORPHO',
+            token: '0xBAa5CC21fd487B8Fcc2F632f3F4E8D37262a0842',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'BRETT',
+            token: '0x532f27101965dd16442e59d40670faf5ebb142e4',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'CARV',
+            token: '0xc08Cd26474722cE93F4D0c34D16201461c10AA8C',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'MOG',
+            token: '0x2Da56AcB9Ea78330f947bD57C54119Debda7AF71',
+            feed: '0x4aeb6D15769EaD32D0c5Be2940F40c7CFf53801d',
+            relay: '',
+        },
+        {
+            symbol: 'AXL',
+            token: '0x23ee2343B892b1BB63503a4FAbc840E0e2C6810f',
+            feed: '0x676C4C6C31D97A5581D3204C04A8125B350E2F9D',
+            relay: '',
+        },
+        {
+            symbol: 'BAL',
+            token: '0x7c6b91D9Be155A6Db01f749217d76fF02A7227F2',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: '',
+            token: '',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: '',
+            token: '',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: '',
+            token: '',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: '',
+            token: '',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: '',
+            token: '',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: '',
+            token: '',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: '',
+            token: '',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: '',
+            token: '',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: '',
+            token: '',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: '',
+            token: '',
+            feed: '',
             relay: '',
         },
     ];
@@ -275,6 +557,126 @@ export class BscAddresses extends ChainAddresses {
             symbol: 'USDT',
             token: '0x55d398326f99059fF775485246999027B3197955',
             feed: '0xB97Ad0E74fa7d920791E90258A6E2085088b4320',
+            relay: '',
+        },
+        {
+            symbol: 'INJ',
+            token: '0xa2b726b1145a4773f68593cf171187d8ebe4d495',
+            feed: '0x63A9133cd7c611d6049761038C16f238FddA71d7',
+            relay: '',
+        },
+        {
+            symbol: 'FDUSD',
+            token: '0xc5f0f7b66764F6ec8C8Dff7BA683102295E16409',
+            feed: '0x390180e80058A8499930F0c13963AD3E0d86Bfc9',
+            relay: '',
+        },
+        {
+            symbol: 'CAKE',
+            token: '0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82',
+            feed: '0xB6064eD41d4f67e353768aA239cA86f4F73665a1',
+            relay: '',
+        },
+        {
+            symbol: 'GMT',
+            token: '0x3019BF2a2eF8040C242C9a4c5c4BD4C81678b2A1',
+            feed: '0x8b0D36ae4CF8e277773A7ba5F35c09Edb144241b',
+            relay: '',
+        },
+        {
+            symbol: 'CAT',
+            token: '0x6894CDe390a3f51155ea41Ed24a33A4827d3063D',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'WMTX',
+            token: '0xDBB5Cf12408a3Ac17d668037Ce289f9eA75439D7',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'BABYDOGE',
+            token: '0xc748673057861a797275cd8a068abb95a902e8de',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'INSURANCE',
+            token: '0x64E4fea6e4F3637025c7Bcd878E2B238B01f7D4e',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'LUMIA',
+            token: '0x7F39BcdCa8E0E581c1d43aaa1cB862AA1c8C2047',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'CTSI',
+            token: '0x8da443f84fea710266c8eb6bc34b71702d033ef2',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'AI',//sleepless AI 
+            token: '0xBDA011D7F8EC00F66C1923B049B94c67d148d8b2',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'CYBER',
+            token: '0x14778860e937f509e651192a90589de711fb88a9',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'MNT',
+            token: '0x3e81aa8d6813ec9d7e6ddb4e523fb1601a0e86f3',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'CGPT',
+            token: '0x9840652DC04fb9db2C43853633f0F62BE6f00f98',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'HFT',
+            token: '0x44Ec807ce2F4a6F2737A92e985f318d035883e47',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'MVL',
+            token: '0x5f588efaf8eb57e3837486e834fc5a4e07768d98',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'NMT',
+            token: '0x03AA6298F1370642642415EDC0db8b957783e8D6',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: 'HOOK',
+            token: '0xa260e12d2b924cb899ae80bb58123ac3fee1e2f0',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: '',
+            token: '',
+            feed: '',
+            relay: '',
+        },
+        {
+            symbol: '',
+            token: '',
+            feed: '',
             relay: '',
         },
     ];
@@ -1001,10 +1403,15 @@ const symbolToMinAmount: Record<string, bigint> = {
 }
 
 export function getMinAmountBySymbol(symbol: string, factor: bigint) {
-    const minAmount = symbolToMinAmount[symbol] * factor
-    if (!minAmount) {
-        throw new Error(`Min amount not found for ${symbol}`)
+
+    let minAmount = 0n
+
+    try {
+        minAmount = symbolToMinAmount[symbol] * factor
+    } catch (e) {
+        console.log("No min set for ", symbol)
     }
+
     return minAmount
 }
 
