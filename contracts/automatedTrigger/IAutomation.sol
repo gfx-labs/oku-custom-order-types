@@ -183,8 +183,9 @@ interface IStopLimit is IAutomation {
         uint16 stopSlippage,
         uint16 swapSlippage,
         bool swapOnFill,
-        bool permit,
         bool increasePosition,
+        uint96 pendingOrderIdx,
+        bool permit,
         bytes calldata permitPayload
     ) external;
 }
@@ -286,8 +287,9 @@ interface IBracket is IAutomation {
         address recipient,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
-        bool permit,
         bool increasePosition,
+        uint96 pendingOrderIdx,
+        bool permit,
         bytes calldata permitPayload
     ) external;
 }
@@ -331,6 +333,7 @@ interface IOracleLess {
         uint256 _minAmountOut,
         address _recipient,
         bool increasePosition,
+        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
     ) external;

@@ -101,9 +101,14 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint256 _minAmountOut,
         address _recipient,
         bool increasePosition,
+        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
     ) external override nonReentrant {
+        require(
+            orderId == pendingOrderIds[pendingOrderIdx],
+            "order doesn't exist"
+        );
         _modifyOrder(
             orderId,
             _tokenOut,
@@ -111,6 +116,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             _minAmountOut,
             _recipient,
             increasePosition,
+            pendingOrderIdx,
             permit,
             permitPayload
         );
@@ -192,12 +198,16 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint256 _minAmountOut,
         address _recipient,
         bool increasePosition,
+        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
     ) internal {
         //fetch order
         Order memory order = orders[orderId];
-
+        require(
+            order.orderId == pendingOrderIds[pendingOrderIdx],
+            "order doesn't exist"
+        );
         require(msg.sender == order.recipient, "only order owner");
 
         //deduce any amountIn changes
@@ -253,8 +263,14 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint256 initialTokenIn = order.tokenIn.balanceOf(address(this));
         uint256 initialTokenOut = order.tokenOut.balanceOf(address(this));
 
+        //approve 0
+        order.tokenIn.safeDecreaseAllowance(
+            target,
+            (order.tokenIn.allowance(address(this), target))
+        );
+
         //approve
-        order.tokenIn.safeApprove(target, order.amountIn);
+        order.tokenIn.safeIncreaseAllowance(target, order.amountIn);
 
         //perform the call
         (bool success, bytes memory reason) = target.call(txData);
@@ -262,6 +278,12 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         if (!success) {
             revert TransactionFailed(reason);
         }
+
+        //approve 0
+        order.tokenIn.safeDecreaseAllowance(
+            target,
+            (order.tokenIn.allowance(address(this), target))
+        );
 
         uint256 finalTokenIn = order.tokenIn.balanceOf(address(this));
         require(finalTokenIn >= initialTokenIn - order.amountIn, "over spend");

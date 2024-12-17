@@ -96,10 +96,15 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             pendingOrderIds
         );
 
-        //approve
-        updateApproval(
+        //approve 0
+        order.tokenIn.safeDecreaseAllowance(
             address(BRACKET_CONTRACT),
-            order.tokenIn,
+            (order.tokenIn.allowance(address(this), address(BRACKET_CONTRACT)))
+        );
+
+        //approve
+        order.tokenIn.safeIncreaseAllowance(
+            address(BRACKET_CONTRACT),
             order.amountIn
         );
 
@@ -137,6 +142,12 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             order.stopSlippage,
             false, //permit
             "0x" //permitPayload
+        );
+
+        //approve 0
+        order.tokenIn.safeDecreaseAllowance(
+            address(BRACKET_CONTRACT),
+            (order.tokenIn.allowance(address(this), address(BRACKET_CONTRACT)))
         );
 
         emit OrderProcessed(order.orderId);
@@ -200,12 +211,17 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         uint16 _stopSlippage,
         uint16 _swapSlippage,
         bool _swapOnFill,
-        bool permit,
         bool increasePosition,
+        uint96 pendingOrderIdx,
+        bool permit,
         bytes calldata permitPayload
     ) external override nonReentrant {
         //get existing order
         Order memory order = orders[orderId];
+        require(
+            order.orderId == pendingOrderIds[pendingOrderIdx],
+            "order doesn't exist"
+        );
         //only order owner
         require(msg.sender == order.recipient, "only order owner");
         //deduce any amountIn changes
@@ -390,24 +406,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
         permit2.permit(owner, payload.permitSingle, payload.signature);
         permit2.transferFrom(owner, address(this), amount, token);
-    }
-
-    ///@notice if current approval is insufficient, approve max
-    ///@notice oz safeIncreaseAllowance controls for tokens that require allowance to be reset to 0 before increasing again
-    function updateApproval(
-        address spender,
-        IERC20 token,
-        uint256 amount
-    ) internal {
-        // get current allowance
-        uint256 currentAllowance = token.allowance(address(this), spender);
-        if (currentAllowance < amount) {
-            // amount is a delta, so need to pass max - current to avoid overflow
-            token.safeIncreaseAllowance(
-                spender,
-                type(uint256).max - currentAllowance
-            );
-        }
     }
 
     ///@notice check if the order is fillable
