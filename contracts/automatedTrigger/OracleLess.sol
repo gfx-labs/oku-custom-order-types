@@ -13,15 +13,25 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
     AutomationMaster public immutable MASTER;
     IPermit2 public immutable permit2;
 
+    ///@notice fee to create an order, in order to deter spam
+    uint256 public orderFee;
+
+    uint96 public orderCount;
+
     uint96[] public pendingOrderIds;
 
     mapping(uint96 => Order) public orders;
 
-    mapping(address => uint256) public registeredTokens;
-
     constructor(AutomationMaster _master, IPermit2 _permit2) {
         MASTER = _master;
         permit2 = _permit2;
+    }
+
+    modifier paysFee() {
+        require(msg.value >= orderFee, "Insufficient funds for order fee");
+        _;
+        // Transfer the fee to the contract owner
+        payable(owner()).transfer(orderFee);
     }
 
     ///@return pendingOrders a full list of all pending orders with full order details
@@ -38,15 +48,8 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         }
     }
 
-    function registerTokens(
-        address[] calldata _tokens,
-        uint256[] calldata _minAmounts
-    ) external onlyOwner {
-        require(_tokens.length == _minAmounts.length, "Array Mismatch");
-
-        for (uint i = 0; i < _tokens.length; i++) {
-            registeredTokens[_tokens[i]] = _minAmounts[i];
-        }
+    function setOrderFee(uint256 _orderFee) external onlyOwner {
+        orderFee = _orderFee;
     }
 
     function createOrder(
@@ -58,9 +61,9 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint16 feeBips,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant returns (uint96 orderId) {
-        //verify token registy
-        verifyMinAmount(tokenIn, amountIn);
+    ) external override payable paysFee nonReentrant returns (uint96 orderId) {
+
+        require(amountIn != 0, "amountIn == 0");
 
         //procure tokens
         procureTokens(tokenIn, amountIn, recipient, permit, permitPayload);
@@ -80,7 +83,9 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         //store pending order
         pendingOrderIds.push(orderId);
 
-        emit OrderCreated(orderId);
+        orderCount++;
+
+        emit OrderCreated(orderId, orderCount);
     }
 
     function adminCancelOrder(uint96 orderId) external onlyOwner {
@@ -236,9 +241,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             }
         }
 
-        //verify token registy
-        verifyMinAmount(order.tokenIn, newAmountIn);
-
         //construct new order
         Order memory newOrder = Order({
             orderId: orderId,
@@ -336,11 +338,5 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         } else {
             return (0, amount);
         }
-    }
-
-    function verifyMinAmount(IERC20 token, uint256 amount) internal view {
-        uint256 min = registeredTokens[address(token)];
-        require(min != 0, "Token Not Registered");
-        require(amount > min, "Insufficient Amount");
     }
 }

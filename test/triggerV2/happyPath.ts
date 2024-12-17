@@ -965,12 +965,16 @@ describe("Oracle Less", () => {
     const expectedAmountOut = 5600885752n
     const minAmountOut = expectedAmountOut - 50n
     let orderId: bigint
+
+    let fee = ethers.parseEther("0.0001")
+
     before(async () => {
         s.OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2)
         await stealMoney(s.wethWhale, await s.Oscar.getAddress(), await s.WETH.getAddress(), s.wethAmount)
 
-        //register
-        await s.OracleLess.registerTokens([await s.WETH.getAddress(), await s.USDC.getAddress()], [10000000000000000n, 1000000n])
+        //set fee
+        await s.OracleLess.setOrderFee(fee)
+
     })
 
     it("Create Order", async () => {
@@ -984,7 +988,8 @@ describe("Oracle Less", () => {
             await s.Oscar.getAddress(),
             25,
             false,
-            "0x"
+            "0x",
+            {value: fee}
         )
         const filter = s.OracleLess.filters.OrderCreated
         const events = await s.OracleLess.queryFilter(filter, -1)
