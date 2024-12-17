@@ -295,7 +295,7 @@ interface IBracket is IAutomation {
 }
 
 interface IOracleLess {
-    event OrderCreated(uint96 orderId);
+    event OrderCreated(uint96 orderId, uint96 index);
     event OrderCancelled(uint96 orderId);
     event OrderModified(uint96 orderId);
     event OrderProcessed(uint96 orderId);
@@ -322,7 +322,7 @@ interface IOracleLess {
         uint16 feeBips,
         bool permit,
         bytes calldata permitPayload
-    ) external returns (uint96);
+    ) external payable returns (uint96);
 
     function cancelOrder(uint96 orderId) external;
 
