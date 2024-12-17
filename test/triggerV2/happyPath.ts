@@ -741,14 +741,15 @@ describe("Bracket order with order modification", () => {
             ogOrder.recipient,
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
-            false,
-            pendingOrders.findIndex((id:bigint) => id === orderId),
             true,
+            pendingOrders.findIndex((id: bigint) => id === orderId),
+            false,
             "0x"
         );
 
         //verify
         const increasedOrder = await s.Bracket.orders(ethers.toBigInt(orderId.toString()))
+
         expect(increasedOrder.amountIn).to.eq(ogOrder.amountIn + amountInDelta, "AmountIn correct")
 
         let balance = await s.WETH.balanceOf(await s.Bob.getAddress())
@@ -996,6 +997,8 @@ describe("Oracle Less", () => {
         const delta = 10000000n
         const initialWeth = await s.WETH.balanceOf(await s.Oscar.getAddress())
 
+        const pendingOrders = await s.OracleLess.getPendingOrders()
+
         //imposter
         expect(s.OracleLess.connect(s.Bob).modifyOrder(
             orderId,
@@ -1004,6 +1007,7 @@ describe("Oracle Less", () => {
             order.minAmountOut,
             order.recipient,
             false,
+            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x"
         )).to.be.revertedWith("only order owner")
@@ -1016,6 +1020,7 @@ describe("Oracle Less", () => {
             order.minAmountOut,
             order.recipient,
             false,
+            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x"
         )
@@ -1031,6 +1036,7 @@ describe("Oracle Less", () => {
             order.minAmountOut,
             order.recipient,
             true,
+            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x"
         )
@@ -1039,6 +1045,7 @@ describe("Oracle Less", () => {
     })
 
     it("Modify Amount Received", async () => {
+        const pendingOrders = await s.OracleLess.getPendingOrders()
 
         const order = await s.OracleLess.orders(orderId)
         //increase min amount down
@@ -1049,6 +1056,7 @@ describe("Oracle Less", () => {
             expectedAmountOut + 50n,
             order.recipient,
             false,
+            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x"
         )
@@ -1073,6 +1081,7 @@ describe("Oracle Less", () => {
             minAmountOut,
             order.recipient,
             false,
+            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x"
         )
