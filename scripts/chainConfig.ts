@@ -13,7 +13,7 @@ export type ChainConfig = {
 export const chainConfigs: ChainConfig[] = [
     {
         name: "arbitrum",
-        chainId: 42161,
+        chainId: 42161, 
         rpcUrl: process.env.ARB_URL!,
         privateKey: process.env.MAINNET_PRIVATE_KEY!,
         chainlink: true

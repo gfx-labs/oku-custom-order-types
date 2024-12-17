@@ -51,6 +51,7 @@ async function main() {
     //reset for testing
     if (!mainnet) {
       try {
+        console.log(`Resetting network to ${config.name}`)
         await resetGeneric(config.rpcUrl!)
       } catch (e) {
         console.log("Resseting RPC failed for ", config.name)
