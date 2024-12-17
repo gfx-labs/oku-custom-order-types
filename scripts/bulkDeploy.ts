@@ -7,7 +7,7 @@ import { impersonateAccount } from "../util/impersonator";
 import { setBalance } from "@nomicfoundation/hardhat-network-helpers";
 import { decodeUpkeepData, generateUniTx } from "../util/msc";
 import { ChainConfig, chainConfigs } from "./chainConfig";
-import { ChainAddresses, getAddressesByChainId, getMinAmountBySymbol, tokenInfo } from "../util/deploymentAddresses"
+import { ChainAddresses, getAddressesByChainId, getFeeByChainId, tokenInfo } from "../util/deploymentAddresses"
 import { a, o } from "../util/addresser";
 type OraclePair = {
   token: string,
@@ -28,8 +28,7 @@ const { ethers } = require("hardhat");
 //"https://github.com/adrastia-oracle/oku-automation-config/blob/main/worker-config.ts"
 
 const maxPendingOrders = 50
-const minOrderDollars = 25n
-const minOrderSize = ethers.parseUnits(minOrderDollars.toString(), 8)
+const minOrderDollars = ethers.parseUnits("25", 8)
 
 
 const userAddr = "0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89"
@@ -180,9 +179,9 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
     await tx.wait()
     console.log("Registered Oracles on Master on ", config.name)
 
-    tx = await master.setMinOrderSize(minOrderSize)
+    tx = await master.setMinOrderSize(minOrderDollars)
     await tx.wait()
-    console.log(`Set min order size to ${minOrderSize} on ${config.name}`)
+    console.log(`Set min order size to ${minOrderDollars} on ${config.name}`)
     tx = await master.setMaxPendingOrders(maxPendingOrders)
     await tx.wait()
     console.log(`Set max pending orders to ${maxPendingOrders} on ${config.name}`)
@@ -245,21 +244,8 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
     console.log(`OracleLess deployed to ${config.name} @ ${await oracleLess.getAddress()}`)
     coreDeployments.oracleLess = await oracleLess.getAddress()
 
-    //register tokens
-    let tokens: string[] = []
-    let minAmounts: bigint[] = []
-    for (let i = 0; i < addresses.allTokens.length; i++) {
-      //get min amount
-      const minAmount = getMinAmountBySymbol(addresses.allTokens[i].symbol, minOrderDollars)
-      if (minAmount != 0n && addresses.allTokens[i].token != "") {
-        tokens.push(addresses.allTokens[i].token)
-        minAmounts.push(minAmount)
-      }
-    }
-
-    //register tokens
-    await oracleLess.registerTokens(tokens, minAmounts)
-    console.log("Registered min amounts and tokens on Oracless on ", config.name)
+    //set fee
+    await oracleLess.setOrderFee(getFeeByChainId(config.chainId))
 
     if (mainnet) {
       console.log("Submitting OracleLess for verification...")

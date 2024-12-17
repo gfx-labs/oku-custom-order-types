@@ -1371,58 +1371,6 @@ export class Metall2Addresses extends ChainAddresses {
     };
 }
 
-
-
-//map each symbol to ~$1 worth of its tokens
-const symbolToMinAmount: Record<string, bigint> = {
-    "USDC": ethers.parseUnits((1).toString(), 6),
-    "USDT": ethers.parseUnits((1).toString(), 6),
-    "DAI": ethers.parseUnits((1).toString(), 18),
-    "FRAX": ethers.parseUnits((1).toString(), 18),
-    "WETH": ethers.parseUnits((0.00025).toString(), 18),
-    "WBTC": ethers.parseUnits((0.00001).toString(), 8),
-    "WSTETH": ethers.parseUnits((0.000216).toString(), 18),
-    "COMP": ethers.parseUnits((0.009).toString(), 18),
-    "UNI": ethers.parseUnits((0.0575).toString(), 18),
-    "ENS": ethers.parseUnits((0.023315).toString(), 18),
-    "DYDX": ethers.parseUnits((0.467).toString(), 18),
-    "AAVE": ethers.parseUnits((0.0026629).toString(), 18),
-    "MKR": ethers.parseUnits((0.000477).toString(), 18),
-    "TRIBE": ethers.parseUnits((1.5).toString(), 18),
-    "POLYGON": ethers.parseUnits((1.62).toString(), 18),
-    "MATIC": ethers.parseUnits((1.62).toString(), 18),
-    "POL": ethers.parseUnits((1.62).toString(), 18),
-    "LDO": ethers.parseUnits((0.46).toString(), 18),
-    "BAL": ethers.parseUnits((0.2825).toString(), 18),
-    "RETH": ethers.parseUnits((0.0002285).toString(), 18),
-    "CRV": ethers.parseUnits((0.8772).toString(), 18),
-    "1INCH": ethers.parseUnits((1.975).toString(), 18),
-    "GRT": ethers.parseUnits((3.5).toString(), 18),
-    "SNX": ethers.parseUnits((0.325).toString(), 18),
-    "YFI": ethers.parseUnits((0.000088).toString(), 18),
-    "OP": ethers.parseUnits((0.39).toString(), 18),
-    "PYTH": ethers.parseUnits((2.1667).toString(), 18),
-    "WLD": ethers.parseUnits((0.326).toString(), 18),
-    "PENDLE": ethers.parseUnits((0.168634).toString(), 18),
-    "RPL": ethers.parseUnits((0.062).toString(), 18),
-    "FXS": ethers.parseUnits((0.27).toString(), 18),
-    "KNC": ethers.parseUnits((1.425).toString(), 18),
-    "VELO": ethers.parseUnits((3.6).toString(), 18),
-}
-
-export function getMinAmountBySymbol(symbol: string, factor: bigint) {
-
-    let minAmount = 0n
-
-    try {
-        minAmount = symbolToMinAmount[symbol] * factor
-    } catch (e) {
-        console.log("No min set for ", symbol)
-    }
-
-    return minAmount
-}
-
 // Function to retrieve the addresses by chain ID
 export function getAddressesByChainId(chainId: number) {
     const addresses = chainIdToAddresses[chainId];
@@ -1432,27 +1380,61 @@ export function getAddressesByChainId(chainId: number) {
     return addresses;
 }
 
+export function getFeeByChainId(chainId: number) {
+    const fee = chainIdFeeAmount[chainId]
+    if (!fee) {
+        throw new Error(`Fee not available for chain ID ${chainId}`);
+    }
+    return fee
+}
+
+//targeting a ~$0.5 fee in the native gas token
+const chainIdFeeAmount: Record<number, bigint> = {
+    1: ethers.parseEther("0.0001"),
+    42161: ethers.parseEther("0.0001"),
+    137: ethers.parseEther("1"),//MATIC
+    10: ethers.parseEther("0.0001"),
+    8453: ethers.parseEther("0.0001"),
+    56: ethers.parseEther("0.0007"),//BNB
+    324: ethers.parseEther("0.0001"),
+    534353: ethers.parseEther("0.0001"),
+    314: ethers.parseEther("0.08"), //FIL
+    1284: ethers.parseEther("1.75"), //GLMR
+    1101: ethers.parseEther("0.0001"),
+    81457: ethers.parseEther("0.0001"),
+    30: ethers.parseUnits("0.00000475", 8), //RBTC
+    169: ethers.parseEther("0.5"), //MANTA
+    288: ethers.parseEther("2"), //BOBA
+    59144: ethers.parseEther("0.0001"),
+    167000: ethers.parseEther("0.0001"),
+    15000: ethers.parseUnits("1", 8), //SEI
+    100: ethers.parseEther("0.5"), //xDAI
+    1294: ethers.parseEther("0.0001"),
+    2025: ethers.parseEther("0.01"), //OKB
+    1750: ethers.parseUnits("0.4", 8) //MTL
+};
+
 const chainIdToAddresses: Record<number, any> = {
     1: new MainnetAddresses(),
     42161: new ArbAddresses(),
-    137: new PolygonAddresses(),
+    137: new PolygonAddresses(),//MATIC
     10: new OptimisimAddresses(),
     8453: new BaseAddresses(),
-    56: new BscAddresses(),
+    56: new BscAddresses(),//BNB
     324: new ZkSyncAddresses(),
     534353: new ScrollAddresses(),
-    314: new FilecoinAddresses(),  // Filecoin
-    1284: new MoonbeamAddresses(), // Moonbeam
-    1101: new PolygonZkEvmAddresses(), // Polygon zkEVM
-    81457: new BlastAddresses(), // Blast
-    30: new RootstockAddresses(), // Rootstock
-    169: new MantaPacificAddresses(), // Manta Pacific
-    288: new BobaAddresses(), // Boba
-    59144: new LineaAddresses(), // Linea
-    167000: new TaikoAddresses(), // Taiko
-    15000: new SeiAddresses(), // Sei
-    100: new GnosisAddresses(), // Gnosis
-    1294: new BobAddresses(), // Bob
-    2025: new XLayerAddresses(), // XLayer
-    1750: new Metall2Addresses() // Metall2
+    314: new FilecoinAddresses(), //FIL
+    1284: new MoonbeamAddresses(), //GLMR
+    1101: new PolygonZkEvmAddresses(),
+    81457: new BlastAddresses(),
+    30: new RootstockAddresses(), //RBTC
+    169: new MantaPacificAddresses(), //MANTA
+    288: new BobaAddresses(), //BOBA
+    59144: new LineaAddresses(),
+    167000: new TaikoAddresses(),
+    15000: new SeiAddresses(), //SEI
+    100: new GnosisAddresses(), //xDAI
+    1294: new BobAddresses(),
+    2025: new XLayerAddresses(), //OKB
+    1750: new Metall2Addresses() //MTL
 };
