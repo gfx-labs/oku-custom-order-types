@@ -101,9 +101,14 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint256 _minAmountOut,
         address _recipient,
         bool increasePosition,
+        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
     ) external override nonReentrant {
+        require(
+            orderId == pendingOrderIds[pendingOrderIdx],
+            "order doesn't exist"
+        );
         _modifyOrder(
             orderId,
             _tokenOut,
@@ -111,6 +116,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
             _minAmountOut,
             _recipient,
             increasePosition,
+            pendingOrderIdx,
             permit,
             permitPayload
         );
@@ -192,12 +198,16 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint256 _minAmountOut,
         address _recipient,
         bool increasePosition,
+        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
     ) internal {
         //fetch order
         Order memory order = orders[orderId];
-
+        require(
+            order.orderId == pendingOrderIds[pendingOrderIdx],
+            "order doesn't exist"
+        );
         require(msg.sender == order.recipient, "only order owner");
 
         //deduce any amountIn changes

@@ -727,6 +727,9 @@ describe("Bracket order with order modification", () => {
 
         const ogWethBal = await s.WETH.balanceOf(await s.Bob.getAddress())
 
+        //get pending order IDX
+        const pendingOrders = await s.Bracket.getPendingOrders()
+
         //increase amount, providing more USDC to add to the position
         await s.WETH.connect(s.Bob).approve(await s.Bracket.getAddress(), amountInDelta)
         await s.Bracket.connect(s.Bob).modifyOrder(
@@ -739,6 +742,7 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
+            pendingOrders.findIndex((id:bigint) => id === orderId),
             true,
             "0x"
         );
@@ -765,6 +769,7 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
+            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x"
         );
@@ -784,7 +789,7 @@ describe("Bracket order with order modification", () => {
 
         const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
         const ogOrder = await s.Bracket.orders(orderId.toString())
-
+        const pendingOrders = await s.Bracket.getPendingOrders()
         //set stop above strike price
         await s.Bracket.connect(s.Bob).modifyOrder(
             orderId.toString(),
@@ -796,6 +801,7 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
+            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x"
         );
@@ -813,6 +819,7 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
+            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x"
         )
@@ -830,6 +837,7 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
+            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x"
         )
@@ -850,6 +858,7 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
+            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x"
         )

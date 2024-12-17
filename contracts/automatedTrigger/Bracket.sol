@@ -222,12 +222,17 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         address _recipient,
         uint16 _takeProfitSlippage,
         uint16 _stopSlippage,
-        bool permit,
         bool increasePosition,
+        uint96 pendingOrderIdx,
+        bool permit,
         bytes calldata permitPayload
     ) external override nonReentrant {
         //get order
         Order memory order = orders[orderId];
+        require(
+            order.orderId == pendingOrderIds[pendingOrderIdx],
+            "order doesn't exist"
+        );
 
         //only order owner
         require(msg.sender == order.recipient, "only order owner");

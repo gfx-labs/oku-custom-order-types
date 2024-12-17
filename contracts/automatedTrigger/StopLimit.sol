@@ -103,7 +103,10 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         );
 
         //approve
-        order.tokenIn.safeIncreaseAllowance(address(BRACKET_CONTRACT), order.amountIn);
+        order.tokenIn.safeIncreaseAllowance(
+            address(BRACKET_CONTRACT),
+            order.amountIn
+        );
 
         bytes memory swapPayload;
         IERC20 tokenIn = order.tokenIn;
@@ -208,12 +211,17 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         uint16 _stopSlippage,
         uint16 _swapSlippage,
         bool _swapOnFill,
-        bool permit,
         bool increasePosition,
+        uint96 pendingOrderIdx,
+        bool permit,
         bytes calldata permitPayload
     ) external override nonReentrant {
         //get existing order
         Order memory order = orders[orderId];
+        require(
+            order.orderId == pendingOrderIds[pendingOrderIdx],
+            "order doesn't exist"
+        );
         //only order owner
         require(msg.sender == order.recipient, "only order owner");
         //deduce any amountIn changes
