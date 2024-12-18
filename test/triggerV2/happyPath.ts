@@ -247,14 +247,6 @@ describe("Execute Stop-Limit Upkeep", () => {
     })
 })
 
-describe("Permit Check", () => {
-    it("Permit Check", async () => {
-
-    })
-})
-
-
-
 /**
  * For swap on fill, we expect to receive the same asset we provide
  * In this case, we provide USDC, swap to WETH when the stop limit is filled, 
@@ -577,6 +569,18 @@ describe("Execute Bracket Upkeep", () => {
         expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
         result = await s.Bracket.checkUpkeep("0x")
         expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
+
+        //check specific indexes
+        let start = 0
+        let finish = 1
+        const abi = new AbiCoder()
+        const encodedIdxs = abi.encode(["uint96", "uint96"], [start, finish])
+        result = await s.Bracket.checkUpkeep(encodedIdxs)
+        expect(result.upkeepNeeded).to.eq(true, "first idx updeep is needed")
+
+        console.log("Checking from master")
+        result = await s.Master.checkUpkeep(encodedIdxs)
+        expect(result.upkeepNeeded).to.eq(true, "first idx updeep is needed")
     })
 
     it("Perform Upkeep - stop loss", async () => {
@@ -989,7 +993,7 @@ describe("Oracle Less", () => {
             25,
             false,
             "0x",
-            {value: fee}
+            { value: fee }
         )
         const filter = s.OracleLess.filters.OrderCreated
         const events = await s.OracleLess.queryFilter(filter, -1)

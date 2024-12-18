@@ -38,14 +38,24 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
     ///@notice this should never be called inside of a write function due to high gas usage
     function checkUpkeep(
-        bytes calldata
+        bytes calldata checkData
     )
         external
         view
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        for (uint96 i = 0; i < pendingOrderIds.length; i++) {
+        uint96 i = 0;
+        uint96 length = uint96(pendingOrderIds.length);
+        bytes memory checkDataBytes = checkData;
+        if (checkDataBytes.length == 64) {
+            //decode start and end idxs
+            (i, length) = abi.decode(checkData, (uint96, uint96));
+            if(length > uint96(pendingOrderIds.length)){
+                length = uint96(pendingOrderIds.length);
+            }
+        }
+        for (i; i < length; i++) {
             Order memory order = orders[pendingOrderIds[i]];
             (bool inRange, uint256 exchangeRate) = checkInRange(order);
             if (inRange) {
