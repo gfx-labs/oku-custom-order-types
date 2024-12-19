@@ -182,14 +182,14 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
     ) external override nonReentrant {
         if (permit) {
             handlePermit(
-                recipient,
+                msg.sender,
                 permitPayload,
                 uint160(amountIn),
                 address(tokenIn)
             );
         } else {
             //take asset, assume prior approval
-            tokenIn.safeTransferFrom(recipient, address(this), amountIn);
+            tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
         }
 
         _createOrder(
