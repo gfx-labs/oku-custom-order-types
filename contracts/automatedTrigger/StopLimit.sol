@@ -51,7 +51,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         if (checkDataBytes.length == 64) {
             //decode start and end idxs
             (i, length) = abi.decode(checkData, (uint96, uint96));
-            if(length > uint96(pendingOrderIds.length)){
+            if (length > uint96(pendingOrderIds.length)) {
                 length = uint96(pendingOrderIds.length);
             }
         }
@@ -191,6 +191,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             //take asset, assume prior approval
             tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
         }
+        
+        MASTER.checkMinOrderSize(tokenIn, amountIn);
 
         _createOrder(
             stopLimitPrice,
@@ -311,13 +313,13 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
     ///@notice contract owner can cancel any order
     ///@notice cancelled orders refund the order recipient
-    function adminCancelOrder(uint96 orderId) external onlyOwner nonReentrant{
+    function adminCancelOrder(uint96 orderId) external onlyOwner nonReentrant {
         _cancelOrder(orderId);
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(uint96 orderId) external nonReentrant{
+    function cancelOrder(uint96 orderId) external nonReentrant {
         Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(orderId), "Order not active");
@@ -354,8 +356,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
                 feeBips <= 10000,
             "BIPS > 10k"
         );
-
-        MASTER.checkMinOrderSize(tokenIn, amountIn);
 
         uint96 orderId = MASTER.generateOrderId(recipient);
 
