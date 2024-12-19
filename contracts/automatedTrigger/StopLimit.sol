@@ -311,13 +311,13 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
     ///@notice contract owner can cancel any order
     ///@notice cancelled orders refund the order recipient
-    function adminCancelOrder(uint96 orderId) external onlyOwner {
+    function adminCancelOrder(uint96 orderId) external onlyOwner nonReentrant{
         _cancelOrder(orderId);
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(uint96 orderId) external {
+    function cancelOrder(uint96 orderId) external nonReentrant{
         Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(orderId), "Order not active");

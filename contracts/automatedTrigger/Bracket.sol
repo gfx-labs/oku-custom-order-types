@@ -312,14 +312,14 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     ///@notice allow administrator to cancel any order
     ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
     ///@notice only pending orders can be cancelled
-    function adminCancelOrder(uint96 orderId) external onlyOwner {
+    function adminCancelOrder(uint96 orderId) external onlyOwner nonReentrant{
         Order memory order = orders[orderId];
         require(_cancelOrder(order), "Order not active");
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(uint96 orderId) external {
+    function cancelOrder(uint96 orderId) external nonReentrant{
         Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(order), "Order not active");
