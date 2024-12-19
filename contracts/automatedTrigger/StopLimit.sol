@@ -191,7 +191,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             //take asset, assume prior approval
             tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
         }
-        
+
         MASTER.checkMinOrderSize(tokenIn, amountIn);
 
         _createOrder(
@@ -356,6 +356,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
                 feeBips <= 10000,
             "BIPS > 10k"
         );
+
+        require(tokenIn != tokenOut, "tokenIn == tokenOut");
 
         uint96 orderId = MASTER.generateOrderId(recipient);
 
