@@ -88,12 +88,12 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         emit OrderCreated(orderId, orderCount);
     }
 
-    function adminCancelOrder(uint96 orderId) external onlyOwner {
+    function adminCancelOrder(uint96 orderId) external onlyOwner nonReentrant{
         Order memory order = orders[orderId];
         require(_cancelOrder(order), "Order not active");
     }
 
-    function cancelOrder(uint96 orderId) external override {
+    function cancelOrder(uint96 orderId) external override nonReentrant{
         Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(order), "Order not active");
