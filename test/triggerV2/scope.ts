@@ -1,5 +1,5 @@
 import { AbiCoder, AddressLike, BytesLike, Signer } from "ethers";
-import {  AutomationMaster, Bracket, IERC20, PlaceholderOracle, StopLimit, UniswapV3Pool } from "../../typechain-types";
+import {  AutomationMaster, Bracket, IERC20, OracleLess, PlaceholderOracle, StopLimit, UniswapV3Pool } from "../../typechain-types";
 import { ethers } from "hardhat";
 
 export type Order = {
@@ -32,6 +32,8 @@ export class TestScope {
     Bob!: Signer
     Charles!: Signer//test swap-on-fill
     Ian!: Signer //isolated testing
+    Oscar!: Signer //Oracle-less testing
+    Gary!: Signer //Oracle-less failure testing
 
     abi = new AbiCoder()
 
@@ -59,6 +61,7 @@ export class TestScope {
     Master!: AutomationMaster
     StopLimit!: StopLimit
     Bracket!: Bracket
+    OracleLess!: OracleLess
 
     maxPendingOrders = 20
     minOrderSize = ethers.parseUnits("10", 8)

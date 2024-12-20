@@ -49,13 +49,14 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Steve.getAddress(),
+            5,//5 bips fee
             smallSlippage,
             smallSlippage,
             false,
             "0x"
         )
 
-       
+
         const filter = s.Bracket.filters.OrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
@@ -95,7 +96,9 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         expect(s.Master.performUpkeep(encodedTxData)).to.be.revertedWith("Too Little Received")
 
         //try to cancel order that isn't yours
-        expect(s.Bracket.connect(s.Bob).cancelOrder(steveOrder)).to.be.revertedWith("Only Order Owner")
+        let orders = await s.Bracket.getPendingOrders()
+        let orderIndex = orders.findIndex((id: bigint) => id === steveOrder)
+        expect(s.Bracket.connect(s.Bob).cancelOrder(orderIndex)).to.be.revertedWith("Only Order Owner")
 
         minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, data.bips)//actual bips are 0% slippage
 
@@ -112,7 +115,9 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
 
 
         //cancel order for future tests
-        await s.Bracket.connect(s.Steve).cancelOrder(steveOrder)
+        orders = await s.Bracket.getPendingOrders()
+        orderIndex = orders.findIndex((id: bigint) => id === steveOrder)
+        await s.Bracket.connect(s.Steve).cancelOrder(orderIndex)
 
     })
 
@@ -127,6 +132,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Steve.getAddress(),
+            5,//5 bips fee
             smallSlippage,
             smallSlippage,
             false,
@@ -148,6 +154,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Steve.getAddress(),
+            5,//5 bips fee
             steveBips,
             steveBips,
             false,

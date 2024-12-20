@@ -1,5 +1,5 @@
 import { AbiCoder, AddressLike, BigNumberish, BytesLike, Signer, TransactionResponse, TypedDataDomain } from "ethers"
-import { IERC20, IERC20__factory, IPermit2, ISwapRouter02__factory, UniswapV3Pool } from "../typechain-types"
+import { IERC20, IERC20__factory, IPermit2, IPermit2__factory, ISwapRouter02__factory, UniswapV3Pool } from "../typechain-types"
 import { ethers } from "hardhat"
 import { keccak256 } from "@ethersproject/keccak256";
 import { toUtf8Bytes } from "@ethersproject/strings";
@@ -185,6 +185,16 @@ export const permitSingle = async (
         signer = await ethers.getSigner(await signer.getAddress())
         await impersonateAccount(await signer.getAddress())
     }
+
+    const PERMIT = IPermit2__factory.connect(permit2, signer)
+
+    const allowance = await PERMIT.allowance(
+        await signer.getAddress(),
+        token,
+        spender
+    )
+
+    nonce = Number(allowance[2])
 
     const permitDetails: PermitDetails = {
         token: token,
