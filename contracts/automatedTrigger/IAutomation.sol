@@ -336,7 +336,7 @@ interface IOracleLess {
         uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
-    ) external;
+    ) external payable;
 
     function fillOrder(
         uint96 pendingOrderIdx,

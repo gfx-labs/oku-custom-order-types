@@ -61,8 +61,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint16 feeBips,
         bool permit,
         bytes calldata permitPayload
-    ) external override payable paysFee nonReentrant returns (uint96 orderId) {
-
+    ) external payable override paysFee nonReentrant returns (uint96 orderId) {
         require(amountIn != 0, "amountIn == 0");
 
         //procure tokens
@@ -88,12 +87,12 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         emit OrderCreated(orderId, orderCount);
     }
 
-    function adminCancelOrder(uint96 orderId) external onlyOwner nonReentrant{
+    function adminCancelOrder(uint96 orderId) external onlyOwner nonReentrant {
         Order memory order = orders[orderId];
         require(_cancelOrder(order), "Order not active");
     }
 
-    function cancelOrder(uint96 orderId) external override nonReentrant{
+    function cancelOrder(uint96 orderId) external override nonReentrant {
         Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         require(_cancelOrder(order), "Order not active");
@@ -109,7 +108,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant {
+    ) external payable override nonReentrant paysFee{
         require(
             orderId == pendingOrderIds[pendingOrderIdx],
             "order doesn't exist"
@@ -239,6 +238,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
                 //refund position partially
                 order.tokenIn.safeTransfer(order.recipient, amountInDelta);
             }
+            require(newAmountIn != 0, "newAmountIn == 0");
         }
 
         //construct new order

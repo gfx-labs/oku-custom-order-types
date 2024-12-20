@@ -1018,7 +1018,8 @@ describe("Oracle Less", () => {
             false,
             pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
-            "0x"
+            "0x",
+            { value: fee }
         )).to.be.revertedWith("only order owner")
 
         //decrease amount
@@ -1031,7 +1032,8 @@ describe("Oracle Less", () => {
             false,
             pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
-            "0x"
+            "0x",
+            { value: fee }
         )
         //check for refund
         expect(await s.WETH.balanceOf(await s.Oscar.getAddress())).to.eq(initialWeth + delta, "WETH received")
@@ -1047,7 +1049,8 @@ describe("Oracle Less", () => {
             true,
             pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
-            "0x"
+            "0x",
+            { value: fee }
         )
         expect(await s.WETH.balanceOf(await s.Oscar.getAddress())).to.eq(initialWeth, "WETH spent")
 
@@ -1067,7 +1070,8 @@ describe("Oracle Less", () => {
             false,
             pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
-            "0x"
+            "0x",
+            { value: fee }
         )
 
         const txData = await generateUniTxData(
@@ -1092,7 +1096,8 @@ describe("Oracle Less", () => {
             false,
             pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
-            "0x"
+            "0x",
+            { value: fee }
         )
     })
 
