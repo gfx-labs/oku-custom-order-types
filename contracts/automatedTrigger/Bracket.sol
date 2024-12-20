@@ -48,7 +48,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         if (checkData.length == 64) {
             //decode start and end idxs
             (i, length) = abi.decode(checkData, (uint96, uint96));
-            if(length > uint96(pendingOrderIds.length)){
+            if (length > uint96(pendingOrderIds.length)) {
                 length = uint96(pendingOrderIds.length);
             }
         }
@@ -312,17 +312,19 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     ///@notice allow administrator to cancel any order
     ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
     ///@notice only pending orders can be cancelled
-    function adminCancelOrder(uint96 orderId) external onlyOwner nonReentrant{
-        Order memory order = orders[orderId];
-        require(_cancelOrder(order), "Order not active");
+    function adminCancelOrder(
+        uint96 pendingOrderIdx
+    ) external onlyOwner nonReentrant {
+        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
+        _cancelOrder(order, pendingOrderIdx);
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(uint96 orderId) external nonReentrant{
-        Order memory order = orders[orderId];
+    function cancelOrder(uint96 pendingOrderIdx) external nonReentrant {
+        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
         require(msg.sender == order.recipient, "Only Order Owner");
-        require(_cancelOrder(order), "Order not active");
+        _cancelOrder(order, pendingOrderIdx);
     }
 
     function procureTokens(
@@ -511,25 +513,18 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         emit OrderCreated(existingOrderId);
     }
 
-    function _cancelOrder(Order memory order) internal returns (bool) {
-        for (uint96 i = 0; i < pendingOrderIds.length; i++) {
-            if (pendingOrderIds[i] == order.orderId) {
-                //remove from pending array
-                pendingOrderIds = ArrayMutation.removeFromArray(
-                    i,
-                    pendingOrderIds
-                );
+    function _cancelOrder(Order memory order, uint96 pendingOrderIdx) internal {
+        //remove from pending array
+        pendingOrderIds = ArrayMutation.removeFromArray(
+            pendingOrderIdx,
+            pendingOrderIds
+        );
 
-                //refund tokenIn amountIn to recipient
-                order.tokenIn.safeTransfer(order.recipient, order.amountIn);
+        //refund tokenIn amountIn to recipient
+        order.tokenIn.safeTransfer(order.recipient, order.amountIn);
 
-                //emit event
-                emit OrderCancelled(order.orderId);
-
-                return true;
-            }
-        }
-        return false;
+        //emit event
+        emit OrderCancelled(order.orderId);
     }
 
     ///@notice execute swap transaction

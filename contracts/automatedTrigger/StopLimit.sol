@@ -311,18 +311,22 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         orders[orderId] = newOrder;
     }
 
-    ///@notice contract owner can cancel any order
-    ///@notice cancelled orders refund the order recipient
-    function adminCancelOrder(uint96 orderId) external onlyOwner nonReentrant {
-        _cancelOrder(orderId);
+    ///@notice allow administrator to cancel any order
+    ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
+    ///@notice only pending orders can be cancelled
+    function adminCancelOrder(
+        uint96 pendingOrderIdx
+    ) external onlyOwner nonReentrant {
+        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
+        _cancelOrder(order, pendingOrderIdx);
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(uint96 orderId) external nonReentrant {
-        Order memory order = orders[orderId];
+    function cancelOrder(uint96 pendingOrderIdx) external nonReentrant {
+        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
         require(msg.sender == order.recipient, "Only Order Owner");
-        require(_cancelOrder(orderId), "Order not active");
+        _cancelOrder(order, pendingOrderIdx);
     }
 
     function _createOrder(
@@ -383,25 +387,18 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         emit OrderCreated(orderId);
     }
 
-    function _cancelOrder(uint96 orderId) internal returns (bool) {
-        Order memory order = orders[orderId];
-        for (uint96 i = 0; i < pendingOrderIds.length; i++) {
-            if (pendingOrderIds[i] == orderId) {
-                //remove from pending array
-                pendingOrderIds = ArrayMutation.removeFromArray(
-                    i,
-                    pendingOrderIds
-                );
-                order.tokenIn.safeTransfer(order.recipient, order.amountIn);
+    function _cancelOrder(Order memory order, uint96 pendingOrderIdx) internal {
+        //remove from pending array
+        pendingOrderIds = ArrayMutation.removeFromArray(
+            pendingOrderIdx,
+            pendingOrderIds
+        );
 
-                //emit event
-                emit OrderCancelled(orderId);
+        //refund tokenIn amountIn to recipient
+        order.tokenIn.safeTransfer(order.recipient, order.amountIn);
 
-                //short circuit loop
-                return true;
-            }
-        }
-        return false;
+        //emit event
+        emit OrderCancelled(order.orderId);
     }
 
     ///@notice handle signature and acquisition of asset with permit2
