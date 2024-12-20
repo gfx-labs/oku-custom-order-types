@@ -243,7 +243,10 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(balance).to.eq(s.wethAmount, "WETH received")
 
         //cancel limit order for future tests
-        await s.Bracket.connect(s.Bob).cancelOrder(orderId.toString())
+        //get order index
+        const orders = await s.Bracket.getPendingOrders()
+        const orderIndex = orders.findIndex((id: bigint) => id === orderId)
+        await s.Bracket.connect(s.Bob).cancelOrder(orderIndex)
     })
 })
 
