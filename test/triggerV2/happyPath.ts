@@ -243,17 +243,12 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(balance).to.eq(s.wethAmount, "WETH received")
 
         //cancel limit order for future tests
-        await s.Bracket.connect(s.Bob).cancelOrder(orderId.toString())
+        //get order index
+        const orders = await s.Bracket.getPendingOrders()
+        const orderIndex = orders.findIndex((id: bigint) => id === orderId)
+        await s.Bracket.connect(s.Bob).cancelOrder(orderIndex)
     })
 })
-
-describe("Permit Check", () => {
-    it("Permit Check", async () => {
-
-    })
-})
-
-
 
 /**
  * For swap on fill, we expect to receive the same asset we provide
@@ -577,6 +572,18 @@ describe("Execute Bracket Upkeep", () => {
         expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
         result = await s.Bracket.checkUpkeep("0x")
         expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
+
+        //check specific indexes
+        let start = 0
+        let finish = 1
+        const abi = new AbiCoder()
+        const encodedIdxs = abi.encode(["uint96", "uint96"], [start, finish])
+        result = await s.Bracket.checkUpkeep(encodedIdxs)
+        expect(result.upkeepNeeded).to.eq(true, "first idx updeep is needed")
+
+        console.log("Checking from master")
+        result = await s.Master.checkUpkeep(encodedIdxs)
+        expect(result.upkeepNeeded).to.eq(true, "first idx updeep is needed")
     })
 
     it("Perform Upkeep - stop loss", async () => {
@@ -989,7 +996,7 @@ describe("Oracle Less", () => {
             25,
             false,
             "0x",
-            {value: fee}
+            { value: fee }
         )
         const filter = s.OracleLess.filters.OrderCreated
         const events = await s.OracleLess.queryFilter(filter, -1)
@@ -1014,7 +1021,8 @@ describe("Oracle Less", () => {
             false,
             pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
-            "0x"
+            "0x",
+            { value: fee }
         )).to.be.revertedWith("only order owner")
 
         //decrease amount
@@ -1027,7 +1035,8 @@ describe("Oracle Less", () => {
             false,
             pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
-            "0x"
+            "0x",
+            { value: fee }
         )
         //check for refund
         expect(await s.WETH.balanceOf(await s.Oscar.getAddress())).to.eq(initialWeth + delta, "WETH received")
@@ -1043,7 +1052,8 @@ describe("Oracle Less", () => {
             true,
             pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
-            "0x"
+            "0x",
+            { value: fee }
         )
         expect(await s.WETH.balanceOf(await s.Oscar.getAddress())).to.eq(initialWeth, "WETH spent")
 
@@ -1063,7 +1073,8 @@ describe("Oracle Less", () => {
             false,
             pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
-            "0x"
+            "0x",
+            { value: fee }
         )
 
         const txData = await generateUniTxData(
@@ -1088,7 +1099,8 @@ describe("Oracle Less", () => {
             false,
             pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
-            "0x"
+            "0x",
+            { value: fee }
         )
     })
 

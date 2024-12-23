@@ -161,7 +161,7 @@ contract AutomationMaster is IAutomationMaster, Ownable {
 
     ///@notice check upkeep on all order types
     function checkUpkeep(
-        bytes calldata
+        bytes calldata checkData
     )
         external
         view
@@ -169,13 +169,13 @@ contract AutomationMaster is IAutomationMaster, Ownable {
         returns (bool upkeepNeeded, bytes memory performData)
     {
         //check stop limit order
-        (upkeepNeeded, performData) = STOP_LIMIT_CONTRACT.checkUpkeep("0x");
+        (upkeepNeeded, performData) = STOP_LIMIT_CONTRACT.checkUpkeep(checkData);
         if (upkeepNeeded) {
             return (true, performData);
         }
 
         //check bracket order
-        (upkeepNeeded, performData) = BRACKET_CONTRACT.checkUpkeep("0x");
+        (upkeepNeeded, performData) = BRACKET_CONTRACT.checkUpkeep(checkData);
         if (upkeepNeeded) {
             return (true, performData);
         }
