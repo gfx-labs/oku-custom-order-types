@@ -702,7 +702,7 @@ export class OptimisimAddresses extends ChainAddresses {
         { symbol: "AAVE", token: "0x76FB31fb4af56892A25e32cFC43De717950c9278", feed: "0x338ed6787f463394d24813b297401b9f05a8c9d1", relay: "0x1bfeb157400A05C010C34bfA0Baf89822D14a5e4" },
         { symbol: "UNI", token: "0x6fd9d7AD17242c41f7131d257212c54A0e816691", feed: "0x11429ee838cc01071402f21c219870cbac0a59a0", relay: "0x5B4784247dFCA5d0cB73E8ad46114eA3E65cF237" },
         { symbol: "WSTETH", token: "0x1F32b1c2345538c0c6f582fCB022739c4A194Ebb", feed: "0x698b585cbc4407e2d54aa898b2600b53c68958f7", relay: "0x1792ea57b9DB08A077101999b309E951fe576792" },
-        { symbol: "RETH", token: "0x9Bcef72be871e61ED4fBbc7630889beE758eb81D", feed: "0x1a8F81c256aee9C640e14bB0453ce247ea0DFE6F", relay: "" },
+        { symbol: "RETH", token: "0x9Bcef72be871e61ED4fBbc7630889beE758eb81D", feed: "", relay: "" },
         { symbol: "SNX", token: "0x8700dAec35aF8Ff88c16BdF0418774CB3D7599B4", feed: "0x2fcf37343e916eaed1f1ddaaf84458a359b53877", relay: "0x2DBe413536CBa5f4Eb832f94427Be980dDbAa0aa" },
         { symbol: "USDT", token: "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58", feed: "", relay: "" },
         { symbol: "PYTH", token: "0x99C59ACeBFEF3BBFB7129DC90D1a11DB0E91187f", feed: "0x0838cFe6A97C9CE1611a6Ed17252477a3c71eBEb", relay: "0xe4f974b9DB33b9132709F2BadC0cf24954167FD2" },
@@ -714,26 +714,30 @@ export class OptimisimAddresses extends ChainAddresses {
         { symbol: "YFI", token: "0x9046d36440290ffde54fe0dd84db8b1cfee9107b", feed: "0x5cdC797acCBf57EE2363Fed9701262Abc87a232e", relay: "0x5aBB6d9735e7131f39F06A4AA7c789EBfC295241" },
         { symbol: "FXS", token: "0x67CCEA5bb16181E7b4109c9c2143c24a1c2205Be", feed: "0xB9B16330671067B1b062B9aC2eFd2dB75F03436E", relay: "0x0c0337e0283d8547b54E15b0A5C5B2248Ff5FCE5" },
         { symbol: "BAL", token: "0xfe8b128ba8c78aabc59d4c64cee7ff28e9379921", feed: "0x30D9d31C1ac29Bc2c2c312c1bCa9F8b3D60e2376", relay: "0xe6daa90Bae9cAB1c171eefA561fF9b381ee5C19A" },
-        { symbol: "KNC", token: "0xa00e3a3511aac35ca78530c85007afcd31753819", feed: "0xCB24d22aF35986aC1feb8874AdBbDF68f6dC2e96", relay: "0x328397E6BcFFFFDebED68b3841283DEfb0116A4d" },
-        { symbol: "VELO", token: "0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db", feed: "0x0f2Ed59657e391746C1a097BDa98F2aBb94b1120", relay: "" },
+        { symbol: "KNC", token: "0xa00e3a3511aac35ca78530c85007afcd31753819", feed: "0xCB24d22aF35986aC1feb8874AdBbDF68f6dC2e96", relay: "0x73F77640f5428348c99041D9806e5dDAf3eAA32A" },
+        { symbol: "VELO", token: "0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db", feed: "0x0f2Ed59657e391746C1a097BDa98F2aBb94b1120", relay: "0x23cFAE143Fa7cc5b9AA32c3857d3D1aE1193061E" },
         { symbol: "USDC", token: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", feed: "0x16a9FA2FDa030272Ce99B29CF780dFA30361E0f3", relay: "0x8B5AbFbdC5Ec4B88A4e94afBf9f22b81F71a25a9" },
-        { symbol: "LINK", token: "0x350a791bfc2c21f9ed5d10980dad2e2638ffa7f6", feed: "0xCc232dcFAAE6354cE191Bd574108c1aD03f86450s", relay: "" },
-        { symbol: "CRV", token: "0x0994206dfE8De6Ec6920FF4D779B0d950605Fb53s", feed: "0xbD92C6c284271c227a1e0bF1786F468b539f51D9", relay: "" },
+        { symbol: "LINK", token: "0x350a791bfc2c21f9ed5d10980dad2e2638ffa7f6", feed: "0xCc232dcFAAE6354cE191Bd574108c1aD03f86450", relay: "0x0f39bf4De2F2Ee7f1fbc9084E6F5e2E87CD6738d" },
+        { symbol: "CRV", token: "0x0994206dfE8De6Ec6920FF4D779B0d950605Fb53", feed: "0xbD92C6c284271c227a1e0bF1786F468b539f51D9", relay: "0x40680A87E630d7d1E05cA1413448e0Dee1C3702c" },
         { symbol: "STG", token: "0x296F55F8Fb28E498B858d0BcDA06D955B2Cb3f97", feed: "", relay: "" },
-        { symbol: "KNC", token: "0xa00E3A3511aAC35cA78530c85007AFCd31753819", feed: "0xCB24d22aF35986aC1feb8874AdBbDF68f6dC2e96", relay: "" },
-        { symbol: "CBETH", token: "0xadDb6A0412DE1BA0F936DCaeb8Aaa24578dcF3B2", feed: "0x138b809B8472fF09Cd3E075E6EcbB2e42D41d870", relay: "" },
-        { symbol: "PEPE", token: "0x12ff4a259e14D4DCd239C447D23C9b00F7781d8F", feed: "0x64Ecf089a6594Be781908D5a26FC8fA6CB08A2C7", relay: "" }
+        { symbol: "CBETH", token: "0xadDb6A0412DE1BA0F936DCaeb8Aaa24578dcF3B2", feed: "", relay: "" },
+        { symbol: "PEPE", token: "0x12ff4a259e14D4DCd239C447D23C9b00F7781d8F", feed: "0x64Ecf089a6594Be781908D5a26FC8fA6CB08A2C7", relay: "0xfdf6D84f6dfFE2D439c43EDAC0d617eD91756db0" }
     ]
 
+    /**
+    master: "0x940De081B76AbDa22F7E1Dfcfcf666354665c0Ae",
+        bracket: "0x908E2b7C9C5559834776eebe101947e38b66b2CA",
+        stopLimit: "0x7627EDD2357e4F49a1E3D9ae1f353a00DBd67dFA",
+        oracleLess: "0xB2c42eBC823877e23128DDcadD562402d84ca95d",
+     */
 
+    //testing deploys
     readonly coreDeployments = {
-        master: "",
-        bracket: "",
-        stopLimit: "",
-        oracleLess: "",
+        master: '0xa3EB0e5B79cFa0bee52c5Bfaf2B46B20a3E46Ba5',
+        bracket: '0x29C6B745D21FF53140B11d4B5999564E1057F6F1',
+        stopLimit: '0xDd10e34AB58aF00693f2bFAc483139C8EEe2D5Ab',
+        oracleLess: '0x8c8D62eBFE417c9eA8c51583A516a5476388a5D9'
     };
-
-
 }
 export class ZkSyncAddresses extends ChainAddresses {
     readonly permit2: string = "0x0000000000225e31d15943971f47ad3022f714fa"

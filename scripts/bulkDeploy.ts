@@ -9,6 +9,8 @@ import { decodeUpkeepData, generateUniTx } from "../util/msc";
 import { ChainConfig, chainConfigs } from "./chainConfig";
 import { ChainAddresses, getAddressesByChainId, getFeeByChainId, tokenInfo } from "../util/deploymentAddresses"
 import { a, o } from "../util/addresser";
+import { sleep } from "sleep"
+import {network} from "hardhat"
 type OraclePair = {
   token: string,
   oracle: string
@@ -20,6 +22,33 @@ type CoreDeployments = {
   stopLimit: string,
   oracleLess: string
 }
+
+const chainsToDeploy = [
+  10, // Optimism
+  /**
+  42161, // Arbitrum
+  137, // Polygon (MATIC)
+  8453, // Base
+  56, // Binance Smart Chain (BSC)
+  324, // ZkSync
+  534353, // Scroll
+  314, // Filecoin (FIL)
+  1284, // Moonbeam (GLMR)
+  1101, // Polygon zkEVM
+  81457, // Blast
+  30, // Rootstock (RBTC)
+  169, // Manta Pacific (MANTA)
+  288, // Boba
+  59144, // Linea
+  167000, // Taiko
+  15000, // Sei
+  100, // Gnosis (xDAI)
+  1294, // Bob
+  2025, // XLayer (OKB)
+  1750, // Metall2 (MTL)
+  1, // Mainnet
+   */
+];
 
 const zaddr = "0x0000000000000000000000000000000000000000"
 
@@ -47,32 +76,38 @@ async function main() {
 
   for (const config of chainConfigs) {
     let signer: Signer
-    //reset for testing
-    if (!mainnet) {
+
+    if (chainsToDeploy.includes(config.chainId)) {
+      //reset for testing
+      if (!mainnet) {
+        try {
+          console.log(`Resetting network to ${config.name}`)
+          await resetGeneric(config.rpcUrl!)
+        } catch (e) {
+          console.log("Resseting RPC failed for ", config.name)
+          continue
+        }
+        signer = await ethers.getSigner(userAddr)
+        await setBalance(userAddr, ethers.parseEther("1000"))
+        await impersonateAccount(userAddr)
+      } else {
+        console.log("Deploying to: ", config.name)
+        const provider = new ethers.JsonRpcProvider(config.rpcUrl)
+        signer = new ethers.Wallet(config.privateKey, provider)
+      }
       try {
-        console.log(`Resetting network to ${config.name}`)
-        await resetGeneric(config.rpcUrl!)
+        mainnet = false
+        const addresses: ChainAddresses = getAddressesByChainId(config.chainId)
+        await deployAndSetup(signer, config, addresses)
+
       } catch (e) {
-        console.log("Resseting RPC failed for ", config.name)
+        console.log(e)
         continue
       }
-      signer = await ethers.getSigner(userAddr)
-      await setBalance(userAddr, ethers.parseEther("1000"))
-      await impersonateAccount(userAddr)
-    } else {
-      console.log("Deploying to: ", config.name)
-      const provider = new ethers.JsonRpcProvider(config.rpcUrl)
-      signer = new ethers.Wallet(config.privateKey, provider)
     }
-    try {
-      const addresses: ChainAddresses = getAddressesByChainId(config.chainId)
-      await deployAndSetup(signer, config, addresses)
 
-    } catch (e) {
-      console.log(e)
-      continue
-    }
   }
+  console.log("DONE")
 }
 
 const deployAndSetup = async (signer: Signer, config: ChainConfig, a: ChainAddresses) => {
@@ -88,6 +123,10 @@ const deployAndSetup = async (signer: Signer, config: ChainConfig, a: ChainAddre
   console.log("")
   console.log("Core Deployments for: ", config.name)
   console.log(coreDeployments)
+  const master = IAutomationMaster__factory.connect(coreDeployments.master, signer)
+  const result = await master.checkUpkeep("0x")
+  await sleep(15)
+  console.log("Upkeep: ", result.upkeepNeeded)
   console.log("")
 
 
@@ -98,6 +137,11 @@ const bulkDeployOracles = async (signer: Signer, config: ChainConfig, addresses:
   let oracles: OraclePair[] = []
 
   const tokens: tokenInfo[] = addresses.allTokens
+
+  let deployed = false
+  let relay = ""
+  let args: string[] = []
+
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i]
@@ -120,28 +164,38 @@ const bulkDeployOracles = async (signer: Signer, config: ChainConfig, addresses:
       continue
     }
 
+
     //if there is no relay and we have a feed, deploy a relay
     if (token.relay == '' && token.feed != '') {
-      const oracle = await DeployContract(new OracleRelay__factory(signer), signer, token.token, token.feed)
+      console.log("Deploying oracle for ", token.symbol)
+      const oracle = await DeployContract(new OracleRelay__factory(signer), signer, ethers.getAddress(token.token), ethers.getAddress(token.feed))
       await oracle!.deploymentTransaction()
       console.log(`${token.symbol} Oracle Deployed to ${config.name} @ ${await oracle!.getAddress()}`)
       console.log(`${token.symbol} PRICE: `, await oracle!.currentValue())
       oraclePair.oracle = await oracle.getAddress()
       oracles.push(oraclePair)
+      deployed = true
+      relay = await oracle.getAddress()
+      args = [token.token, token.feed]
 
     }
 
   }
   //submit 1 for verification
 
-  if (mainnet) {
+  if (mainnet && deployed) {
     console.log("Submitting oracle for verificaiton on ", config.name)
-    Promise.all([
-      hre.run("verify:verify", {
-        address: oracles[0].oracle,
-        constructorArguments: [tokens[0].token, tokens[0].feed],
-      }),
-    ])
+    await sleep(15)
+    try {
+      Promise.all([
+        hre.run("verify:verify", {
+          address: relay,
+          constructorArguments: args,//[tokens[0].token, tokens[0].feed]
+        }),
+      ])
+    }catch (e) {
+      console.log("Error verifying oracle on ", config.name)
+    }
   }
 
 
@@ -170,8 +224,8 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
 
     //register oracles
     //split oracle pairs
-    const tokenAddrs = oracles.map(pair => pair.token);
-    const oracleAddrs = oracles.map(pair => pair.oracle);
+    const tokenAddrs = oracles.map(pair => ethers.getAddress(pair.token));
+    const oracleAddrs = oracles.map(pair => ethers.getAddress(pair.oracle));
     console.log("TOKENS: ", tokenAddrs)
     console.log("ORACLE: ", oracleAddrs)
 
@@ -188,7 +242,9 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
 
 
     if (mainnet) {
-      console.log("Submitting Bracket for verification...")
+      const ogNetwork = network.name
+      console.log("Submitting Master for verification...")
+      await sleep(1)
       Promise.all([
         hre.run("verify:verify", {
           address: await master.getAddress(),
@@ -211,6 +267,7 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
 
     if (mainnet) {
       console.log("Submitting Bracket for verification...")
+      await sleep(15)
       Promise.all([
         hre.run("verify:verify", {
           address: await bracket.getAddress(),
@@ -228,6 +285,7 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
     coreDeployments.stopLimit = await stopLimit.getAddress()
     if (mainnet) {
       console.log("Submitting StopLimit for verification...")
+      await sleep(15)
       Promise.all([
         hre.run("verify:verify", {
           address: await stopLimit.getAddress(),
@@ -243,12 +301,17 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
     await oracleLess.deploymentTransaction()
     console.log(`OracleLess deployed to ${config.name} @ ${await oracleLess.getAddress()}`)
     coreDeployments.oracleLess = await oracleLess.getAddress()
+    await sleep(1)
 
     //set fee
-    await oracleLess.setOrderFee(getFeeByChainId(config.chainId))
+    let tx = await oracleLess.setOrderFee(getFeeByChainId(config.chainId))
+    await tx.wait()
+    await sleep(1)
+    console.log("Set fee on Oracleless")
 
     if (mainnet) {
       console.log("Submitting OracleLess for verification...")
+      await sleep(15)
       Promise.all([
         hre.run("verify:verify", {
           address: await oracleLess.getAddress(),
@@ -261,10 +324,11 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
   if (newMaster) {
     //register sub keepers
     const master = AutomationMaster__factory.connect(coreDeployments.master, signer)
-    await master.registerSubKeepers(
+    let tx = await master.registerSubKeepers(
       coreDeployments.stopLimit,
       coreDeployments.bracket
     )
+    await tx.wait()
     console.log("Sub Keepers Registered to Master on ", config.name)
   }
 

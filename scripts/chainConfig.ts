@@ -19,7 +19,7 @@ export const chainConfigs: ChainConfig[] = [
         chainlink: true
     },
     {
-        name: "op",
+        name: "optimism",
         chainId: 10,
         rpcUrl: process.env.OP_URL!,
         privateKey: process.env.MAINNET_PRIVATE_KEY!,
