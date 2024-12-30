@@ -250,22 +250,13 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         if (amountInDelta != 0) {
             if (increasePosition) {
                 newAmountIn += amountInDelta;
-                //take funds via permit2
-                if (permit) {
-                    handlePermit(
-                        order.recipient,
-                        permitPayload,
-                        uint160(amountInDelta),
-                        address(order.tokenIn)
-                    );
-                } else {
-                    //legacy transfer, assume prior approval
-                    order.tokenIn.safeTransferFrom(
-                        order.recipient,
-                        address(this),
-                        amountInDelta
-                    );
-                }
+                procureTokens(
+                    order.tokenIn,
+                    amountInDelta,
+                    msg.sender,
+                    permit,
+                    permitPayload
+                );
             } else {
                 //ensure delta is valid
                 require(amountInDelta < order.amountIn, "invalid delta");
@@ -335,6 +326,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         bytes calldata permitPayload
     ) internal {
         if (permit) {
+            require(amount < type(uint160).max, "uint160 overflow");
             IAutomation.Permit2Payload memory payload = abi.decode(
                 permitPayload,
                 (IAutomation.Permit2Payload)

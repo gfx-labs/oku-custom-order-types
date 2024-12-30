@@ -181,6 +181,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         bytes calldata permitPayload
     ) external override nonReentrant {
         if (permit) {
+            require(amountIn < type(uint160).max, "uint160 overflow");
             handlePermit(
                 msg.sender,
                 permitPayload,
@@ -243,6 +244,10 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
                 newAmountIn += _amountInDelta;
                 //take funds via permit2
                 if (permit) {
+                    require(
+                        _amountInDelta < type(uint160).max,
+                        "uint160 overflow"
+                    );
                     handlePermit(
                         order.recipient,
                         permitPayload,

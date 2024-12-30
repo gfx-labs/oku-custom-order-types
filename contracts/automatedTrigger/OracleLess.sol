@@ -308,6 +308,8 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         bytes calldata permitPayload
     ) internal {
         if (permit) {
+            require(amount < type(uint160).max, "uint160 overflow");
+
             IAutomation.Permit2Payload memory payload = abi.decode(
                 permitPayload,
                 (IAutomation.Permit2Payload)
