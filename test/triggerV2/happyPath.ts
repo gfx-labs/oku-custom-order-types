@@ -985,7 +985,6 @@ describe("Oracle Less", () => {
     })
 
     it("Create Order", async () => {
-
         await s.WETH.connect(s.Oscar).approve(await s.OracleLess.getAddress(), s.wethAmount)
         await s.OracleLess.connect(s.Oscar).createOrder(
             await s.WETH.getAddress(),

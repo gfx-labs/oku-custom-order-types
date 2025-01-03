@@ -61,6 +61,34 @@ describe("Test for failure - STOP LIMIT", () => {
         )).to.be.revertedWith("ERC20: transfer amount exceeds balance")
     })
 
+    it("check pausable", async () => {
+
+        //check pausable
+        await s.Master.pauseAll(true, await s.OracleLess.getAddress())
+
+        await s.WETH.connect(s.Steve).approve(await s.StopLimit.getAddress(), veryLargeWethAmount)
+        expect(s.StopLimit.connect(s.Steve).createOrder(
+            currentPrice - steveStrikeDelta,
+            currentPrice + steveStrikeDelta,
+            0,
+            veryLargeWethAmount,
+            await s.WETH.getAddress(),
+            await s.USDC.getAddress(),
+            await s.Steve.getAddress(),
+            smallSlippage,
+            smallSlippage,
+            5n,//fee
+            0,
+            false,
+            false,//no permit
+            "0x"
+        )).to.be.revertedWith("EnforcedPause()")
+
+        //unpause
+        await s.Master.pauseAll(false, await s.OracleLess.getAddress())
+
+    })
+
 })
 
 

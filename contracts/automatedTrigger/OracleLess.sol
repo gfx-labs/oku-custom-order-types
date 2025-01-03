@@ -5,10 +5,11 @@ import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/ERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
+import "../interfaces/openzeppelin/Pausable.sol";
 import "./AutomationMaster.sol";
 import "../libraries/ArrayMutation.sol";
 
-contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
+contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
     AutomationMaster public immutable MASTER;
     IPermit2 public immutable permit2;
@@ -32,6 +33,15 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         _;
         // Transfer the fee to the contract owner
         payable(owner()).transfer(orderFee);
+    }
+
+    function pause(bool __pause) external override{
+        require(msg.sender == address(MASTER) || msg.sender == owner(), "Not Authorized");
+        if(__pause){
+            _pause();
+        }else{
+            _unpause();
+        }
     }
 
     ///@return pendingOrders a full list of all pending orders with full order details
@@ -61,7 +71,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint16 feeBips,
         bool permit,
         bytes calldata permitPayload
-    ) external payable override paysFee nonReentrant returns (uint96 orderId) {
+    ) external payable override paysFee nonReentrant whenNotPaused returns (uint96 orderId) {
         require(amountIn != 0, "amountIn == 0");
 
         //procure tokens
@@ -99,7 +109,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(uint96 pendingOrderIdx) external nonReentrant {
+    function cancelOrder(uint96 pendingOrderIdx) external nonReentrant whenNotPaused {
         Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
         require(msg.sender == order.recipient, "Only Order Owner");
         _cancelOrder(order, pendingOrderIdx);
@@ -115,7 +125,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
-    ) external payable override nonReentrant paysFee {
+    ) external payable override nonReentrant paysFee whenNotPaused {
         require(
             orderId == pendingOrderIds[pendingOrderIdx],
             "order doesn't exist"
@@ -139,7 +149,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard {
         uint96 orderId,
         address target,
         bytes calldata txData
-    ) external override nonReentrant {
+    ) external override nonReentrant whenNotPaused {
         //fetch order
         Order memory order = orders[orderId];
 

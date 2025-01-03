@@ -10,16 +10,14 @@ import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
-
-//testing
-import "hardhat/console.sol";
+import "../interfaces/openzeppelin/Pausable.sol";
 
 ///@notice This contract owns and handles all logic associated with the following order types:
 /// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independant slippapge for each option
 /// LIMIT_ORDER - BRACKET_ORDER at specified take profit price, with STOP set to 0
 /// STOP_ORDER - BRACKET_ORDER at specified stop price, with take profit set to 2 ** 256 - 1
 /// In order to configure a LIMIT_ORDER or STOP_ORDER, simply set the take profit or stop price to either 0 for the lower bound or 2^256 - 1 for the upper bound
-contract Bracket is Ownable, IBracket, ReentrancyGuard {
+contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     IAutomationMaster public immutable MASTER;
@@ -32,6 +30,18 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     constructor(IAutomationMaster _master, IPermit2 _permit2) {
         MASTER = _master;
         permit2 = _permit2;
+    }
+
+    function pause(bool __pause) external override {
+        require(
+            msg.sender == address(MASTER) || msg.sender == owner(),
+            "Not Authorized"
+        );
+        if (__pause) {
+            _pause();
+        } else {
+            _unpause();
+        }
     }
 
     function getPendingOrders() external view returns (uint96[] memory) {
@@ -95,7 +105,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     ///this pending order is removed from the array via array mutation
     function performUpkeep(
         bytes calldata performData
-    ) external override nonReentrant {
+    ) external override nonReentrant whenNotPaused {
         MasterUpkeepData memory data = abi.decode(
             performData,
             (MasterUpkeepData)
@@ -170,7 +180,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         bool bracketDirection,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant {
+    ) external override nonReentrant whenNotPaused {
         require(
             msg.sender == address(MASTER.STOP_LIMIT_CONTRACT()),
             "Only Stop Limit"
@@ -187,7 +197,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             existingFeeBips,
             takeProfitSlippage,
             stopSlippage,
-            bracketDirection ? InitializeOrderDirection.TRUE : InitializeOrderDirection.FALSE,
+            bracketDirection
+                ? InitializeOrderDirection.TRUE
+                : InitializeOrderDirection.FALSE,
             permit,
             permitPayload
         );
@@ -207,7 +219,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint16 stopSlippage,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant {
+    ) external override nonReentrant whenNotPaused {
         _initializeOrder(
             swapPayload,
             takeProfit,
@@ -240,7 +252,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant {
+    ) external override nonReentrant whenNotPaused {
         //get order
         Order memory order = orders[orderId];
         require(
@@ -318,7 +330,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(uint96 pendingOrderIdx) external nonReentrant {
+    function cancelOrder(
+        uint96 pendingOrderIdx
+    ) external nonReentrant whenNotPaused {
         Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
         require(msg.sender == order.recipient, "Only Order Owner");
         _cancelOrder(order, pendingOrderIdx);
@@ -498,12 +512,13 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
 
         //deduce direction if not pre-determined
         bool finalDirection = false;
-        if(direction == InitializeOrderDirection.TRUE){
+        if (direction == InitializeOrderDirection.TRUE) {
             finalDirection = true;
         }
-        if(direction == InitializeOrderDirection.NEWORDER){
+        if (direction == InitializeOrderDirection.NEWORDER) {
             //exchangeRate in/out > takeProfit
-            finalDirection = MASTER.getExchangeRate(tokenIn, tokenOut) > takeProfit;
+            finalDirection =
+                MASTER.getExchangeRate(tokenIn, tokenOut) > takeProfit;
         }
 
         //construct order
@@ -518,7 +533,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             takeProfitSlippage: takeProfitSlippage,
             feeBips: feeBips,
             stopSlippage: stopSlippage,
-            direction: finalDirection 
+            direction: finalDirection
         });
 
         //store pending order
