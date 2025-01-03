@@ -408,7 +408,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
     ///@notice handle signature and acquisition of asset with permit2
     function handlePermit(
-        address owner,
+        address tokenOwner,
         bytes calldata permitPayload,
         uint160 amount,
         address token
@@ -418,8 +418,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             (Permit2Payload)
         );
 
-        permit2.permit(owner, payload.permitSingle, payload.signature);
-        permit2.transferFrom(owner, address(this), amount, token);
+        permit2.permit(tokenOwner, payload.permitSingle, payload.signature);
+        permit2.transferFrom(tokenOwner, address(this), amount, token);
     }
 
     ///@notice check if the order is fillable

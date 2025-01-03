@@ -321,7 +321,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     function procureTokens(
         IERC20 token,
         uint256 amount,
-        address owner,
+        address tokenOwner,
         bool permit,
         bytes calldata permitPayload
     ) internal {
@@ -332,15 +332,15 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 (IAutomation.Permit2Payload)
             );
 
-            permit2.permit(owner, payload.permitSingle, payload.signature);
+            permit2.permit(tokenOwner, payload.permitSingle, payload.signature);
             permit2.transferFrom(
-                owner,
+                tokenOwner,
                 address(this),
                 uint160(amount),
                 address(token)
             );
         } else {
-            token.safeTransferFrom(owner, address(this), amount);
+            token.safeTransferFrom(tokenOwner, address(this), amount);
         }
     }
 
