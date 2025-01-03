@@ -11,6 +11,9 @@ import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 
+//testing
+import "hardhat/console.sol";
+
 ///@notice This contract owns and handles all logic associated with the following order types:
 /// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independant slippapge for each option
 /// LIMIT_ORDER - BRACKET_ORDER at specified take profit price, with STOP set to 0
@@ -164,6 +167,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint16 existingFeeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
+        bool bracketDirection,
         bool permit,
         bytes calldata permitPayload
     ) external override nonReentrant {
@@ -183,6 +187,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             existingFeeBips,
             takeProfitSlippage,
             stopSlippage,
+            bracketDirection ? InitializeOrderDirection.TRUE : InitializeOrderDirection.FALSE,
             permit,
             permitPayload
         );
@@ -215,6 +220,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             feeBips,
             takeProfitSlippage,
             stopSlippage,
+            InitializeOrderDirection.NEWORDER,
             permit,
             permitPayload
         );
@@ -356,6 +362,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
+        InitializeOrderDirection direction,
         bool permit,
         bytes calldata permitPayload
     ) internal {
@@ -384,7 +391,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 recipient,
                 feeBips,
                 takeProfitSlippage,
-                stopSlippage
+                stopSlippage,
+                direction
             );
         } else {
             //no swap
@@ -400,7 +408,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 recipient,
                 feeBips,
                 takeProfitSlippage,
-                stopSlippage
+                stopSlippage,
+                direction
             );
         }
     }
@@ -415,7 +424,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         address recipient,
         uint16 feeBips,
         uint16 takeProfitSlippage,
-        uint16 stopSlippage
+        uint16 stopSlippage,
+        InitializeOrderDirection direction
     ) internal {
         require(swapParams.swapSlippage <= 10000, "BIPS > 10k");
 
@@ -439,7 +449,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             recipient,
             feeBips,
             takeProfitSlippage,
-            stopSlippage
+            stopSlippage,
+            direction
         );
         //refund any unspent tokenIn
         //this should generally be 0 when using exact input for swaps, which is recommended
@@ -458,7 +469,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         address recipient,
         uint16 feeBips,
         uint16 takeProfitSlippage,
-        uint16 stopSlippage
+        uint16 stopSlippage,
+        InitializeOrderDirection direction
     ) internal {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
@@ -484,6 +496,16 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             existingOrderId = MASTER.generateOrderId(recipient);
         }
 
+        //deduce direction if not pre-determined
+        bool finalDirection = false;
+        if(direction == InitializeOrderDirection.TRUE){
+            finalDirection = true;
+        }
+        if(direction == InitializeOrderDirection.NEWORDER){
+            //exchangeRate in/out > takeProfit
+            finalDirection = MASTER.getExchangeRate(tokenIn, tokenOut) > takeProfit;
+        }
+
         //construct order
         orders[existingOrderId] = Order({
             orderId: existingOrderId,
@@ -496,7 +518,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             takeProfitSlippage: takeProfitSlippage,
             feeBips: feeBips,
             stopSlippage: stopSlippage,
-            direction: MASTER.getExchangeRate(tokenIn, tokenOut) > takeProfit //exchangeRate in/out > takeProfit
+            direction: finalDirection 
         });
 
         //store pending order

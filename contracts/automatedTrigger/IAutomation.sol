@@ -16,6 +16,12 @@ interface IAutomation is AutomationCompatibleInterface {
         BRACKET
     }
 
+    enum InitializeOrderDirection { 
+        TRUE,
+        FALSE,
+        NEWORDER
+    }
+
     ///@notice encode permit2 data into a single struct
     struct Permit2Payload {
         IPermit2.PermitSingle permitSingle;
@@ -119,6 +125,7 @@ interface IStopLimit is IAutomation {
         uint16 stopSlippage;
         uint16 swapSlippage;
         bool direction;
+        bool bracketDirection;
         bool swapOnFill;
     }
 
@@ -261,6 +268,7 @@ interface IBracket is IAutomation {
         uint16 existingFeeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
+        bool bracketDirection,
         bool permit,
         bytes calldata permitPayload
     ) external;

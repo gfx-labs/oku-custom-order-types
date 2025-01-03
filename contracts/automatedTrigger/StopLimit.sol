@@ -150,6 +150,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             order.feeBips,
             order.takeProfitSlippage,
             order.stopSlippage,
+            order.bracketDirection,
             false, //permit
             "0x" //permitPayload
         );
@@ -292,6 +293,13 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
                 "Oracle !exist"
             );
         }
+        bool bracketDirection = MASTER.getExchangeRate(
+            order.tokenIn,
+            _tokenOut
+        ) > _takeProfit;
+        if (_swapOnFill) {
+            !bracketDirection;
+        }
 
         //construct order
         Order memory newOrder = Order({
@@ -309,6 +317,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             recipient: _recipient,
             direction: MASTER.getExchangeRate(order.tokenIn, _tokenOut) >
                 _stopLimitPrice,
+            bracketDirection: bracketDirection,
             swapOnFill: _swapOnFill
         });
 
@@ -370,6 +379,14 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
         uint96 orderId = MASTER.generateOrderId(recipient);
 
+        //deduce tokenIn / out for resulting bracket order
+        //if ! swap on fill, then no change,
+        bool bracketDirection = MASTER.getExchangeRate(tokenIn, tokenOut) >
+            takeProfit;
+        if (swapOnFill) {
+            !bracketDirection;
+        }
+
         orders[orderId] = Order({
             orderId: orderId,
             stopLimitPrice: stopLimitPrice,
@@ -385,6 +402,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             recipient: recipient,
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) >
                 stopLimitPrice, //compare to stop price for this order's direction
+            bracketDirection: bracketDirection,
             swapOnFill: swapOnFill
         });
         pendingOrderIds.push(uint96(orderId));
