@@ -8,10 +8,11 @@ import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
+import "../interfaces/openzeppelin/Pausable.sol";
 
 ///@notice This contract owns and handles all logic associated with STOP_LIMIT orders
 ///STOP_LIMIT orders create a new Bracket order order with the same order ID once filled
-contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
+contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     IAutomationMaster public immutable MASTER;
@@ -30,6 +31,18 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         MASTER = _master;
         BRACKET_CONTRACT = _bracket;
         permit2 = _permit2;
+    }
+
+    function pause(bool __pause) external override{
+        require(
+            msg.sender == address(MASTER) || msg.sender == owner(),
+            "Not Authorized"
+        );
+        if (__pause) {
+            _pause();
+        } else {
+            _unpause();
+        }
     }
 
     function getPendingOrders() external view returns (uint96[] memory) {
@@ -84,7 +97,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
     function performUpkeep(
         bytes calldata performData
-    ) external override nonReentrant {
+    ) external override nonReentrant whenNotPaused {
         MasterUpkeepData memory data = abi.decode(
             performData,
             (MasterUpkeepData)
@@ -150,6 +163,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             order.feeBips,
             order.takeProfitSlippage,
             order.stopSlippage,
+            order.bracketDirection,
             false, //permit
             "0x" //permitPayload
         );
@@ -179,8 +193,9 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         bool swapOnFill,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant {
+    ) external override nonReentrant whenNotPaused {
         if (permit) {
+            require(amountIn < type(uint160).max, "uint160 overflow");
             handlePermit(
                 msg.sender,
                 permitPayload,
@@ -227,7 +242,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
         uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant {
+    ) external override nonReentrant whenNotPaused {
         //get existing order
         Order memory order = orders[orderId];
         require(
@@ -243,6 +258,10 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
                 newAmountIn += _amountInDelta;
                 //take funds via permit2
                 if (permit) {
+                    require(
+                        _amountInDelta < type(uint160).max,
+                        "uint160 overflow"
+                    );
                     handlePermit(
                         order.recipient,
                         permitPayload,
@@ -287,6 +306,13 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
                 "Oracle !exist"
             );
         }
+        bool bracketDirection = MASTER.getExchangeRate(
+            order.tokenIn,
+            _tokenOut
+        ) > _takeProfit;
+        if (_swapOnFill) {
+            !bracketDirection;
+        }
 
         //construct order
         Order memory newOrder = Order({
@@ -304,6 +330,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             recipient: _recipient,
             direction: MASTER.getExchangeRate(order.tokenIn, _tokenOut) >
                 _stopLimitPrice,
+            bracketDirection: bracketDirection,
             swapOnFill: _swapOnFill
         });
 
@@ -323,7 +350,9 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(uint96 pendingOrderIdx) external nonReentrant {
+    function cancelOrder(
+        uint96 pendingOrderIdx
+    ) external nonReentrant whenNotPaused {
         Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
         require(msg.sender == order.recipient, "Only Order Owner");
         _cancelOrder(order, pendingOrderIdx);
@@ -365,6 +394,14 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
         uint96 orderId = MASTER.generateOrderId(recipient);
 
+        //deduce tokenIn / out for resulting bracket order
+        //if ! swap on fill, then no change,
+        bool bracketDirection = MASTER.getExchangeRate(tokenIn, tokenOut) >
+            takeProfit;
+        if (swapOnFill) {
+            !bracketDirection;
+        }
+
         orders[orderId] = Order({
             orderId: orderId,
             stopLimitPrice: stopLimitPrice,
@@ -380,6 +417,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             recipient: recipient,
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) >
                 stopLimitPrice, //compare to stop price for this order's direction
+            bracketDirection: bracketDirection,
             swapOnFill: swapOnFill
         });
         pendingOrderIds.push(uint96(orderId));
@@ -403,7 +441,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
 
     ///@notice handle signature and acquisition of asset with permit2
     function handlePermit(
-        address owner,
+        address tokenOwner,
         bytes calldata permitPayload,
         uint160 amount,
         address token
@@ -413,8 +451,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard {
             (Permit2Payload)
         );
 
-        permit2.permit(owner, payload.permitSingle, payload.signature);
-        permit2.transferFrom(owner, address(this), amount, token);
+        permit2.permit(tokenOwner, payload.permitSingle, payload.signature);
+        permit2.transferFrom(tokenOwner, address(this), amount, token);
     }
 
     ///@notice check if the order is fillable

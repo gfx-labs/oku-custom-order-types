@@ -7,11 +7,13 @@ import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/ERC20.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
+import "../interfaces/openzeppelin/Pausable.sol";
+
 import "../oracle/IPythRelay.sol";
 
 ///@notice This contract owns and handles all of the settings and accounting logic for automated swaps
 ///@notice This contract should not hold any user funds, only collected fees
-contract AutomationMaster is IAutomationMaster, Ownable {
+contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     using SafeERC20 for IERC20;
 
     ///@notice maximum pending orders that may exist at a time, limiting the compute requriement for checkUpkeep
@@ -29,6 +31,19 @@ contract AutomationMaster is IAutomationMaster, Ownable {
     mapping(IERC20 => bytes32) public pythIds;
     mapping(address => uint96) private nonces;
 
+    function pauseAll(
+        bool pause,
+        IOracleLess oracleLessContract
+    ) external override onlyOwner {
+        if (pause) {
+            _pause();
+        } else {
+            _unpause();
+        }
+        STOP_LIMIT_CONTRACT.pause(pause);
+        BRACKET_CONTRACT.pause(pause);
+        oracleLessContract.pause(pause);
+    }
 
     ///@notice register Stop Limit and Bracket order contracts
     function registerSubKeepers(
@@ -169,7 +184,9 @@ contract AutomationMaster is IAutomationMaster, Ownable {
         returns (bool upkeepNeeded, bytes memory performData)
     {
         //check stop limit order
-        (upkeepNeeded, performData) = STOP_LIMIT_CONTRACT.checkUpkeep(checkData);
+        (upkeepNeeded, performData) = STOP_LIMIT_CONTRACT.checkUpkeep(
+            checkData
+        );
         if (upkeepNeeded) {
             return (true, performData);
         }
@@ -182,7 +199,9 @@ contract AutomationMaster is IAutomationMaster, Ownable {
     }
 
     ///@notice perform upkeep on any order type
-    function performUpkeep(bytes calldata performData) external override {
+    function performUpkeep(
+        bytes calldata performData
+    ) external override whenNotPaused {
         //decode into masterUpkeepData
         MasterUpkeepData memory data = abi.decode(
             performData,

@@ -186,7 +186,6 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         //how much weth is on the contract, relative to how much we are supposed to be allowed to send (steve's order.amountIn)?
         const totalWeths = await s.WETH.balanceOf(await s.Bracket.getAddress())
         const expectedAmountIn = data.amountIn
-        const expectedRemaining = totalWeths - expectedAmountIn
 
         //inject malicious amount into the tx data
         data.amountIn += ethers.parseEther("5")//increase the amount we pass in to encoded data
@@ -220,6 +219,39 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         const delta = (await s.WETH.balanceOf(await s.Steve.getAddress())) - initBalance
         expect(delta).to.eq(underFillAmount, "Refund issued")
 
+
+    })
+
+    it("check pausable", async () => {
+
+        //try to pause when not authorized
+        expect(s.Master.connect(s.Bob).pauseAll(true, await s.OracleLess.getAddress())).to.be.revertedWith("Not Authorized")
+        expect(s.Bracket.connect(s.Bob).pause(true)).to.be.revertedWith("Not Authorized")
+        expect(s.StopLimit.connect(s.Bob).pause(true)).to.be.revertedWith("Not Authorized")
+        expect(s.OracleLess.connect(s.Bob).pause(true)).to.be.revertedWith("Not Authorized")
+
+        //check pausable
+        await s.Master.pauseAll(true, await s.OracleLess.getAddress())
+
+        //create order
+        await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), s.wethAmount)
+        expect(s.Bracket.connect(s.Steve).createOrder(
+            "0x",
+            currentPrice + steveStrikeDelta,
+            currentPrice - steveStrikeDelta,
+            s.wethAmount,
+            await s.WETH.getAddress(),
+            await s.USDC.getAddress(),
+            await s.Steve.getAddress(),
+            5,//5 bips fee
+            steveBips,
+            steveBips,
+            false,
+            "0x"
+        )).to.be.revertedWith("EnforcedPause()") 
+
+        //unpause
+        await s.Master.pauseAll(false, await s.OracleLess.getAddress())
 
     })
 

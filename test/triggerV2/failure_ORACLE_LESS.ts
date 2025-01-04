@@ -55,8 +55,28 @@ describe("Test for failure - Oracleless", () => {
         )).to.be.revertedWith("ERC20: transfer amount exceeds balance")
     })
 
-    it("Create an order", async () => {
+    it("check pausable", async () => {
+
         
+        //check pausable
+        await s.Master.pauseAll(true, await s.OracleLess.getAddress())
+
+        //create order
+        await s.WETH.connect(s.Steve).approve(await s.StopLimit.getAddress(), veryLargeWethAmount)
+        expect(s.OracleLess.connect(s.Steve).createOrder(
+            await s.WETH.getAddress(),
+            await s.USDC.getAddress(),
+            veryLargeWethAmount,
+            0,
+            await s.Steve.getAddress(),
+            25,
+            false,//no permit
+            "0x"
+        )).to.be.revertedWith("EnforcedPause()")
+
+        //unpause
+        await s.Master.pauseAll(false, await s.OracleLess.getAddress())
+
     })
 
 })

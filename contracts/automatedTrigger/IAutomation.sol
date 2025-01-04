@@ -16,6 +16,12 @@ interface IAutomation is AutomationCompatibleInterface {
         BRACKET
     }
 
+    enum InitializeOrderDirection {
+        TRUE,
+        FALSE,
+        NEWORDER
+    }
+
     ///@notice encode permit2 data into a single struct
     struct Permit2Payload {
         IPermit2.PermitSingle permitSingle;
@@ -69,6 +75,7 @@ interface IAutomationMaster is IAutomation {
     function STOP_LIMIT_CONTRACT() external view returns (IStopLimit);
     function oracles(IERC20 token) external view returns (IPythRelay);
     function maxPendingOrders() external view returns (uint16);
+    function pauseAll(bool, IOracleLess) external;
 
     function getExchangeRate(
         IERC20 tokenIn,
@@ -119,8 +126,10 @@ interface IStopLimit is IAutomation {
         uint16 stopSlippage;
         uint16 swapSlippage;
         bool direction;
+        bool bracketDirection;
         bool swapOnFill;
     }
+    function pause(bool) external;
 
     ///@notice StopLimit orders create a new bracket order once filled
     ///@param stopLimitPrice execution price to fill the Stop Limit order
@@ -218,6 +227,8 @@ interface IBracket is IAutomation {
         bool direction; //true if initial exchange rate > takeProfit price
     }
 
+    function pause(bool) external;
+
     ///@notice Bracket orders are filled when either @param takeProfit or @param stopPrice are reached,
     /// at which time @param tokenIn is swapped for @param tokenOut    ///@param stopLimitPrice execution price to fill the Stop Limit order
     ///@param takeProfit execution price for resulting Bracket order
@@ -261,6 +272,7 @@ interface IBracket is IAutomation {
         uint16 existingFeeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
+        bool bracketDirection,
         bool permit,
         bytes calldata permitPayload
     ) external;
@@ -312,6 +324,8 @@ interface IOracleLess {
         address recipient;
         uint16 feeBips;
     }
+
+    function pause(bool) external;
 
     function createOrder(
         IERC20 tokenIn,
