@@ -1,22 +1,25 @@
 import hre, { network } from "hardhat";
 import { currentBlock, resetCurrentArb, resetCurrentBase, resetCurrentOP } from "../util/block";
-import { AutomationMaster, AutomationMaster__factory, Bracket, Bracket__factory, IERC20, IERC20__factory, IPermit2__factory, StopLimit, StopLimit__factory, UniswapV3Pool__factory } from "../typechain-types";
+import { AutomationMaster, AutomationMaster__factory, Bracket, Bracket__factory, IERC20, IERC20__factory, IPermit2__factory, OracleLess, OracleLess__factory, StopLimit, StopLimit__factory, UniswapV3Pool__factory } from "../typechain-types";
 import { AbiCoder, Signer } from "ethers";
 import { impersonateAccount } from "../util/impersonator";
 import { setBalance } from "@nomicfoundation/hardhat-network-helpers";
 import { decodeUpkeepData, generateUniTx, generateUniTxData, MasterUpkeepData, permitSingle } from "../util/msc";
 import { a, b, o } from "../util/addresser";
 import { s, SwapParams } from "../test/triggerV2/scope";
+import { OptimisimAddresses } from "../util/deploymentAddresses";
 const { ethers } = require("hardhat");
 
 
 let Master: AutomationMaster
 let StopLimit: StopLimit
 let Bracket: Bracket
+let OracleLess: OracleLess
 let mainnet = true
 let masterAddr: string //"0x8327B0168858bd918A0177e89b2c172475F6B16f"//second deploy//0x4f38FA4F676a053ea497F295f855B2dC3580f517"//initial deploy
 let bracketAddr: string
 let stopLimitAddr: string
+let oracleLessAddr: string
 let permitAddr: string
 
 //tokens
@@ -96,9 +99,10 @@ async function main() {
         } else {
             chainId = 10
         }
-        masterAddr = o.Master
-        stopLimitAddr = o.stopLimit
-        bracketAddr = o.bracket
+        const addrs = new OptimisimAddresses()
+        masterAddr = addrs.coreDeployments.master
+        stopLimitAddr = addrs.coreDeployments.stopLimit
+        bracketAddr = addrs.coreDeployments.bracket
         permitAddr = o.permit2
 
         WETH = IERC20__factory.connect(o.wethAddress, signer)
@@ -110,6 +114,7 @@ async function main() {
     Master = AutomationMaster__factory.connect(masterAddr, signer)
     StopLimit = StopLimit__factory.connect(stopLimitAddr, signer)
     Bracket = Bracket__factory.connect(bracketAddr, signer)
+    OracleLess = OracleLess__factory.connect(oracleLessAddr, signer)
 
     if (!mainnet) {
         signer = await ethers.getSigner(userAddr)
@@ -121,13 +126,13 @@ async function main() {
     }
     const delta = ethers.parseUnits("50", 8)
 
-    await createStopLimitOrder(signer, delta)
-    await createStopLimitOrder(signer, delta * 2n)
-    await createStopLimitOrder(signer, delta * 3n)
-    await createBracketOrder(signer, delta)
-    await createBracketOrder(signer, delta * 2n)
-    await createBracketOrder(signer, delta * 3n)
-
+    //await createStopLimitOrder(signer, delta)
+    //await createStopLimitOrder(signer, delta * 2n)
+    //await createStopLimitOrder(signer, delta * 3n)
+    //await createBracketOrder(signer, delta)
+    //await createBracketOrder(signer, delta * 2n)
+    //await createBracketOrder(signer, delta * 3n)
+    await createStopLimitPermit(signer, delta)
 
 }
 
@@ -147,13 +152,11 @@ const createBracketOrder = async (signer: Signer, delta: bigint) => {
         500,
         500,
         false,
-        "0x" 
+        "0x"
     )
 }
 
 const createStopLimitOrder = async (signer: Signer, delta: bigint) => {
-
-
     const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
     await WETH.connect(signer).approve(await StopLimit.getAddress(), wethAmount)
     await StopLimit.connect(signer).createOrder(
@@ -172,12 +175,9 @@ const createStopLimitOrder = async (signer: Signer, delta: bigint) => {
         false,
         "0x"
     )
-
-
-    
 }
 
-const createStopLimitPermit = async (signer: Signer) => {
+const createStopLimitPermit = async (signer: Signer, delta: bigint) => {
 
     const permit = await permitSingle(
         signer,
@@ -212,7 +212,24 @@ const createStopLimitPermit = async (signer: Signer) => {
             permit.signature
         ]
     );
-    //await StopLimit.connect(signer)
+    
+    const currentPrice = await Master.getExchangeRate(await WETH.getAddress(), await USDC.getAddress())
+    await StopLimit.connect(signer).createOrder(
+        currentPrice - delta,
+        currentPrice + delta,
+        currentPrice - (delta * 2n),
+        wethAmount,
+        await WETH.getAddress(),
+        await USDC.getAddress(),
+        await signer.getAddress(),
+        5,
+        500,
+        500,
+        500,
+        true,
+        true,
+        encoded
+    )
 
 }
 

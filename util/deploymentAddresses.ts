@@ -725,18 +725,26 @@ export class OptimisimAddresses extends ChainAddresses {
     ]
 
     /**
-    master: "0x940De081B76AbDa22F7E1Dfcfcf666354665c0Ae",
+        master: "0x940De081B76AbDa22F7E1Dfcfcf666354665c0Ae",
         bracket: "0x908E2b7C9C5559834776eebe101947e38b66b2CA",
         stopLimit: "0x7627EDD2357e4F49a1E3D9ae1f353a00DBd67dFA",
         oracleLess: "0xB2c42eBC823877e23128DDcadD562402d84ca95d",
-     */
 
-    //testing deploys
-    readonly coreDeployments = {
+        readonly coreDeployments = {
         master: '0xa3EB0e5B79cFa0bee52c5Bfaf2B46B20a3E46Ba5',
         bracket: '0x29C6B745D21FF53140B11d4B5999564E1057F6F1',
         stopLimit: '0xDd10e34AB58aF00693f2bFAc483139C8EEe2D5Ab',
         oracleLess: '0x8c8D62eBFE417c9eA8c51583A516a5476388a5D9'
+    };
+     */
+
+
+    //testing deploys
+    readonly coreDeployments = {
+        master: '0x7d7B52AB13cbC0aBD7FEAE84799a22d22a186079',
+        bracket: '0x1EB68eBA2471D4d72a20b55369F1BdBcF10155bc',
+        stopLimit: '0xF9fFbA0fE174bf7a099B10D1142379322CD1Bf46',
+        oracleLess: '0x7B0Dee8e9d7B22b6c4DddbB76008A7bf7C5937a1'
     };
 }
 export class ZkSyncAddresses extends ChainAddresses {

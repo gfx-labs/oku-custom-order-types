@@ -96,7 +96,7 @@ async function main() {
         signer = new ethers.Wallet(config.privateKey, provider)
       }
       try {
-        mainnet = false
+        //mainnet = false
         const addresses: ChainAddresses = getAddressesByChainId(config.chainId)
         await deployAndSetup(signer, config, addresses)
 
