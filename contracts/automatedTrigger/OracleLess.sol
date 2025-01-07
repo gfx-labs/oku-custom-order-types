@@ -79,7 +79,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         procureTokens(tokenIn, amountIn, msg.sender, permit, permitPayload);
 
         //construct and store order
-        orderId = MASTER.generateOrderId(recipient);
+        orderId = MASTER.generateOrderId(msg.sender);
         orders[orderId] = Order({
             orderId: orderId,
             tokenIn: tokenIn,

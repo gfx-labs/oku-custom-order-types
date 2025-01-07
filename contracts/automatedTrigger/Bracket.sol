@@ -510,7 +510,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
 
         //generate random but unique order id if there is not an existing orderId from a stop limit order
         if (existingOrderId == 0) {
-            existingOrderId = MASTER.generateOrderId(recipient);
+            existingOrderId = MASTER.generateOrderId(msg.sender);
         }
 
         //deduce direction if not pre-determined
