@@ -62,36 +62,36 @@ export class WormholeConstants {
     }
 }
 
-export class AvaxAddresses { 
+export class AvaxAddresses {
     readonly wethAddress: string = "0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab"
     readonly wormWeth: string = "0x8b82A291F83ca07Af22120ABa21632088fC92931"
 
     readonly usdtAddress: string = "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7"
     readonly wormUsdt: string = "0x9d228444FC4B7E15A2C481b48E10247A03351FD8"//decimal 6
     readonly usdtWhale: string = "0x5a52E96BAcdaBb82fd05763E25335261B270Efcb"
-    
+
     readonly tokenBridge: string = "0x0e082F06FF657D94310cB8cE8B0D9a04541d8052"
     readonly uniRouter: string = "0xbb00FF08d01D300023C629E8fFfFcb65A5a578cE"
     readonly portico03: string = "0xE565E118e75304dD3cF83dff409c90034b7EA18a"
 
 }
 
-export class PolygonAddresses{
+export class PolygonAddresses {
     readonly wethAddress: string = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
     readonly wstethAddress: string = "0x03b54A6e9a984069379fae1a4fC4dBAE93B3bCCD"
     readonly usdtAddress: string = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"
     readonly wormUsdt: string = "0x9417669fBF23357D2774e9D421307bd5eA1006d2"
     readonly usdtWhale: string = "0xF977814e90dA44bFA03b6295A0616a897441aceC"//binance hot wallet
-    
+
     readonly wormWeth: string = "0x11CD37bb86F65419713f30673A480EA33c826872"
     readonly wormWsteth: string = "0xe082a7Fc696De18172Ad08D956569Ee80BC37f06"
     readonly wormUSDC: string = "0x4318CB63A2b8edf2De971E2F17F77097e499459D"
 
     readonly usdcAddress: string = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
     readonly polyPortico: string = "0x87aC3f21A5335286cCC1785f66d39847Be6Bfed9"//testing deploy
-    readonly portico:string =  "0xE1442bA08e330967Dab4fd4Fc173835e9730bff6"
-    readonly portico02:string = "0xf6C5FD2C8Ecba25420859f61Be0331e68316Ba01"//updated 12/12
-    readonly portico03:string = "0x227bABe533fa9a1085f5261210E0B7137E44437B"
+    readonly portico: string = "0xE1442bA08e330967Dab4fd4Fc173835e9730bff6"
+    readonly portico02: string = "0xf6C5FD2C8Ecba25420859f61Be0331e68316Ba01"//updated 12/12
+    readonly portico03: string = "0x227bABe533fa9a1085f5261210E0B7137E44437B"
 
     readonly polySwapRouter: string = "0xE592427A0AEce92De3Edee1F18E0157C05861564"
     readonly uniRouter: string = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"
@@ -101,7 +101,7 @@ export class PolygonAddresses{
 
 }
 
-export class ArbAddresses{
+export class ArbAddresses {
     readonly portico: string = "0x7C1Caa71943Ef43e9b203B02678000755a4eCdE9"
     readonly portico02: string = "0xf8497FE5B0C5373778BFa0a001d476A21e01f09b"//updated 12/12
     readonly portico03: string = "0x48fa7528bFD6164DdF09dF0Ed22451cF59c84130"
@@ -125,7 +125,7 @@ export class ArbAddresses{
 
     //automated trigger
     readonly triggerAddress: string = "0x27F63920D2855853E5aAC290e9fF2406f3c46Dc0"//"0x8fBdE56be121275a80682513292F7831dc951215"
-    
+
     //trigger v2 deployments
     /**
      * old
@@ -136,11 +136,11 @@ export class ArbAddresses{
      */
 
     //trigger v2 deployments with permit
-    readonly Master: string = "0x107dA33FdfA0661360D91E134FA5f5D4BEC25e4d"//"0x8a39E39234Bbb0840484c442Af01584DB04801CE"
-    readonly stopLimit: string = "0xCC1c159fcc0a226fd1A24c70454Ec349Deedd97b"//"0x491397f7eb6f5d9B82B15cEcaBFf835bA31f217F"
-    readonly bracket: string = "0x950DDb2F428057F41Ab6639c765EF10eC98F9DCd"//"0xEF52F132746a55f750ecfb3853e29CfECBC5f6E5"
+    readonly Master: string = "0x1d9bDc6838D4D6C5D6Cd89c63784d0Ecc1e3037B"
+    readonly bracket: string = "0x4E9F0494526e1178d4638B925047e4d4C36CbF1F"
+    readonly stopLimit: string = "0x5C71b4c8406E920DcAcF10E85FA0357fFCed70CB"
 
-    
+
     readonly wethFeed: string = "0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612"
     readonly usdcFeed: string = "0x50834F3163758fcC1Df9973b6e91f0F0F0434aD3"
     readonly wethOracleAddress: string = "0x384542D720A765aE399CFDDF079CBE515731F044"//usd price in 1e8 terms
@@ -185,7 +185,7 @@ export class BaseAddresses {
     readonly usdcFeed: string = "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B"
 }
 
-export class BscAddresses { 
+export class BscAddresses {
     readonly uniRouter: string = "0xB971eF87ede563556b2ED4b1C0b0019111Dd85d2"
     readonly tokenBridge: string = "0xB6F6D86a8f9879A9c87f643768d9efc38c1Da6E7"
     readonly wethAddress: string = "0x2170Ed0880ac9A755fd29B2688956BD959F933F8"
@@ -206,7 +206,7 @@ export class BscAddresses {
     readonly portico03: string = "0x05498574BD0Fa99eeCB01e1241661E7eE58F8a85"
 }
 
-export class CeloAddresses { 
+export class CeloAddresses {
     readonly uniRouter: string = "0x5615CDAb10dc425a742d643d949a7F474C01abc4"//swapRouter02
     readonly tokenBridge: string = "0x796Dff6D74F3E27060B71255Fe517BFb23C93eed"
     readonly wethAddress: string = "0x122013fd7dF1C6F636a5bb8f03108E876548b455"
@@ -215,7 +215,7 @@ export class CeloAddresses {
     readonly wormUSDT: string = "0x617f3112bf5397D0467D315cC709EF968D9ba546"
     readonly usdtAddress: string = "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e"
 
-    readonly portico:string = "0xE565E118e75304dD3cF83dff409c90034b7EA18a"
+    readonly portico: string = "0xE565E118e75304dD3cF83dff409c90034b7EA18a"
 
     readonly pancakePortico: string = ""
     readonly pcsSwapRouter: string = ""//smart router (use this)
@@ -242,6 +242,17 @@ export class OptimisimAddresses {
     readonly snxAddress: string = "0x8700dAec35aF8Ff88c16BdF0418774CB3D7599B4"
     readonly usdtAddress: string = "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58"
     readonly wormUsdtAddress: string = "0xf6B4185FCf8aF291c0E3927fbEab7046b4f6A8CA"
+    readonly pythAddress: string = "0x99C59ACeBFEF3BBFB7129DC90D1a11DB0E91187f"
+    readonly wldAddress: string = "0xdc6ff44d5d932cbd77b52e5612ba0529dc6226f1"
+    readonly ldoAddress: string = "0xfdb794692724153d1488ccdbe0c56c252596735f"
+    readonly pendleAddress: string = "0xbc7b1ff1c6989f006a1185318ed4e7b5796e66e1"
+    readonly fraxAddress: string = "0x2E3D870790dC77A83DD1d18184Acc7439A53f475"
+    readonly rplAddress: string = "0xC81D1F0EB955B0c020E5d5b264E1FF72c14d1401"
+    readonly yfiAddress: string = "0x9046d36440290ffde54fe0dd84db8b1cfee9107b"
+    readonly fxsAddress: string = "0x67CCEA5bb16181E7b4109c9c2143c24a1c2205Be"
+    readonly balAddress: string = "0xfe8b128ba8c78aabc59d4c64cee7ff28e9379921"
+    readonly kncAddress: string = "0xa00e3a3511aac35ca78530c85007afcd31753819"
+    readonly veloAddress: string = '0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db'
 
     //Contracts
     readonly nfpManager: string = "0xC36442b4a4522E871399CD717aBDD847Ab11FE88"
@@ -291,24 +302,66 @@ export class OptimisimAddresses {
     readonly SNX_CL_FEED: string = "0x2fcf37343e916eaed1f1ddaaf84458a359b53877"
     readonly SNX_UNI_POOL: string = "0x0392b358CE4547601BEFa962680BedE836606ae2"
 
+    readonly wethFeed: string = "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"
+    readonly usdcFeed: string = "0x16a9FA2FDa030272Ce99B29CF780dFA30361E0f3"
+    readonly pythFeed: string = "0x0838cFe6A97C9CE1611a6Ed17252477a3c71eBEb"
+    readonly wldFeed: string = "0x4e1C6B168DCFD7758bC2Ab9d2865f1895813D236"
+    readonly ldoFeed: string = "0x221618871470f78D8a3391d35B77dFb3C0fbc383"
+    readonly pendleFeed: string = "0x58F23F80bF389DB1af9e3aA8c59679806749A8a4"
+    readonly fraxFeed: string = "0xc7D132BeCAbE7Dcc4204841F33bae45841e41D9C"
+    readonly rplFeed: string = "0xADE082c91A6AeCC86fC11704a830e933e1b382eA"
+    readonly yfiFeed: string = "0x5cdC797acCBf57EE2363Fed9701262Abc87a232e"
+    readonly fxsFeed: string = "0xB9B16330671067B1b062B9aC2eFd2dB75F03436E"
+    readonly balFeed: string = "0x30D9d31C1ac29Bc2c2c312c1bCa9F8b3D60e2376"
+    readonly kncFeed: string = "0xCB24d22aF35986aC1feb8874AdBbDF68f6dC2e96"
+    readonly veloFeed: string = "0x0f2Ed59657e391746C1a097BDa98F2aBb94b1120"
+
+    readonly wstethFeed: string = "0x698B585CbC4407e2D54aa898B2600B53C68958f7"
+    readonly opFeed: string = "0x0D276FC14719f9292D5C1eA2198673d1f4269246"
+    readonly wbtcFeed: string = "0xD702DD976Fb76Fffc2D3963D037dfDae5b04E593"
+    readonly uniFeed: string = "0x11429eE838cC01071402f21C219870cbAc0a59A0"
+    readonly aaveFeed: string = '0x338ed6787f463394D24813b297401B9F05a8C9d1'
+    readonly snxFeed: string = "0x2FCF37343e916eAEd1f1DdaaF84458a359b53877"
+
+    readonly wstethEthFeed: string = "0x524299Ab0987a7c4B3c8022a35669DdcdC715a10"//wsteth/eth
+
 
     //v3 pools
     readonly wETH_USDC_POOL: string = this.wETH_UNI_POOL //~6.82mm TVL
 
+    //trigger oracles (USD 1e8 terms) 
+    readonly wethOracleAddress: string = "0x064E3A830f905686a718cb100708ff3D90aB5202"//usd price in 1e8 terms
+    readonly usdcOracleAddress: string = "0x8B5AbFbdC5Ec4B88A4e94afBf9f22b81F71a25a9"//usd price in 1e8 terms
+    readonly rethOracleAddress: string = ""//only against eth
+    readonly wstethOracleAddress: string = "0x1792ea57b9DB08A077101999b309E951fe576792";
+    readonly opOracleAddress: string = "0xCBd011dACB8270E5235CB18b3b189Ff7d7fF5f28";
+    readonly wbtcOracleAddress: string = "0x210e8Ed0AaaF3A59FD2BD761b081F2B1c246c428";
+    readonly uniOracleAddress: string = "0x5B4784247dFCA5d0cB73E8ad46114eA3E65cF237";
+    readonly aaveOracleAddress: string = "0x1bfeb157400A05C010C34bfA0Baf89822D14a5e4";
+    readonly snxOracleAddress: string = "0x2DBe413536CBa5f4Eb832f94427Be980dDbAa0aa";
+
+    readonly pythOracleAddress: string = "0xe4f974b9DB33b9132709F2BadC0cf24954167FD2";
+    readonly wldOracleAddress: string = "0x588ede0BF90d9E883303b7F6F2f2814B5c129717";
+    readonly ldoOracleAddress: string = "0x7AC2e13d63bFE22DB4bf5aa0DaD2bC2C028b362F";
+    readonly pendleOracleAddress: string = "0x17781589c1088038652A4877bB0b170a1a37951F";
+    readonly fraxOracleAddress: string = "0xb1A9A0A5D4426A5Ce322639C9f4E8F27193e32A1";
+    readonly rplOracleAddress: string = "0xFB92D97223FEB34A0e33A1A4a439bAa1789D683D";
+    readonly yfiOracleAddress: string = "0x5aBB6d9735e7131f39F06A4AA7c789EBfC295241";
+    readonly fxsOracleAddress: string = "0x0c0337e0283d8547b54E15b0A5C5B2248Ff5FCE5";
+    readonly balOracleAddress: string = "0xe6daa90Bae9cAB1c171eefA561fF9b381ee5C19A";
+    readonly kncOracleAddress: string = "0x328397E6BcFFFFDebED68b3841283DEfb8C23807";
+    readonly veloOracleAddress: string = "0xFC8DBbC50dd144294D782D371F119a63229169fD";
 
     //automated trigger
     readonly triggerAddress: string = "0x8327B0168858bd918A0177e89b2c172475F6B16f"
-    readonly wethFeed: string = "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"
-    readonly usdcFeed: string = "0x16a9FA2FDa030272Ce99B29CF780dFA30361E0f3"
-    readonly wethOracleAddress: string = "0x064E3A830f905686a718cb100708ff3D90aB5202"//usd price in 1e8 terms
-    readonly usdcOracleAddress: string = "0x8B5AbFbdC5Ec4B88A4e94afBf9f22b81F71a25a9"//usd price in 1e8 terms
+
     readonly wethUsdcPoolAddress: string = "0x1fb3cf6e48F1E7B10213E7b6d87D4c073C7Fdb7b"//fee 500
     readonly nativeUsdcAddress: string = "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"
 
     //automated trigger v2
-    readonly Master: string = "0xf556757ecB7DfeA2eDfe320992e21D68acf670B8"
-    readonly stopLimit: string = "0x3bd3be51634b42B7c1699aDe0Ff726493b378B60"
-    readonly bracket: string = "0x267807b17bBE64Fe7e921E533061131F0f95cc5b"
+    readonly Master: string = "0x09f1e409F5A90bAC73b2485BbE8f4f88AAd2e800"
+    readonly stopLimit: string = "0x5320E49BDCF83683dfA1923AEfA20dec01E29aB2"
+    readonly bracket: string = "0xA90307cF7EE55eb6DEA5f55F37101c02b0a55acE"
     readonly permit2: string = "0x000000000022D473030F116dDEE9F6B43aC78BA3"
 
 }
@@ -324,7 +377,7 @@ export const bsc = new BscAddresses()
 
 export const e = new MainnetAddresses()
 
-export const c =  new CeloAddresses()
+export const c = new CeloAddresses()
 
 export const o = new OptimisimAddresses()
 

@@ -1,10 +1,12 @@
 import hre, { ethers, network } from "hardhat";
 import { DeployContract } from "../util/deploy";
 import { currentBlock, resetCurrent, reset, resetCurrentOP, resetCurrentPoly } from "../util/block";
-import { MasterKeeper, MasterKeeper__factory } from "../typechain-types";
+import { IOracleRelay__factory, PythOracle__factory } from "../typechain-types";
 import { impersonateAccount } from "../util/impersonator";
-import { limitOrderData } from "./limitOrderData";
 import { Signer } from "ethers";
+import { e, o } from "../util/addresser";
+import axios from 'axios';
+import { HermesClient } from "@pythnetwork/hermes-client";
 
 const opLOR = "0x54dF9e11c7933a9cA3BD1E540B63dA15edAe40bf"
 const mainnetLOR = "0x54dF9e11c7933a9cA3BD1E540B63dA15edAe40bf"
@@ -29,12 +31,26 @@ async function main() {
     console.log("Sending for real...")
   }
 
-  const mk = MasterKeeper__factory.connect("0x15518AA548248d97479Ca3AE2358266f12B2A61A", user)
+  await testPythOracle(user)
+}
 
-  console.log("CHECKING")
-  const result = await mk.checkUpkeep("0x")
-  
- 
+const testPythOracle = async (signer: Signer) => {
+  await resetCurrentOP()
+  const pythAddr = "0xff1a0f4744e8582DF1aE09D5611b887B6a12925C"
+  const wethTokenId = "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace"//"0x9d4294bbcd1174d6f2003ec365831e64cc31d9f6f15a2b85399db8d5000960f6"
+
+  const pythOracle = await DeployContract(new PythOracle__factory(signer), signer, pythAddr, wethTokenId, 50000, o.wethAddress)
+  const refOracle = IOracleRelay__factory.connect(o.wethOracleAddress, signer)
+  console.log("REFERENCE PRICE: ", await refOracle.currentValue())
+
+  const connection = new HermesClient("https://hermes.pyth.network", {});
+  const priceUpdates = await connection.getLatestPriceUpdates([wethTokenId]);
+  const data = priceUpdates.binary.data[0]
+  const formatted = data.startsWith("0x") ? data : "0x" + data;
+  const testData = "0x504e41550100000003b801000000040d00d476f90ba2c371ed65d3af2611070885c4b1f7f96f1f4185a4df477370989e497e80c9b3fa17410fec4208c4d6fd9b7ad22454e9ed4f0e9283ee5acfcd4a02af010345b4159ecf79cb65d19433dce69b445f1bc324f139e96000bf294d3ef71c5b3737c00a670070ffcd3dac56f0d10430ec68d796323c161d3df1b0b6e336bed34b010462f1fe693b5cf9001237aa575e7552aade0614261c52ccf305a0ecf8574a2cf55afd93922b57c8b6796aceb7993319091116d85227edc185efd2b80c065b589e010854a66f5babd8bd91391a443ea9e09ad41e7564d29c2df78e0644b2739b4495550890dd76ccba45aa6174207695948f0fc35c7bc269ea581045f1418cefb7a39f010ad2eb9e96abd1718bbaa7d32ff2345baffa0b21457a63133f2e52d20e513e0d1b2e4b9d074a59e1c5ce435ffe18b86373257221f05882dceefdb9b7749e3ed9db010b99600fe20546c1d9b29c47eca96b917c609ae84b8273f13da891f0d8300ac3984c2c331e96c8a9decf6feff348b5f867f397ab419bff8ffea84fe79734299b30000c7b8e248ef7ad07d14b92331565cbbd0c7497b3cc4f5bb97dc7efe7a1e6aa32c91b8beec704ffd10ff99b654d3cda8c24dc2e4691db7c0c87028f9ac69cc4a4f2010d02953d9773fe85b3f4d0c07e0bdc990a80d496f165b7dd5804a74993032120211f125f3214fdaf3f3b5bd9fb974d02c2bc34519caae6ce6933457c83fdbe8199010e6ca03dfd9c22dfff0faef3fc9e61b24c2e95f3d3bfc596446f618bcaae475167143c51b63ac40d91058fb9b6c500b47cf3002e8fc06ab36a211bb5968be660e6010f41729f3b39efdce263ab7f81a21931b3b0547f0cfacf0a2bce8d0db37d06fc3a15cbc39776a3029dd281d12eeb779b99860a53ec4af28651b429eea992ab85ad00107ef1d7e24f02abdeada7928661f346500c432a37e2d8c1fe9aa3f5362561f3c31d634a43002ccdb8f53390c93164b865c2f150a5178671abcb98c25b05e469250111c54e805ef377e52884abb916bef00047cf7738d4df871ace4bdc4f101fd6971648254c9a622fa8f89916218e088a99036df82214aacff0cd9d98833b4037c79800129608cff8770a2307a135bb24a15413cac47dd82043dd8ddd618bd00875c729462b7d507e74e7c653ae343ddaa2af076670efc5f28c58b6365e1ddc8d8908411101673e6bb200000000001ae101faedac5851e32b9b23b5f9411a8c2bac4aae3ed4dd7b811dd1a72ea4aa710000000005a35e76014155575600000000000ab03275000027105edd8e80b7da3673380d9297d680b085f2f818f701005500ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace00000047812ecbe2000000000dcb1972fffffff800000000673e6bb200000000673e6bb200000047aa10dd70000000000c79d9b90bd2125c29e0a4b2ff4076d874b52bfd0b668751690c34674b2cf5a508bac9759af373290c98a1006ef78c19709aa6b7540e1ec10646001dd95f2ae6456c632a4c57b75a8eef0ae1a8d6855be16f631d4c4f0ae07b8a91e59a4c384fa2e04e989577ed142dae1656ee24698dd27616efc52c0be3b36a5b74636122567969f4320daea3ffce6b1a459c5e116a5039ca465272480178dc07861aeac711fcff33a2d5197f8b8eb4d1dc44d4482f7d08ffc74d5a7960a487b8d8ee60e2ece30b244e63e5eafff55f94c175ae8a7fd70d6c4389c61ebe0f390874fa2dc0a96e"
+
+  await pythOracle.updatePrice([formatted], {value: ethers.parseEther("1")})
+
 
 }
 

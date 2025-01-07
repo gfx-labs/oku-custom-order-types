@@ -1,7 +1,7 @@
 import hre from "hardhat";
 import { DeployContract } from "../util/deploy";
 import { currentBlock, resetCurrentArb, resetCurrentBase, resetCurrentOP } from "../util/block";
-import { AutomationMaster, AutomationMaster__factory, Bracket, Bracket__factory, IERC20__factory, IOracleRelay, OracleRelay__factory, StopLimit, StopLimit__factory, UniswapV3Pool__factory } from "../typechain-types";
+import { AutomationMaster, AutomationMaster__factory, Bracket, Bracket__factory, IERC20__factory, IOracleRelay, OracleRelay__factory, StopLimit, StopLimit__factory, TokenEthRelay__factory, UniswapV3Pool__factory } from "../typechain-types";
 import { Signer } from "ethers";
 import { impersonateAccount } from "../util/impersonator";
 import { setBalance } from "@nomicfoundation/hardhat-network-helpers";
@@ -16,7 +16,7 @@ const { ethers } = require("hardhat");
 const userAddr = "0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89"
 
 
-let masterAddr: string  = a.Master
+let masterAddr: string = a.Master
 let stopLimitAddr: string = a.stopLimit
 let bracketAddr: string = a.bracket
 let permit2Addr: string = a.permit2
@@ -38,7 +38,7 @@ let StopLimit!: StopLimit
 let Bracket!: Bracket
 
 //SET THIS FOR TESTING
-const testingNetwork = "arbitrum"
+const testingNetwork = "op"
 
 let masterKeeper: AutomationMaster
 async function main() {
@@ -55,7 +55,7 @@ async function main() {
     console.log("Deploying for real to: ", networkName)
   }
 
-  if(networkName == 'base'){
+  if (networkName == 'base') {
     if (!mainnet) {
       await resetCurrentBase()
       console.log("Testing on BASE @", (await currentBlock())?.number)
@@ -77,6 +77,7 @@ async function main() {
   if (networkName == "op") {
     if (!mainnet) {
       await resetCurrentOP()
+      console.log("RESET")
       console.log("Testing on OP @", (await currentBlock())?.number)
 
     }
@@ -134,11 +135,94 @@ async function main() {
 
   //do things
   //await deployOracles(signer)
-  await deployEverything(signer)
+  //await deployEverything(signer)
   //await updateSubKeeper(signer)
+  //await wstethOracle(signer)
+  //await moreOracles(signer)
 
 
   console.log("DONE")
+}
+
+const pythOracle = async (signer: Signer) => {
+
+  //deploy pyth oracle
+
+  //read price
+
+  //register
+
+}
+
+const wstethOracle = async (signer: Signer) => {
+
+  const oracle: IOracleRelay = await DeployContract(new TokenEthRelay__factory(signer), signer, o.wstethAddress, o.wstethEthFeed, o.wethOracleAddress)
+  await oracle.deploymentTransaction()
+
+  console.log("WSTETH: ", ethers.formatUnits(await oracle.currentValue(), 8))
+
+
+}
+
+const moreOracles = async (signer: Signer) => {
+
+  const tokens = [
+    o.wstethAddress,
+    o.opAddress,
+    o.wbtcAddress,
+    o.uniAddress,
+    o.aaveAddress,
+    o.snxAddress
+  ];
+
+  const feeds = [
+    o.wstethFeed,
+    o.opFeed,
+    o.wbtcFeed,
+    o.uniFeed,
+    o.aaveFeed,
+    o.snxFeed
+  ];
+
+  const oracleAddresses: string[] = []
+
+  for (let i = 0; i < tokens.length; i++) {
+
+    const oracle: IOracleRelay = await DeployContract(new OracleRelay__factory(signer), signer, tokens[i], feeds[i])
+    await oracle.deploymentTransaction()
+    oracleAddresses.push(await oracle.getAddress())
+    console.log("Deployed: ", oracleAddresses[i])
+    //console.log("Price: ", ethers.formatUnits(await oracle.currentValue(), 8))
+
+  }
+
+
+  //register
+  await Master.connect(signer).registerOracle(tokens, oracleAddresses)
+  console.log("REGISTERED")
+
+  if (mainnet) {
+    console.log("Verifying...")
+    try {
+      await hre.run("verify:verify", {
+        address: oracleAddresses[0],
+        constructorArguments: [
+          tokens[0],
+          feeds[0]
+        ]
+      })
+    } catch (error) {
+      console.log("Error: ", error)
+    }
+    console.log("verified")
+  }
+
+
+
+
+
+
+
 }
 
 const deployOracles = async (signer: Signer) => {
@@ -204,11 +288,6 @@ const register = async (signer: Signer) => {
   tx = await Master.connect(signer).setMinOrderSize(ethers.parseUnits("0.25", 8))
   await tx.wait()
   console.log("SET MIN ORDER SIZE")
-
-  tx = await Master.connect(signer).setFee(5n)
-  await tx.wait()
-  console.log("SET FEE TO 5 BIPS")
-
 }
 
 const deployEverything = async (signer: Signer) => {
@@ -323,7 +402,7 @@ const updateSubKeeper = async (signer: Signer) => {
 
   if (mainnet) {
     console.log("Verifying...")
-    try{
+    try {
       await hre.run("verify:verify", {
         address: await newBracket.getAddress(),
         constructorArguments: [
@@ -331,7 +410,7 @@ const updateSubKeeper = async (signer: Signer) => {
           bracketAddr
         ]
       })
-    }catch (error){
+    } catch (error) {
       console.log(error)
     }
     console.log("verified")

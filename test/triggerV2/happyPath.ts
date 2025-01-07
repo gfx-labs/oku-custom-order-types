@@ -1,4 +1,4 @@
-import { AutomationMaster__factory, Bracket__factory, IERC20__factory, IPermit2__factory, PlaceholderOracle__factory, StopLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
+import { AutomationMaster__factory, Bracket__factory, IERC20__factory, IPermit2__factory, OracleLess, OracleLess__factory, PlaceholderOracle__factory, StopLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
 import { currentBlock, hardhat_mine, hardhat_mine_timed, resetCurrentArbBlock } from "../../util/block"
 import { expect } from "chai"
 import { stealMoney } from "../../util/money"
@@ -28,6 +28,8 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         s.Bob = s.signers[2]
         s.Charles = s.signers[3]
         s.Steve = s.signers[4]
+        s.Oscar = s.signers[5]
+        s.Gary = s.signers[6]
 
 
         s.UniPool = UniswapV3Pool__factory.connect(s.pool, s.Frank)
@@ -41,9 +43,9 @@ describe("Automated Trigger Testing on Arbitrum", () => {
 
     it("Deploy", async () => {
         //deploy master
-        s.Master = await DeployContract(new AutomationMaster__factory(s.Frank), s.Frank)
+        s.Master = await DeployContract(new AutomationMaster__factory(s.Frank), s.Frank, await s.Frank.getAddress())
         //deploy stop loss limit
-        s.Bracket = await DeployContract(new Bracket__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2)
+        s.Bracket = await DeployContract(new Bracket__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2, await s.Frank.getAddress())
 
         //deploy stop limit
         s.StopLimit = await DeployContract(
@@ -51,7 +53,8 @@ describe("Automated Trigger Testing on Arbitrum", () => {
             s.Frank,
             await s.Master.getAddress(),
             await s.Bracket.getAddress(),
-            a.permit2
+            a.permit2,
+            await s.Frank.getAddress()
         )
 
 
@@ -83,8 +86,6 @@ describe("Automated Trigger Testing on Arbitrum", () => {
 
         //set min order size 1000000000n
         await s.Master.connect(s.Frank).setMinOrderSize(s.minOrderSize)
-
-        await s.Master.connect(s.Frank).setFee(5)
 
     })
 
@@ -131,6 +132,7 @@ describe("Execute Stop-Limit Upkeep", () => {
             await s.USDC.getAddress(),
             await s.Bob.getAddress(),
             strikeBips,
+            5,//5 bips fee
             0,//no stop loss bips
             0,//no swap on fill bips
             false,//no swap on fill
@@ -155,19 +157,12 @@ describe("Execute Stop-Limit Upkeep", () => {
     })
 
     it("Check upkeep", async () => {
-
-        console.log("TESTING")
-        console.log("TESTING")
-        console.log("TESTING")
-
         //should be no upkeep needed yet
         await hardhat_mine_timed(10, 10)
         let initial = await s.Master.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
         initial = await s.StopLimit.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
-
-
 
         //confirm order pricing is correct
         const order = await s.StopLimit.orders(orderId.toString())
@@ -181,8 +176,6 @@ describe("Execute Stop-Limit Upkeep", () => {
         initial = await s.StopLimit.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
 
-
-
         //increase price to over take profit, should not trigger
         await s.wethOracle.setPrice(order.takeProfit + BigInt(ethers.parseUnits("1", 8)))
         await hardhat_mine_timed(10, 10)
@@ -191,13 +184,9 @@ describe("Execute Stop-Limit Upkeep", () => {
         initial = await s.StopLimit.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
 
-
         //reduce price to stop limit price to trigger order
         await s.wethOracle.setPrice(order.stopLimitPrice - BigInt(ethers.parseUnits("1", 8)))
         await hardhat_mine_timed(10, 10)
-        currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
-        console.log("CURRENT: ", currentPrice)
-        console.log("SLPRICE: ", order.stopLimitPrice)
 
         //check upkeep
         let result = await s.Master.checkUpkeep("0x")
@@ -227,7 +216,7 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(await s.StopLimit.pendingOrderIds.length).to.eq(0, "no pending orders left")
 
         //stop-limit order filled event
-        const Filter = s.StopLimit.filters.StopLimitOrderProcessed
+        const Filter = s.StopLimit.filters.OrderProcessed
         const Events = await s.StopLimit.queryFilter(Filter, -1)
         const Event = Events[0].args
         expect(Event.orderId).to.eq(orderId, "Order Id correct")
@@ -255,9 +244,13 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(balance).to.eq(s.wethAmount, "WETH received")
 
         //cancel limit order for future tests
-        await s.Bracket.connect(s.Bob).cancelOrder(orderId.toString())
+        //get order index
+        const orders = await s.Bracket.getPendingOrders()
+        const orderIndex = orders.findIndex((id: bigint) => id === orderId)
+        await s.Bracket.connect(s.Bob).cancelOrder(orderIndex)
     })
 })
+
 /**
  * For swap on fill, we expect to receive the same asset we provide
  * In this case, we provide USDC, swap to WETH when the stop limit is filled, 
@@ -298,6 +291,7 @@ describe("Execute Stop-Limit with swap on fill", () => {
             await s.USDC.getAddress(),//tokenIn
             await s.WETH.getAddress(),//tokenOut
             await s.Charles.getAddress(),
+            5,//5 bips fee
             strikeBips,
             stopBips,//no stop loss bips
             swapBips,//no swap on fill bips
@@ -520,6 +514,7 @@ describe("Execute Bracket Upkeep", () => {
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Bob.getAddress(),
+            5,//5 bips fee
             strikeBips,
             stopBips,
             false,//no permit
@@ -578,6 +573,18 @@ describe("Execute Bracket Upkeep", () => {
         expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
         result = await s.Bracket.checkUpkeep("0x")
         expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
+
+        //check specific indexes
+        let start = 0
+        let finish = 1
+        const abi = new AbiCoder()
+        const encodedIdxs = abi.encode(["uint96", "uint96"], [start, finish])
+        result = await s.Bracket.checkUpkeep(encodedIdxs)
+        expect(result.upkeepNeeded).to.eq(true, "first idx updeep is needed")
+
+        console.log("Checking from master")
+        result = await s.Master.checkUpkeep(encodedIdxs)
+        expect(result.upkeepNeeded).to.eq(true, "first idx updeep is needed")
     })
 
     it("Perform Upkeep - stop loss", async () => {
@@ -616,7 +623,6 @@ describe("Execute Bracket Upkeep", () => {
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         expect(event.orderId).to.eq(orderId, "Order Id correct")
-        expect(event.success).to.eq(true, "Swap succeeded")
 
         //no tokens left on contract
         expect(await s.WETH.balanceOf(await s.Bracket.getAddress())).to.eq(0n, "0 s.WETH left on contract")
@@ -701,6 +707,7 @@ describe("Bracket order with order modification", () => {
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Bob.getAddress(),
+            5,//5 bips fee
             strikeBips,
             stopBips,
             false,
@@ -728,6 +735,9 @@ describe("Bracket order with order modification", () => {
 
         const ogWethBal = await s.WETH.balanceOf(await s.Bob.getAddress())
 
+        //get pending order IDX
+        const pendingOrders = await s.Bracket.getPendingOrders()
+
         //increase amount, providing more USDC to add to the position
         await s.WETH.connect(s.Bob).approve(await s.Bracket.getAddress(), amountInDelta)
         await s.Bracket.connect(s.Bob).modifyOrder(
@@ -739,13 +749,15 @@ describe("Bracket order with order modification", () => {
             ogOrder.recipient,
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
-            false,
             true,
+            pendingOrders.findIndex((id: bigint) => id === orderId),
+            false,
             "0x"
         );
 
         //verify
         const increasedOrder = await s.Bracket.orders(ethers.toBigInt(orderId.toString()))
+
         expect(increasedOrder.amountIn).to.eq(ogOrder.amountIn + amountInDelta, "AmountIn correct")
 
         let balance = await s.WETH.balanceOf(await s.Bob.getAddress())
@@ -766,6 +778,7 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
+            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x"
         );
@@ -785,7 +798,7 @@ describe("Bracket order with order modification", () => {
 
         const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
         const ogOrder = await s.Bracket.orders(orderId.toString())
-
+        const pendingOrders = await s.Bracket.getPendingOrders()
         //set stop above strike price
         await s.Bracket.connect(s.Bob).modifyOrder(
             orderId.toString(),
@@ -797,6 +810,7 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
+            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x"
         );
@@ -814,6 +828,7 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
+            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x"
         )
@@ -831,6 +846,7 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
+            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x"
         )
@@ -851,6 +867,7 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
+            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x"
         )
@@ -930,7 +947,6 @@ describe("Bracket order with order modification", () => {
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         expect(event.orderId).to.eq(orderId, "Order Id correct")
-        expect(event.success).to.eq(true, "Swap succeeded")
 
         //no tokens left on contract
         expect(await s.WETH.balanceOf(await s.Bracket.getAddress())).to.eq(0n, "0 s.WETH left on contract")
@@ -940,6 +956,171 @@ describe("Bracket order with order modification", () => {
         const check = await s.Master.checkUpkeep("0x")
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
     })
+
+    it("Verify fee", async () => {
+
+        const usdcBalance = await s.USDC.balanceOf(await s.Master.getAddress())
+        expect(usdcBalance).to.be.gt(0, "USDC fees accumulated")
+
+        await s.Master.connect(s.Frank).sweep(await s.USDC.getAddress())
+
+        expect(await s.USDC.balanceOf(s.Frank)).to.eq(usdcBalance, "Frank received fees")
+
+    })
+})
+
+describe("Oracle Less", () => {
+    const expectedAmountOut = 5600885752n
+    const minAmountOut = expectedAmountOut - 50n
+    let orderId: bigint
+
+    let fee = ethers.parseEther("0.0001")
+
+    before(async () => {
+        s.OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2, await s.Frank.getAddress())
+        await stealMoney(s.wethWhale, await s.Oscar.getAddress(), await s.WETH.getAddress(), s.wethAmount)
+
+        //set fee
+        await s.OracleLess.setOrderFee(fee)
+
+    })
+
+    it("Create Order", async () => {
+        await s.WETH.connect(s.Oscar).approve(await s.OracleLess.getAddress(), s.wethAmount)
+        await s.OracleLess.connect(s.Oscar).createOrder(
+            await s.WETH.getAddress(),
+            await s.USDC.getAddress(),
+            s.wethAmount,
+            minAmountOut,
+            await s.Oscar.getAddress(),
+            25,
+            false,
+            "0x",
+            { value: fee }
+        )
+        const filter = s.OracleLess.filters.OrderCreated
+        const events = await s.OracleLess.queryFilter(filter, -1)
+        const event = events[0].args
+        expect(Number(event[0])).to.not.eq(0, "New order")
+        orderId = (event[0])
+    })
+    it("Modify Amount In", async () => {
+        const order = await s.OracleLess.orders(orderId)
+        const delta = 10000000n
+        const initialWeth = await s.WETH.balanceOf(await s.Oscar.getAddress())
+
+        const pendingOrders = await s.OracleLess.getPendingOrders()
+
+        //imposter
+        expect(s.OracleLess.connect(s.Bob).modifyOrder(
+            orderId,
+            order.tokenOut,
+            delta,
+            order.minAmountOut,
+            order.recipient,
+            false,
+            pendingOrders.findIndex((id) => id.orderId === orderId),
+            false,
+            "0x",
+            { value: fee }
+        )).to.be.revertedWith("only order owner")
+
+        //decrease amount
+        await s.OracleLess.connect(s.Oscar).modifyOrder(
+            orderId,
+            order.tokenOut,
+            delta,
+            order.minAmountOut,
+            order.recipient,
+            false,
+            pendingOrders.findIndex((id) => id.orderId === orderId),
+            false,
+            "0x",
+            { value: fee }
+        )
+        //check for refund
+        expect(await s.WETH.balanceOf(await s.Oscar.getAddress())).to.eq(initialWeth + delta, "WETH received")
+
+        //increase back to original
+        await s.WETH.connect(s.Oscar).approve(await s.OracleLess.getAddress(), delta)
+        await s.OracleLess.connect(s.Oscar).modifyOrder(
+            orderId,
+            order.tokenOut,
+            delta,
+            order.minAmountOut,
+            order.recipient,
+            true,
+            pendingOrders.findIndex((id) => id.orderId === orderId),
+            false,
+            "0x",
+            { value: fee }
+        )
+        expect(await s.WETH.balanceOf(await s.Oscar.getAddress())).to.eq(initialWeth, "WETH spent")
+
+    })
+
+    it("Modify Amount Received", async () => {
+        const pendingOrders = await s.OracleLess.getPendingOrders()
+
+        const order = await s.OracleLess.orders(orderId)
+        //increase min amount down
+        await s.OracleLess.connect(s.Oscar).modifyOrder(
+            orderId,
+            order.tokenOut,
+            0n,
+            expectedAmountOut + 50n,
+            order.recipient,
+            false,
+            pendingOrders.findIndex((id) => id.orderId === orderId),
+            false,
+            "0x",
+            { value: fee }
+        )
+
+        const txData = await generateUniTxData(
+            s.WETH,
+            await s.USDC.getAddress(),
+            s.wethAmount,
+            s.router02,
+            s.UniPool,
+            await s.OracleLess.getAddress(),
+            0n//pendingOrders[0].minAmountOut//5600885752
+        )
+        expect(s.OracleLess.fillOrder(0n, orderId, s.router02, txData)).to.be.revertedWith("Too Little Received")
+
+        //reset
+        await s.WETH.connect
+        await s.OracleLess.connect(s.Oscar).modifyOrder(
+            orderId,
+            order.tokenOut,
+            0n,
+            minAmountOut,
+            order.recipient,
+            false,
+            pendingOrders.findIndex((id) => id.orderId === orderId),
+            false,
+            "0x",
+            { value: fee }
+        )
+    })
+
+
+    it("Fill Order", async () => {
+
+        const pendingOrders = await s.OracleLess.getPendingOrders()
+        const txData = await generateUniTxData(
+            s.WETH,
+            await s.USDC.getAddress(),
+            s.wethAmount,
+            s.router02,
+            s.UniPool,
+            await s.OracleLess.getAddress(),
+            pendingOrders[0].minAmountOut//5600885752
+        )
+
+        await s.OracleLess.fillOrder(0n, orderId, s.router02, txData)
+    })
+
 })
 
 

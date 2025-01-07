@@ -1,6 +1,7 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+import "../oracle/IPythRelay.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "../interfaces/uniswapV3/IPermit2.sol";
@@ -13,6 +14,12 @@ interface IAutomation is AutomationCompatibleInterface {
     enum OrderType {
         STOP_LIMIT,
         BRACKET
+    }
+
+    enum InitializeOrderDirection {
+        TRUE,
+        FALSE,
+        NEWORDER
     }
 
     ///@notice encode permit2 data into a single struct
@@ -58,17 +65,38 @@ interface IAutomation is AutomationCompatibleInterface {
         bytes txData;
     }
 
-    event OrderProcessed(uint256 orderId, bool success, bytes result);
-    event OrderCreated(uint256 orderId);
-    event OrderCancelled(uint256 orderId);
+    event OrderProcessed(uint96 orderId);
+    event OrderCreated(uint96 orderId);
+    event OrderModified(uint96 orderId);
+    event OrderCancelled(uint96 orderId);
+}
+
+interface IAutomationMaster is IAutomation {
+    function STOP_LIMIT_CONTRACT() external view returns (IStopLimit);
+    function oracles(IERC20 token) external view returns (IPythRelay);
+    function maxPendingOrders() external view returns (uint16);
+    function pauseAll(bool, IOracleLess) external;
+
+    function getExchangeRate(
+        IERC20 tokenIn,
+        IERC20 tokenOut
+    ) external view returns (uint256 exchangeRate);
+
+    function generateOrderId(address sender) external returns (uint96);
+
+    function getMinAmountReceived(
+        uint256 amountIn,
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        uint96 slippageBips
+    ) external view returns (uint256 minAmountReceived);
+
+    function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) external view;
 }
 
 ///@notice Stop Limit orders create a new bracket order once filled
 /// the resulting bracket order will have the same unique order ID but will exist on the Bracket contract
 interface IStopLimit is IAutomation {
-    ///@notice emitted when an order is filled
-    event StopLimitOrderProcessed(uint256 orderId);
-
     ///@notice StopLimit orders create a new bracket order once @param stopLimitPrice is reached
     ///@param stopLimitPrice execution price to fill the Stop Limit order
     ///@param takeProfit execution price for resulting Bracket order
@@ -78,6 +106,7 @@ interface IStopLimit is IAutomation {
     ///@param tokenIn token sold in the swap
     ///@param tokenOut token bought in the swap
     ///@param recipient owner of the order and receiver of the funds once the order is closed
+    ///@param feeBips optional fee, raw basis points, taken in @param tokenOut
     ///@param takeProfitSlippage raw bips used to determine slippage for resulting Bracket order once @param takeProfit is reached
     ///@param stopSlippage raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
     ///@param swapSlippage raw bips used to determine slippage for resulting swap if @param swapOnFill is true
@@ -92,18 +121,22 @@ interface IStopLimit is IAutomation {
         IERC20 tokenIn;
         IERC20 tokenOut;
         address recipient;
+        uint16 feeBips;
         uint16 takeProfitSlippage;
         uint16 stopSlippage;
         uint16 swapSlippage;
         bool direction;
+        bool bracketDirection;
         bool swapOnFill;
     }
+    function pause(bool) external;
 
     ///@notice StopLimit orders create a new bracket order once filled
     ///@param stopLimitPrice execution price to fill the Stop Limit order
     ///@param takeProfit execution price for resulting Bracket order
     ///@param stopPrice execution price for resulting Bracket order
     ///@param amountIn amount of @param tokenIn to sell
+    ///@param feeBips optional fee, raw basis points, taken in @param tokenOut
     ///@param tokenIn token sold in the swap
     ///@param tokenOut token bought in the swap
     ///@param recipient owner of the order and receiver of the funds once the order is closed
@@ -122,6 +155,7 @@ interface IStopLimit is IAutomation {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         uint16 swapSlippage,
@@ -158,8 +192,9 @@ interface IStopLimit is IAutomation {
         uint16 stopSlippage,
         uint16 swapSlippage,
         bool swapOnFill,
-        bool permit,
         bool increasePosition,
+        uint96 pendingOrderIdx,
+        bool permit,
         bytes calldata permitPayload
     ) external;
 }
@@ -174,6 +209,7 @@ interface IBracket is IAutomation {
     ///@param tokenIn token sold in the swap
     ///@param tokenOut token bought in the swap
     ///@param recipient owner of the order and receiver of the funds once the order is closed
+    ///@param feeBips optional fee, raw basis points, taken in @param tokenOut
     ///@param takeProfitSlippage raw bips used to determine slippage for resulting Bracket order once @param takeProfit is reached
     ///@param stopSlippage raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
     ///@param direction determines the expected direction of price movement
@@ -185,18 +221,20 @@ interface IBracket is IAutomation {
         IERC20 tokenIn;
         IERC20 tokenOut;
         address recipient; //addr to receive swap results
+        uint16 feeBips;
         uint16 takeProfitSlippage; //slippage if order is filled
         uint16 stopSlippage; //slippage of stop price is reached
-        bool direction; //true if initial exchange rate > strike price
+        bool direction; //true if initial exchange rate > takeProfit price
     }
 
-    
+    function pause(bool) external;
 
     ///@notice Bracket orders are filled when either @param takeProfit or @param stopPrice are reached,
     /// at which time @param tokenIn is swapped for @param tokenOut    ///@param stopLimitPrice execution price to fill the Stop Limit order
     ///@param takeProfit execution price for resulting Bracket order
     ///@param stopPrice execution price for resulting Bracket order
     ///@param amountIn amount of @param tokenIn to sell
+    ///@param feeBips optional fee, raw basis points, taken in @param tokenOut
     ///@param tokenIn token sold in the swap
     ///@param tokenOut token bought in the swap
     ///@param recipient owner of the order and receiver of the funds once the order is closed
@@ -213,6 +251,7 @@ interface IBracket is IAutomation {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         bool permit,
@@ -230,12 +269,13 @@ interface IBracket is IAutomation {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 existingFeeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
+        bool bracketDirection,
         bool permit,
         bytes calldata permitPayload
     ) external;
-
 
     ///@param orderId unique id to reference the order being modified
     ///@param takeProfit new execution price for resulting Bracket order
@@ -259,8 +299,63 @@ interface IBracket is IAutomation {
         address recipient,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
-        bool permit,
         bool increasePosition,
+        uint96 pendingOrderIdx,
+        bool permit,
         bytes calldata permitPayload
+    ) external;
+}
+
+interface IOracleLess {
+    event OrderCreated(uint96 orderId, uint96 index);
+    event OrderCancelled(uint96 orderId);
+    event OrderModified(uint96 orderId);
+    event OrderProcessed(uint96 orderId);
+
+    ///@notice force a revert if the external call fails
+    error TransactionFailed(bytes reason);
+
+    struct Order {
+        uint96 orderId;
+        IERC20 tokenIn;
+        IERC20 tokenOut;
+        uint256 amountIn;
+        uint256 minAmountOut;
+        address recipient;
+        uint16 feeBips;
+    }
+
+    function pause(bool) external;
+
+    function createOrder(
+        IERC20 tokenIn,
+        IERC20 tokenOut,
+        uint256 amountIn,
+        uint256 minAmountOut,
+        address recipient,
+        uint16 feeBips,
+        bool permit,
+        bytes calldata permitPayload
+    ) external payable returns (uint96);
+
+    function cancelOrder(uint96 orderId) external;
+
+    function modifyOrder(
+        uint96 orderId,
+        IERC20 _tokenOut,
+        uint256 amountInDelta,
+        uint256 _minAmountOut,
+        address _recipient,
+        bool increasePosition,
+        uint96 pendingOrderIdx,
+        bool permit,
+        bytes calldata permitPayload
+    ) external payable;
+
+    function fillOrder(
+        uint96 pendingOrderIdx,
+        uint96 orderId,
+        address target,
+        bytes calldata txData
     ) external;
 }

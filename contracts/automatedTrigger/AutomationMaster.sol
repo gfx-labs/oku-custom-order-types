@@ -1,51 +1,66 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
 import "./IAutomation.sol";
+import "../oracle/IPythRelay.sol";
 import "../libraries/ArrayMutation.sol";
-import "../interfaces/ILimitOrderRegistry.sol";
-import "../interfaces/uniswapV3/UniswapV3Pool.sol";
-import "../interfaces/uniswapV3/ISwapRouter02.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
+import "../interfaces/openzeppelin/ERC20.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
-import "../oracle/IOracleRelay.sol";
+import "../interfaces/openzeppelin/Pausable.sol";
 
 ///@notice This contract owns and handles all of the settings and accounting logic for automated swaps
-///@notice This contract should not hold any user funds, only collected fees 
-contract AutomationMaster is IAutomation, Ownable {
+///@notice This contract should not hold any user funds, only collected fees
+contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     using SafeERC20 for IERC20;
 
-    uint16 public constant MAX_BIPS = 10000;
-
-    uint16 public feeBips;
-
+    ///@notice maximum pending orders that may exist at a time, limiting the compute requriement for checkUpkeep
     uint16 public maxPendingOrders;
 
+    ///@notice minumum USD value required to create a new order, in 1e8 terms
     uint256 public minOrderSize;
 
+    ///sub keeper contracts
     IStopLimit public STOP_LIMIT_CONTRACT;
     IBracket public BRACKET_CONTRACT;
 
-    mapping(IERC20 => IOracleRelay) public oracles;
+    ///each token must have a registered oracle in order to be tradable
+    mapping(IERC20 => IPythRelay) public oracles;
+    mapping(IERC20 => bytes32) public pythIds;
+    mapping(address => uint96) private nonces;
 
-    ///@param _feeBips is the raw bips to determine the fee
-    function setFee(uint16 _feeBips) external onlyOwner {
-        feeBips = _feeBips;
+    constructor(address owner){
+        _transferOwnership(owner);
     }
 
+    function pauseAll(
+        bool pause,
+        IOracleLess oracleLessContract
+    ) external override onlyOwner {
+        if (pause) {
+            _pause();
+        } else {
+            _unpause();
+        }
+        STOP_LIMIT_CONTRACT.pause(pause);
+        BRACKET_CONTRACT.pause(pause);
+        oracleLessContract.pause(pause);
+    }
+
+    ///@notice register Stop Limit and Bracket order contracts
     function registerSubKeepers(
         IStopLimit stopLimitContract,
-        IBracket stopLossLimitContract
+        IBracket bracketContract
     ) external onlyOwner {
         STOP_LIMIT_CONTRACT = stopLimitContract;
-        BRACKET_CONTRACT = stopLossLimitContract;
+        BRACKET_CONTRACT = bracketContract;
     }
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
     function registerOracle(
         IERC20[] calldata _tokens,
-        IOracleRelay[] calldata _oracles
+        IPythRelay[] calldata _oracles
     ) external onlyOwner {
         require(_tokens.length == _oracles.length, "Array Length Mismatch");
         for (uint i = 0; i < _tokens.length; i++) {
@@ -71,11 +86,11 @@ contract AutomationMaster is IAutomation, Ownable {
     }
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
-    ///@return exchangeRate should always be 1e8
+    ///@return exchangeRate should always be in 1e8 terms
     function getExchangeRate(
         IERC20 tokenIn,
         IERC20 tokenOut
-    ) external view returns (uint256 exchangeRate) {
+    ) external view override returns (uint256 exchangeRate) {
         return _getExchangeRate(tokenIn, tokenOut);
     }
 
@@ -91,17 +106,28 @@ contract AutomationMaster is IAutomation, Ownable {
         return (priceIn * 1e8) / priceOut;
     }
 
-    function generateOrderId(address sender) public view returns (uint96) {
-        uint256 hashedValue = uint256(keccak256(abi.encodePacked(sender, block.timestamp)));
+    ///@notice generate a random and unique order id
+    function generateOrderId(
+        address sender
+    ) external override returns (uint96) {
+        uint96 nonce = nonces[sender]++;
+        uint256 hashedValue = uint256(
+            keccak256(
+                abi.encodePacked(sender, nonce, blockhash(block.number - 1))
+            )
+        );
         return uint96(hashedValue);
     }
 
+    ///@notice compute minumum amount received
+    ///@return minAmountReceived is in @param tokenOut terms
+    ///@param slippageBips is in raw basis points
     function getMinAmountReceived(
         uint256 amountIn,
         IERC20 tokenIn,
         IERC20 tokenOut,
         uint96 slippageBips
-    ) external view returns (uint256 minAmountReceived) {
+    ) external view override returns (uint256 minAmountReceived) {
         uint256 exchangeRate = _getExchangeRate(tokenIn, tokenOut);
 
         // Adjust for decimal differences between tokens
@@ -114,10 +140,11 @@ contract AutomationMaster is IAutomation, Ownable {
         // Calculate the fair amount out without slippage
         uint256 fairAmountOut = (adjustedAmountIn * exchangeRate) / 1e8;
 
-        // Apply slippage (MAX_BIPS is 10000, representing 100%)
-        return (fairAmountOut * (MAX_BIPS - slippageBips)) / MAX_BIPS;
+        // Apply slippage - 10000 bips is equivilant to 100% slippage
+        return (fairAmountOut * (10000 - slippageBips)) / 10000;
     }
 
+    ///@notice account for token scale when computing token amounts based on slippage bips
     function adjustForDecimals(
         uint256 amountIn,
         IERC20 tokenIn,
@@ -137,19 +164,12 @@ contract AutomationMaster is IAutomation, Ownable {
         return amountIn;
     }
 
-    ///@notice apply the protocol fee to @param amount
-    ///@notice fee is in the form of tokenOut after a successful performUpkeep
-    function applyFee(uint256 amount) external view returns (uint256 feeAmount, uint256 adjustedAmount){
-        if(feeBips != 0){
-            //determine adjusted amount and fee amount
-            adjustedAmount = (amount * (MAX_BIPS - feeBips)) / MAX_BIPS;
-            feeAmount = amount - adjustedAmount;
-        }else{
-            return (0, amount);
-        }
-    }
-
-    function checkMinOrderSize(IERC20 tokenIn, uint256 amountIn) public view {
+    ///@notice determine if a new order meets the minimum order size requirement
+    ///Value of @param amountIn of @param tokenIn must meed the minimum USD value
+    function checkMinOrderSize(
+        IERC20 tokenIn,
+        uint256 amountIn
+    ) external view override {
         uint256 currentPrice = oracles[tokenIn].currentValue();
         uint256 usdValue = (currentPrice * amountIn) /
             (10 ** ERC20(address(tokenIn)).decimals());
@@ -157,30 +177,34 @@ contract AutomationMaster is IAutomation, Ownable {
         require(usdValue > minOrderSize, "order too small");
     }
 
+    ///@notice check upkeep on all order types
     function checkUpkeep(
-        bytes calldata
+        bytes calldata checkData
     )
         external
         view
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        //check stop order
-        (upkeepNeeded, performData) = STOP_LIMIT_CONTRACT.checkUpkeep("0x");
+        //check stop limit order
+        (upkeepNeeded, performData) = STOP_LIMIT_CONTRACT.checkUpkeep(
+            checkData
+        );
         if (upkeepNeeded) {
             return (true, performData);
         }
 
-        //check stop loss limit order
-        (upkeepNeeded, performData) = BRACKET_CONTRACT.checkUpkeep(
-            "0x"
-        );
+        //check bracket order
+        (upkeepNeeded, performData) = BRACKET_CONTRACT.checkUpkeep(checkData);
         if (upkeepNeeded) {
             return (true, performData);
         }
     }
 
-    function performUpkeep(bytes calldata performData) external override {
+    ///@notice perform upkeep on any order type
+    function performUpkeep(
+        bytes calldata performData
+    ) external override whenNotPaused {
         //decode into masterUpkeepData
         MasterUpkeepData memory data = abi.decode(
             performData,

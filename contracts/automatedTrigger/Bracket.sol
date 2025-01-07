@@ -1,10 +1,8 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
 import "./IAutomation.sol";
-import "./AutomationMaster.sol";
 import "../libraries/ArrayMutation.sol";
-import "../interfaces/ILimitOrderRegistry.sol";
 import "../interfaces/uniswapV3/UniswapV3Pool.sol";
 import "../interfaces/uniswapV3/IPermit2.sol";
 import "../interfaces/uniswapV3/ISwapRouter02.sol";
@@ -12,50 +10,71 @@ import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
-import "../oracle/IOracleRelay.sol";
+import "../interfaces/openzeppelin/Pausable.sol";
 
 ///@notice This contract owns and handles all logic associated with the following order types:
-/// BRACKET_ORDER - automated fill at strike price AND stop loss, with independant slippapge for each option
-/// LIMIT_ORDER - automated market swap at specified strike price
-/// STOP_LOSS - automated market swap at specified stop price
-/// In order to configure a LIMIT_ORDER or STOP_LOSS order, simply set the strike price or stop price to either 0 for the lower bound or 2^256 - 1 for the upper bound
-///todo example
-contract Bracket is Ownable, IBracket, ReentrancyGuard {
+/// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independant slippapge for each option
+/// LIMIT_ORDER - BRACKET_ORDER at specified take profit price, with STOP set to 0
+/// STOP_ORDER - BRACKET_ORDER at specified stop price, with take profit set to 2 ** 256 - 1
+/// In order to configure a LIMIT_ORDER or STOP_ORDER, simply set the take profit or stop price to either 0 for the lower bound or 2^256 - 1 for the upper bound
+contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
-    AutomationMaster public immutable MASTER;
+    IAutomationMaster public immutable MASTER;
     IPermit2 public immutable permit2;
 
     uint96[] public pendingOrderIds;
 
     mapping(uint96 => Order) public orders;
 
-    constructor(
-        AutomationMaster _master,
-        IPermit2 _permit2
-    ) {
+    constructor(IAutomationMaster _master, IPermit2 _permit2, address owner) {
         MASTER = _master;
         permit2 = _permit2;
+        _transferOwnership(owner);
     }
+
+    function pause(bool __pause) external override {
+        require(
+            msg.sender == address(MASTER) || msg.sender == owner(),
+            "Not Authorized"
+        );
+        if (__pause) {
+            _pause();
+        } else {
+            _unpause();
+        }
+    }
+
+
 
     function getPendingOrders() external view returns (uint96[] memory) {
         return pendingOrderIds;
     }
 
-    //check upkeep
     function checkUpkeep(
-        bytes calldata
+        bytes calldata checkData
     )
         external
         view
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        for (uint96 i = 0; i < pendingOrderIds.length; i++) {
+        uint96 i = 0;
+        uint96 length = uint96(pendingOrderIds.length);
+        if (checkData.length == 64) {
+            //decode start and end idxs
+            (i, length) = abi.decode(checkData, (uint96, uint96));
+            if (length > uint96(pendingOrderIds.length)) {
+                length = uint96(pendingOrderIds.length);
+            }
+        }
+        for (i; i < length; i++) {
             Order memory order = orders[pendingOrderIds[i]];
-            (bool inRange, bool strike, uint256 exchangeRate) = checkInRange(
-                order
-            );
+            (
+                bool inRange,
+                bool takeProfit,
+                uint256 exchangeRate
+            ) = checkInRange(order);
             if (inRange) {
                 return (
                     true,
@@ -68,9 +87,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                             orderId: order.orderId,
                             tokenIn: order.tokenIn,
                             tokenOut: order.tokenOut,
-                            slippage: strike
+                            slippage: takeProfit
                                 ? order.takeProfitSlippage
-                                : order.stopSlippage, //bips based on strike or stop fill
+                                : order.stopSlippage, //bips based on take profit or stop fill
                             amountIn: order.amountIn,
                             exchangeRate: exchangeRate
                         })
@@ -89,64 +108,64 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
     ///this pending order is removed from the array via array mutation
     function performUpkeep(
         bytes calldata performData
-    ) external override nonReentrant {
+    ) external override nonReentrant whenNotPaused {
         MasterUpkeepData memory data = abi.decode(
             performData,
             (MasterUpkeepData)
         );
         Order memory order = orders[pendingOrderIds[data.pendingOrderIdx]];
-        //deduce if we are filling stop or strike
-        (bool inRange, bool strike, ) = checkInRange(order);
+
+        require(
+            order.orderId == pendingOrderIds[data.pendingOrderIdx],
+            "Order Fill Mismatch"
+        );
+
+        //deduce if we are filling stop or take profit
+        (bool inRange, bool takeProfit, ) = checkInRange(order);
         require(inRange, "order ! in range");
 
         //deduce bips
         uint16 bips;
-        strike ? bips = order.takeProfitSlippage : bips = order.stopSlippage;
+        takeProfit ? bips = order.takeProfitSlippage : bips = order
+            .stopSlippage;
 
-        (
-            bool success,
-            bytes memory result,
-            uint256 swapAmountOut,
-            uint256 tokenInRefund
-        ) = execute(
-                data.target,
-                data.txData,
-                order.amountIn,
-                order.tokenIn,
-                order.tokenOut,
-                bips
-            );
+        (uint256 swapAmountOut, uint256 tokenInRefund) = execute(
+            data.target,
+            data.txData,
+            order.amountIn,
+            order.tokenIn,
+            order.tokenOut,
+            bips
+        );
 
         //handle accounting
-        if (success) {
-            //remove from pending array
-            pendingOrderIds = ArrayMutation.removeFromArray(
-                data.pendingOrderIdx,
-                pendingOrderIds
-            );
+        //remove from pending array
+        pendingOrderIds = ArrayMutation.removeFromArray(
+            data.pendingOrderIdx,
+            pendingOrderIds
+        );
 
-            //apply fee if there is one
-            (uint256 feeAmount, uint256 adjustedAmount) = MASTER.applyFee(
-                swapAmountOut
-            );
+        //handle fee
+        (uint256 feeAmount, uint256 adjustedAmount) = applyFee(
+            swapAmountOut,
+            order.feeBips
+        );
 
-            //send fee to master
-            if (feeAmount != 0) {
-                order.tokenOut.safeTransfer(address(MASTER), feeAmount);
-            }
+        if (feeAmount != 0) {
+            order.tokenOut.safeTransfer(address(MASTER), feeAmount);
+        }
 
-            //send tokenOut to recipient
-            order.tokenOut.safeTransfer(order.recipient, adjustedAmount);
+        //send tokenOut to recipient
+        order.tokenOut.safeTransfer(order.recipient, adjustedAmount);
 
-            //refund any unspent tokenIn
-            //this should generally be 0 when using exact input for swaps, which is recommended
-            if (tokenInRefund != 0) {
-                order.tokenIn.safeTransfer(order.recipient, tokenInRefund);
-            }
+        //refund any unspent tokenIn
+        //this should generally be 0 when using exact input for swaps, which is recommended
+        if (tokenInRefund != 0) {
+            order.tokenIn.safeTransfer(order.recipient, tokenInRefund);
         }
 
         //emit
-        emit OrderProcessed(order.orderId, success, result);
+        emit OrderProcessed(order.orderId);
     }
 
     function fillStopLimitOrder(
@@ -158,12 +177,17 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 existingFeeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
+        bool bracketDirection,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant{
-        require(msg.sender == address(MASTER.STOP_LIMIT_CONTRACT()), "Only Stop Limit");
+    ) external override nonReentrant whenNotPaused {
+        require(
+            msg.sender == address(MASTER.STOP_LIMIT_CONTRACT()),
+            "Only Stop Limit"
+        );
         _initializeOrder(
             swapPayload,
             takeProfit,
@@ -173,8 +197,12 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             tokenIn,
             tokenOut,
             recipient,
+            existingFeeBips,
             takeProfitSlippage,
             stopSlippage,
+            bracketDirection
+                ? InitializeOrderDirection.TRUE
+                : InitializeOrderDirection.FALSE,
             permit,
             permitPayload
         );
@@ -189,11 +217,12 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant {
+    ) external override nonReentrant whenNotPaused {
         _initializeOrder(
             swapPayload,
             takeProfit,
@@ -203,8 +232,10 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             tokenIn,
             tokenOut,
             recipient,
+            feeBips,
             takeProfitSlippage,
             stopSlippage,
+            InitializeOrderDirection.NEWORDER,
             permit,
             permitPayload
         );
@@ -215,54 +246,50 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         uint96 orderId,
         uint256 _takeProfit,
         uint256 _stopPrice,
-        uint256 _amountInDelta,
+        uint256 amountInDelta,
         IERC20 _tokenOut,
         address _recipient,
-        uint16 _strikeSlippage,
+        uint16 _takeProfitSlippage,
         uint16 _stopSlippage,
-        bool permit,
         bool increasePosition,
+        uint96 pendingOrderIdx,
+        bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant {
+    ) external override nonReentrant whenNotPaused {
         //get order
         Order memory order = orders[orderId];
+        require(
+            order.orderId == pendingOrderIds[pendingOrderIdx],
+            "order doesn't exist"
+        );
 
         //only order owner
         require(msg.sender == order.recipient, "only order owner");
 
         //deduce any amountIn changes
         uint256 newAmountIn = order.amountIn;
-        if (_amountInDelta != 0) {
+        if (amountInDelta != 0) {
             if (increasePosition) {
-                newAmountIn += _amountInDelta;
-                //take funds via permit2
-                if (permit) {
-                    handlePermit(
-                        order.recipient,
-                        permitPayload,
-                        uint160(_amountInDelta),
-                        address(order.tokenIn)
-                    );
-                } else {
-                    //legacy transfer, assume prior approval
-                    order.tokenIn.safeTransferFrom(
-                        order.recipient,
-                        address(this),
-                        _amountInDelta
-                    );
-                }
+                newAmountIn += amountInDelta;
+                procureTokens(
+                    order.tokenIn,
+                    amountInDelta,
+                    msg.sender,
+                    permit,
+                    permitPayload
+                );
             } else {
                 //ensure delta is valid
-                require(_amountInDelta < order.amountIn, "invalid delta");
+                require(amountInDelta < order.amountIn, "invalid delta");
 
                 //set new amountIn for accounting
-                newAmountIn -= _amountInDelta;
+                newAmountIn -= amountInDelta;
 
                 //check min order size for new amount
                 MASTER.checkMinOrderSize(order.tokenIn, newAmountIn);
 
                 //refund position partially
-                order.tokenIn.safeTransfer(order.recipient, _amountInDelta);
+                order.tokenIn.safeTransfer(order.recipient, amountInDelta);
             }
         }
 
@@ -282,7 +309,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             amountIn: newAmountIn,
             tokenIn: order.tokenIn,
             tokenOut: _tokenOut,
-            takeProfitSlippage: _strikeSlippage,
+            feeBips: order.feeBips,
+            takeProfitSlippage: _takeProfitSlippage,
             stopSlippage: _stopSlippage,
             recipient: _recipient,
             direction: MASTER.getExchangeRate(order.tokenIn, _tokenOut) >
@@ -293,17 +321,50 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         orders[orderId] = newOrder;
     }
 
-    function adminCancelOrder(uint96 orderId) external onlyOwner {
-        Order memory order = orders[orderId];
-        require(_cancelOrder(order), "Order not active");
+    ///@notice allow administrator to cancel any order
+    ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
+    ///@notice only pending orders can be cancelled
+    function adminCancelOrder(
+        uint96 pendingOrderIdx
+    ) external onlyOwner nonReentrant {
+        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
+        _cancelOrder(order, pendingOrderIdx);
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(uint96 orderId) external {
-        Order memory order = orders[orderId];
+    function cancelOrder(
+        uint96 pendingOrderIdx
+    ) external nonReentrant whenNotPaused {
+        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
         require(msg.sender == order.recipient, "Only Order Owner");
-        require(_cancelOrder(order), "Order not active");
+        _cancelOrder(order, pendingOrderIdx);
+    }
+
+    function procureTokens(
+        IERC20 token,
+        uint256 amount,
+        address tokenOwner,
+        bool permit,
+        bytes calldata permitPayload
+    ) internal {
+        if (permit) {
+            require(amount < type(uint160).max, "uint160 overflow");
+            IAutomation.Permit2Payload memory payload = abi.decode(
+                permitPayload,
+                (IAutomation.Permit2Payload)
+            );
+
+            permit2.permit(tokenOwner, payload.permitSingle, payload.signature);
+            permit2.transferFrom(
+                tokenOwner,
+                address(this),
+                uint160(amount),
+                address(token)
+            );
+        } else {
+            token.safeTransferFrom(tokenOwner, address(this), amount);
+        }
     }
 
     function _initializeOrder(
@@ -315,8 +376,10 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
+        InitializeOrderDirection direction,
         bool permit,
         bytes calldata permitPayload
     ) internal {
@@ -327,21 +390,13 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 (SwapParams)
             );
             //procure swap token in
-            if (permit) {
-                handlePermit(
-                    msg.sender,
-                    permitPayload,
-                    uint160(swapParams.swapAmountIn),
-                    address(swapParams.swapTokenIn)
-                );
-            } else {
-                //take asset, assume prior approval
-                swapParams.swapTokenIn.safeTransferFrom(
-                    msg.sender,
-                    address(this),
-                    swapParams.swapAmountIn
-                );
-            }
+            procureTokens(
+                swapParams.swapTokenIn,
+                swapParams.swapAmountIn,
+                msg.sender,
+                permit,
+                permitPayload
+            );
 
             _createOrderWithSwap(
                 swapParams,
@@ -351,23 +406,14 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 tokenIn,
                 tokenOut,
                 recipient,
+                feeBips,
                 takeProfitSlippage,
-                stopSlippage
+                stopSlippage,
+                direction
             );
         } else {
             //no swap
-            //procure tokens
-            if (permit) {
-                handlePermit(
-                    msg.sender,
-                    permitPayload,
-                    uint160(amountIn),
-                    address(tokenIn)
-                );
-            } else {
-                //assume prior approval
-                tokenIn.safeTransferFrom(msg.sender, address(this), amountIn);
-            }
+            procureTokens(tokenIn, amountIn, msg.sender, permit, permitPayload);
 
             _createOrder(
                 takeProfit,
@@ -377,8 +423,10 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 tokenIn,
                 tokenOut,
                 recipient,
+                feeBips,
                 takeProfitSlippage,
-                stopSlippage
+                stopSlippage,
+                direction
             );
         }
     }
@@ -391,16 +439,15 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 feeBips,
         uint16 takeProfitSlippage,
-        uint16 stopSlippage
+        uint16 stopSlippage,
+        InitializeOrderDirection direction
     ) internal {
-        require(
-            swapParams.swapSlippage <= MASTER.MAX_BIPS(),
-            "Invalid Slippage BIPS"
-        );
+        require(swapParams.swapSlippage <= 10000, "BIPS > 10k");
 
         //execute the swap
-        (, , uint256 swapAmountOut, uint256 tokenInRefund) = execute(
+        (uint256 swapAmountOut, uint256 tokenInRefund) = execute(
             swapParams.swapTarget,
             swapParams.txData,
             swapParams.swapAmountIn,
@@ -417,8 +464,10 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             tokenIn,
             tokenOut,
             recipient,
+            feeBips,
             takeProfitSlippage,
-            stopSlippage
+            stopSlippage,
+            direction
         );
         //refund any unspent tokenIn
         //this should generally be 0 when using exact input for swaps, which is recommended
@@ -435,13 +484,15 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         IERC20 tokenIn,
         IERC20 tokenOut,
         address recipient,
+        uint16 feeBips,
         uint16 takeProfitSlippage,
-        uint16 stopSlippage
+        uint16 stopSlippage,
+        InitializeOrderDirection direction
     ) internal {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
             address(MASTER.oracles(tokenIn)) != address(0x0) &&
-                address(MASTER.oracles(tokenIn)) != address(0x0),
+                address(MASTER.oracles(tokenOut)) != address(0x0),
             "Oracle !exist"
         );
         require(
@@ -449,16 +500,28 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             "Max Order Count Reached"
         );
         require(
-            stopSlippage <= MASTER.MAX_BIPS() &&
-                takeProfitSlippage <= MASTER.MAX_BIPS(),
-            "Invalid Slippage BIPS"
+            stopSlippage <= 10000 &&
+                takeProfitSlippage <= 10000 &&
+                feeBips <= 10000,
+            "BIPS > 10k"
         );
 
         MASTER.checkMinOrderSize(tokenIn, amountIn);
 
         //generate random but unique order id if there is not an existing orderId from a stop limit order
         if (existingOrderId == 0) {
-            existingOrderId = MASTER.generateOrderId(msg.sender);
+            existingOrderId = MASTER.generateOrderId(recipient);
+        }
+
+        //deduce direction if not pre-determined
+        bool finalDirection = false;
+        if (direction == InitializeOrderDirection.TRUE) {
+            finalDirection = true;
+        }
+        if (direction == InitializeOrderDirection.NEWORDER) {
+            //exchangeRate in/out > takeProfit
+            finalDirection =
+                MASTER.getExchangeRate(tokenIn, tokenOut) > takeProfit;
         }
 
         //construct order
@@ -471,8 +534,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             tokenOut: tokenOut,
             recipient: recipient,
             takeProfitSlippage: takeProfitSlippage,
+            feeBips: feeBips,
             stopSlippage: stopSlippage,
-            direction: MASTER.getExchangeRate(tokenIn, tokenOut) > takeProfit //exchangeRate in/out > takeProfit
+            direction: finalDirection
         });
 
         //store pending order
@@ -481,29 +545,24 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         emit OrderCreated(existingOrderId);
     }
 
-    function _cancelOrder(Order memory order) internal returns (bool) {
-        for (uint96 i = 0; i < pendingOrderIds.length; i++) {
-            if (pendingOrderIds[i] == order.orderId) {
-                //remove from pending array
-                pendingOrderIds = ArrayMutation.removeFromArray(
-                    i,
-                    pendingOrderIds
-                );
+    function _cancelOrder(Order memory order, uint96 pendingOrderIdx) internal {
+        //remove from pending array
+        pendingOrderIds = ArrayMutation.removeFromArray(
+            pendingOrderIdx,
+            pendingOrderIds
+        );
 
-                //refund tokenIn amountIn to recipient
-                order.tokenIn.safeTransfer(order.recipient, order.amountIn);
+        //refund tokenIn amountIn to recipient
+        order.tokenIn.safeTransfer(order.recipient, order.amountIn);
 
-                //emit event
-                emit OrderCancelled(order.orderId);
-
-                //short circuit loop
-                return true;
-            }
-        }
-        return false;
+        //emit event
+        emit OrderCancelled(order.orderId);
     }
 
-    ///@notice execute swap via @param txData
+    ///@notice execute swap transaction
+    ///@param target is the contract to which we are sending @param txData to perform the swap
+    ///@param tokenIn is the token to sell for @param tokenOut
+    ///@param bips ensures that we received at least the minimum amount of @param tokenOut after the swap
     function execute(
         address target,
         bytes memory txData,
@@ -511,24 +570,22 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         IERC20 tokenIn,
         IERC20 tokenOut,
         uint16 bips
-    )
-        internal
-        returns (
-            bool success,
-            bytes memory result,
-            uint256 swapAmountOut,
-            uint256 tokenInRefund
-        )
-    {
+    ) internal returns (uint256 swapAmountOut, uint256 tokenInRefund) {
         //update accounting
         uint256 initialTokenIn = tokenIn.balanceOf(address(this));
         uint256 initialTokenOut = tokenOut.balanceOf(address(this));
 
+        //approve 0
+        tokenIn.safeDecreaseAllowance(
+            target,
+            (tokenIn.allowance(address(this), target))
+        );
+
         //approve
-        tokenIn.safeApprove(target, amountIn);
+        tokenIn.safeIncreaseAllowance(target, amountIn);
 
         //perform the call
-        (success, result) = target.call(txData);
+        (bool success, bytes memory result) = target.call(txData);
 
         if (success) {
             uint256 finalTokenIn = tokenIn.balanceOf(address(this));
@@ -540,7 +597,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             require(
                 finalTokenOut - initialTokenOut >
                     MASTER.getMinAmountReceived(
-                        amountIn,
+                        (initialTokenIn - finalTokenIn),
                         tokenIn,
                         tokenOut,
                         bips
@@ -548,11 +605,18 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 "Too Little Received"
             );
 
-            swapAmountOut = finalTokenOut - initialTokenOut; //todo change name for swapAmountOut?
+            swapAmountOut = finalTokenOut - initialTokenOut;
             tokenInRefund = amountIn - (initialTokenIn - finalTokenIn);
         } else {
+            //force revert
             revert TransactionFailed(result);
         }
+
+        //approve 0
+        tokenIn.safeDecreaseAllowance(
+            target,
+            (tokenIn.allowance(address(this), target))
+        );
     }
 
     ///@notice handle signature and acquisition of asset with permit2
@@ -570,15 +634,18 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
         permit2.permit(owner, payload.permitSingle, payload.signature);
         permit2.transferFrom(owner, address(this), amount, token);
     }
-
-    //todo what if direction is true but strike price is invalidly higher than strike price?
-    //Just leads to a bad fill?
+    ///@notice determine @param order order is fillable
+    ///
     function checkInRange(
         Order memory order
-    ) internal view returns (bool inRange, bool strike, uint256 exchangeRate) {
+    )
+        internal
+        view
+        returns (bool inRange, bool takeProfit, uint256 exchangeRate)
+    {
         exchangeRate = MASTER.getExchangeRate(order.tokenIn, order.tokenOut);
         if (order.direction) {
-            //check for strike price
+            //check for take profit price
             if (exchangeRate <= order.takeProfit) {
                 return (true, true, exchangeRate);
             }
@@ -587,7 +654,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
                 return (true, false, exchangeRate);
             }
         } else {
-            //check for strike price
+            //check for take profit price
             if (exchangeRate >= order.takeProfit) {
                 return (true, true, exchangeRate);
             }
@@ -595,6 +662,21 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard {
             if (exchangeRate <= order.stopPrice) {
                 return (true, false, exchangeRate);
             }
+        }
+    }
+
+    ///@notice apply the protocol fee to @param amount
+    ///@notice fee is in the form of tokenOut after a successful performUpkeep
+    function applyFee(
+        uint256 amount,
+        uint16 feeBips
+    ) internal pure returns (uint256 feeAmount, uint256 adjustedAmount) {
+        if (feeBips != 0) {
+            //determine adjusted amount and fee amount
+            adjustedAmount = (amount * (10000 - feeBips)) / 10000;
+            feeAmount = amount - adjustedAmount;
+        } else {
+            return (0, amount);
         }
     }
 }

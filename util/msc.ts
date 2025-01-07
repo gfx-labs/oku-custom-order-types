@@ -1,5 +1,5 @@
 import { AbiCoder, AddressLike, BigNumberish, BytesLike, Signer, TransactionResponse, TypedDataDomain } from "ethers"
-import { IERC20, IERC20__factory, IPermit2, ISwapRouter02__factory, UniswapV3Pool } from "../typechain-types"
+import { IERC20, IERC20__factory, IPermit2, IPermit2__factory, ISwapRouter02__factory, UniswapV3Pool } from "../typechain-types"
 import { ethers } from "hardhat"
 import { keccak256 } from "@ethersproject/keccak256";
 import { toUtf8Bytes } from "@ethersproject/strings";
@@ -22,6 +22,11 @@ type PermitSingle = {
     details: PermitDetails
     spender: string
     sigDeadline: string
+}
+
+export interface Permit2Payload {
+    permitSingle: PermitSingle;
+    signature: string;
 }
 
 export type ExactInputSingleParams = {
@@ -169,7 +174,7 @@ export const permitSingle = async (
     signer: Signer,
     chainId: number,
     token: string,
-    amount: BigInt,
+    amount: bigint,
     spender: string,
     permit2: string,
     nonce: number = 0,
@@ -178,13 +183,32 @@ export const permitSingle = async (
     if (expiration == undefined) {
         expiration = Math.floor(Date.now() / 1000) + 60 * 60 // 1 hour from now
     }
-    
+
     const networkName = hre.network.name
-    if(networkName == "hardhat"|| networkName== "localhost"){
+    if (networkName == "hardhat" || networkName == "localhost") {
         console.log("IMPERSONATING", await signer.getAddress())
         signer = await ethers.getSigner(await signer.getAddress())
         await impersonateAccount(await signer.getAddress())
     }
+
+    //verify token allowance
+    const tokenContract = IERC20__factory.connect(token, signer)
+    const tokenAllowance = await tokenContract.allowance(await signer.getAddress(), permit2)
+    if(tokenAllowance < amount){
+        console.log("No permit2 approval, approving max now...")
+        const MAX_UINT256 = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        await tokenContract.connect(signer).approve(permit2, MAX_UINT256)
+    }
+
+    const PERMIT = IPermit2__factory.connect(permit2, signer)
+
+    const allowance = await PERMIT.allowance(
+        await signer.getAddress(),
+        token,
+        spender
+    )
+
+    nonce = Number(allowance[2])
 
     const permitDetails: PermitDetails = {
         token: token,
@@ -210,6 +234,48 @@ export const permitSingle = async (
 
 
 }
+export function encodePermit2Payload(permit: Permit2Payload): string {
+    const abiCoder = new ethers.AbiCoder();
+    const encodedData = abiCoder.encode(
+        [
+            "((" +
+            "(address,uint160,uint48,uint48)," +
+            "address,uint256)," +
+            "bytes)",
+        ],
+        [
+            [
+                [
+                    [
+                        permit.permitSingle.details.token,
+                        permit.permitSingle.details.amount,
+                        permit.permitSingle.details.expiration,
+                        permit.permitSingle.details.nonce,
+                    ],
+                    permit.permitSingle.spender,
+                    permit.permitSingle.sigDeadline,
+                ],
+                permit.signature,
+            ],
+        ]
+    );
+    return encodedData
+}
+
+export const encodePermitSingle = async (signer: Signer,
+    chainId: number,
+    token: string,
+    amount: BigInt,
+    spender: string,
+    permit2: string,
+    nonce: number = 0,
+    expiration?: number) => {
+
+    const permit: Permit2Payload = await permitSingle(signer, chainId, token, amount, spender, permit2, nonce, expiration)
+    return encodePermit2Payload(permit)
+
+}
+
 
 
 /**

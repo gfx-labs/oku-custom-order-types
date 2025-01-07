@@ -49,13 +49,14 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Steve.getAddress(),
+            5,//5 bips fee
             smallSlippage,
             smallSlippage,
             false,
             "0x"
         )
 
-       
+
         const filter = s.Bracket.filters.OrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
@@ -95,7 +96,9 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         expect(s.Master.performUpkeep(encodedTxData)).to.be.revertedWith("Too Little Received")
 
         //try to cancel order that isn't yours
-        expect(s.Bracket.connect(s.Bob).cancelOrder(steveOrder)).to.be.revertedWith("Only Order Owner")
+        let orders = await s.Bracket.getPendingOrders()
+        let orderIndex = orders.findIndex((id: bigint) => id === steveOrder)
+        expect(s.Bracket.connect(s.Bob).cancelOrder(orderIndex)).to.be.revertedWith("Only Order Owner")
 
         minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, data.bips)//actual bips are 0% slippage
 
@@ -112,7 +115,9 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
 
 
         //cancel order for future tests
-        await s.Bracket.connect(s.Steve).cancelOrder(steveOrder)
+        orders = await s.Bracket.getPendingOrders()
+        orderIndex = orders.findIndex((id: bigint) => id === steveOrder)
+        await s.Bracket.connect(s.Steve).cancelOrder(orderIndex)
 
     })
 
@@ -127,6 +132,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Steve.getAddress(),
+            5,//5 bips fee
             smallSlippage,
             smallSlippage,
             false,
@@ -148,6 +154,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Steve.getAddress(),
+            5,//5 bips fee
             steveBips,
             steveBips,
             false,
@@ -179,7 +186,6 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         //how much weth is on the contract, relative to how much we are supposed to be allowed to send (steve's order.amountIn)?
         const totalWeths = await s.WETH.balanceOf(await s.Bracket.getAddress())
         const expectedAmountIn = data.amountIn
-        const expectedRemaining = totalWeths - expectedAmountIn
 
         //inject malicious amount into the tx data
         data.amountIn += ethers.parseEther("5")//increase the amount we pass in to encoded data
@@ -213,6 +219,39 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         const delta = (await s.WETH.balanceOf(await s.Steve.getAddress())) - initBalance
         expect(delta).to.eq(underFillAmount, "Refund issued")
 
+
+    })
+
+    it("check pausable", async () => {
+
+        //try to pause when not authorized
+        expect(s.Master.connect(s.Bob).pauseAll(true, await s.OracleLess.getAddress())).to.be.revertedWith("Not Authorized")
+        expect(s.Bracket.connect(s.Bob).pause(true)).to.be.revertedWith("Not Authorized")
+        expect(s.StopLimit.connect(s.Bob).pause(true)).to.be.revertedWith("Not Authorized")
+        expect(s.OracleLess.connect(s.Bob).pause(true)).to.be.revertedWith("Not Authorized")
+
+        //check pausable
+        await s.Master.pauseAll(true, await s.OracleLess.getAddress())
+
+        //create order
+        await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), s.wethAmount)
+        expect(s.Bracket.connect(s.Steve).createOrder(
+            "0x",
+            currentPrice + steveStrikeDelta,
+            currentPrice - steveStrikeDelta,
+            s.wethAmount,
+            await s.WETH.getAddress(),
+            await s.USDC.getAddress(),
+            await s.Steve.getAddress(),
+            5,//5 bips fee
+            steveBips,
+            steveBips,
+            false,
+            "0x"
+        )).to.be.revertedWith("EnforcedPause()") 
+
+        //unpause
+        await s.Master.pauseAll(false, await s.OracleLess.getAddress())
 
     })
 

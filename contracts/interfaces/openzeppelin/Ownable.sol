@@ -65,11 +65,14 @@ abstract contract Ownable is Context {
     /**
      * @dev Transfers ownership of the contract to a new account (`newOwner`).
      * Can only be called by the current owner.
+     * REMOVED: This function is removed to prevent ownership transfer after deployment
+     *
+     * function transferOwnership(address newOwner) public virtual onlyOwner {
+     *  require(newOwner != address(0), "Ownable: new owner is the zero address");
+     *  _transferOwnership(newOwner);
+     * }
      */
-    function transferOwnership(address newOwner) public virtual onlyOwner {
-        require(newOwner != address(0), "Ownable: new owner is the zero address");
-        _transferOwnership(newOwner);
-    }
+    
 
     /**
      * @dev Transfers ownership of the contract to a new account (`newOwner`).

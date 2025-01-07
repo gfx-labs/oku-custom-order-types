@@ -10,7 +10,7 @@ import { ethers } from "hardhat"
 
 ///All tests are performed as if on Arbitrum
 ///Testing is on the Arb WETH/USDC.e pool @ 500
-describe("Test for failure - STOP LIMIT", () => {
+describe("Test for failure - Oracleless", () => {
 
 
     let currentPrice: bigint
@@ -28,8 +28,8 @@ describe("Test for failure - STOP LIMIT", () => {
         await s.wethOracle.setPrice(s.initialEthPrice)
         currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), s.USDC.getAddress())
 
-        //fund steve
-        await stealMoney(s.wethWhale, await s.Steve.getAddress(), await s.WETH.getAddress(), s.steveWeth)
+        //fund Gary
+        await stealMoney(s.wethWhale, await s.Gary.getAddress(), await s.WETH.getAddress(), s.steveWeth)
 
     })
 
@@ -43,19 +43,13 @@ describe("Test for failure - STOP LIMIT", () => {
 
     it("Order creation fails due to insufficient balance", async () => {
         await s.WETH.connect(s.Steve).approve(await s.StopLimit.getAddress(), veryLargeWethAmount)
-        expect(s.StopLimit.connect(s.Steve).createOrder(
-            currentPrice - steveStrikeDelta,
-            currentPrice + steveStrikeDelta,
-            0,
-            veryLargeWethAmount,
+        expect(s.OracleLess.connect(s.Steve).createOrder(
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
-            await s.Steve.getAddress(),
-            smallSlippage,
-            smallSlippage,
-            5n,//fee
+            veryLargeWethAmount,
             0,
-            false,
+            await s.Steve.getAddress(),
+            25,
             false,//no permit
             "0x"
         )).to.be.revertedWith("ERC20: transfer amount exceeds balance")
@@ -63,23 +57,19 @@ describe("Test for failure - STOP LIMIT", () => {
 
     it("check pausable", async () => {
 
+        
         //check pausable
         await s.Master.pauseAll(true, await s.OracleLess.getAddress())
 
+        //create order
         await s.WETH.connect(s.Steve).approve(await s.StopLimit.getAddress(), veryLargeWethAmount)
-        expect(s.StopLimit.connect(s.Steve).createOrder(
-            currentPrice - steveStrikeDelta,
-            currentPrice + steveStrikeDelta,
-            0,
-            veryLargeWethAmount,
+        expect(s.OracleLess.connect(s.Steve).createOrder(
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
-            await s.Steve.getAddress(),
-            smallSlippage,
-            smallSlippage,
-            5n,//fee
+            veryLargeWethAmount,
             0,
-            false,
+            await s.Steve.getAddress(),
+            25,
             false,//no permit
             "0x"
         )).to.be.revertedWith("EnforcedPause()")
