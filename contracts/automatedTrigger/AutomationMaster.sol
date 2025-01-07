@@ -2,14 +2,13 @@
 pragma solidity ^0.8.19;
 
 import "./IAutomation.sol";
+import "../oracle/IPythRelay.sol";
 import "../libraries/ArrayMutation.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/ERC20.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/Pausable.sol";
-
-import "../oracle/IPythRelay.sol";
 
 ///@notice This contract owns and handles all of the settings and accounting logic for automated swaps
 ///@notice This contract should not hold any user funds, only collected fees

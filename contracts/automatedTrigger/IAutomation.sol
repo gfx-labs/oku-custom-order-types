@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+import "../oracle/IPythRelay.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/chainlink/AutomationCompatibleInterface.sol";
 import "../interfaces/uniswapV3/IPermit2.sol";
-import "../oracle/IPythRelay.sol";
 
 interface IAutomation is AutomationCompatibleInterface {
     ///@notice force a revert if the external call fails
