@@ -31,6 +31,10 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     mapping(IERC20 => bytes32) public pythIds;
     mapping(address => uint96) private nonces;
 
+    constructor(address owner){
+        _transferOwnership(owner);
+    }
+
     function pauseAll(
         bool pause,
         IOracleLess oracleLessContract

@@ -23,9 +23,10 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
 
     mapping(uint96 => Order) public orders;
 
-    constructor(AutomationMaster _master, IPermit2 _permit2) {
+    constructor(AutomationMaster _master, IPermit2 _permit2, address owner) {
         MASTER = _master;
         permit2 = _permit2;
+        _transferOwnership(owner);
     }
 
     modifier paysFee() {

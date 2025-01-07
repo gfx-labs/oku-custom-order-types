@@ -26,11 +26,13 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
     constructor(
         IAutomationMaster _master,
         IBracket _bracket,
-        IPermit2 _permit2
+        IPermit2 _permit2,
+        address owner
     ) {
         MASTER = _master;
         BRACKET_CONTRACT = _bracket;
         permit2 = _permit2;
+        _transferOwnership(owner);
     }
 
     function pause(bool __pause) external override{

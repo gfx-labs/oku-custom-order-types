@@ -27,9 +27,10 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
 
     mapping(uint96 => Order) public orders;
 
-    constructor(IAutomationMaster _master, IPermit2 _permit2) {
+    constructor(IAutomationMaster _master, IPermit2 _permit2, address owner) {
         MASTER = _master;
         permit2 = _permit2;
+        _transferOwnership(owner);
     }
 
     function pause(bool __pause) external override {
@@ -43,6 +44,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             _unpause();
         }
     }
+
+
 
     function getPendingOrders() external view returns (uint96[] memory) {
         return pendingOrderIds;

@@ -43,9 +43,9 @@ describe("Automated Trigger Testing on Arbitrum", () => {
 
     it("Deploy", async () => {
         //deploy master
-        s.Master = await DeployContract(new AutomationMaster__factory(s.Frank), s.Frank)
+        s.Master = await DeployContract(new AutomationMaster__factory(s.Frank), s.Frank, await s.Frank.getAddress())
         //deploy stop loss limit
-        s.Bracket = await DeployContract(new Bracket__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2)
+        s.Bracket = await DeployContract(new Bracket__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2, await s.Frank.getAddress())
 
         //deploy stop limit
         s.StopLimit = await DeployContract(
@@ -53,7 +53,8 @@ describe("Automated Trigger Testing on Arbitrum", () => {
             s.Frank,
             await s.Master.getAddress(),
             await s.Bracket.getAddress(),
-            a.permit2
+            a.permit2,
+            await s.Frank.getAddress()
         )
 
 
@@ -976,7 +977,7 @@ describe("Oracle Less", () => {
     let fee = ethers.parseEther("0.0001")
 
     before(async () => {
-        s.OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2)
+        s.OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2, await s.Frank.getAddress())
         await stealMoney(s.wethWhale, await s.Oscar.getAddress(), await s.WETH.getAddress(), s.wethAmount)
 
         //set fee
