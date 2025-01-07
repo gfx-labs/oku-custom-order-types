@@ -394,7 +394,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
 
         require(tokenIn != tokenOut, "tokenIn == tokenOut");
 
-        uint96 orderId = MASTER.generateOrderId(recipient);
+        uint96 orderId = MASTER.generateOrderId(msg.sender);
 
         //deduce tokenIn / out for resulting bracket order
         //if ! swap on fill, then no change,
