@@ -1,5 +1,5 @@
 import { AbiCoder, AddressLike, BigNumberish, BytesLike, Signer, TransactionResponse, TypedDataDomain } from "ethers"
-import { IERC20, IERC20__factory, IPermit2, IPermit2__factory, ISwapRouter02__factory, UniswapV3Pool } from "../typechain-types"
+import { ERC20__factory, IERC20, IERC20__factory, IPermit2, IPermit2__factory, ISwapRouter02__factory, UniswapV3Pool } from "../typechain-types"
 import { ethers } from "hardhat"
 import { keccak256 } from "@ethersproject/keccak256";
 import { toUtf8Bytes } from "@ethersproject/strings";
@@ -192,10 +192,10 @@ export const permitSingle = async (
     }
 
     //verify token allowance
-    const tokenContract = IERC20__factory.connect(token, signer)
+    const tokenContract = ERC20__factory.connect(token, signer)
     const tokenAllowance = await tokenContract.allowance(await signer.getAddress(), permit2)
     if(tokenAllowance < amount){
-        console.log("No permit2 approval, approving max now...")
+        console.log(`No permit2 approval for ${await tokenContract.symbol()}, approving max now...`)
         const MAX_UINT256 = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         await tokenContract.connect(signer).approve(permit2, MAX_UINT256)
     }

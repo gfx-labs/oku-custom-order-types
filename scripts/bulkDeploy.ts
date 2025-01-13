@@ -61,6 +61,7 @@ const minOrderDollars = ethers.parseUnits("25", 8)
 
 
 const userAddr = "0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89"
+const protocolOwner = "0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89"
 
 let mainnet = true
 async function main() {
@@ -125,7 +126,6 @@ const deployAndSetup = async (signer: Signer, config: ChainConfig, a: ChainAddre
   console.log(coreDeployments)
   const master = IAutomationMaster__factory.connect(coreDeployments.master, signer)
   const result = await master.checkUpkeep("0x")
-  await sleep(15)
   console.log("Upkeep: ", result.upkeepNeeded)
   console.log("")
 
@@ -185,7 +185,6 @@ const bulkDeployOracles = async (signer: Signer, config: ChainConfig, addresses:
 
   if (mainnet && deployed) {
     console.log("Submitting oracle for verificaiton on ", config.name)
-    await sleep(15)
     try {
       Promise.all([
         hre.run("verify:verify", {
@@ -216,7 +215,7 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
 
   if (coreDeployments.master == '') {
     //deploy
-    const master: AutomationMaster = await DeployContract(new AutomationMaster__factory(signer), signer)
+    const master: AutomationMaster = await DeployContract(new AutomationMaster__factory(signer), signer, protocolOwner)
     await master.deploymentTransaction()
     console.log(`Master deployed to ${config.name} @ ${await master.getAddress()}`)
     newMaster = true
@@ -248,6 +247,7 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
       Promise.all([
         hre.run("verify:verify", {
           address: await master.getAddress(),
+          constructorArguments: [protocolOwner],
         }),
       ])
     }
@@ -260,7 +260,7 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
       permit2 = zaddr
     }
     //deploy
-    const bracket: Bracket = await DeployContract(new Bracket__factory(signer), signer, coreDeployments.master, addresses.permit2)
+    const bracket: Bracket = await DeployContract(new Bracket__factory(signer), signer, coreDeployments.master, addresses.permit2, protocolOwner)
     await bracket.deploymentTransaction()
     console.log(`Bracket deployed to ${config.name} @ ${await bracket.getAddress()}`)
     coreDeployments.bracket = await bracket.getAddress()
@@ -271,7 +271,7 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
       Promise.all([
         hre.run("verify:verify", {
           address: await bracket.getAddress(),
-          constructorArguments: [coreDeployments.master, addresses.permit2],
+          constructorArguments: [coreDeployments.master, addresses.permit2, protocolOwner],
         }),
       ])
     }
@@ -279,7 +279,7 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
 
   if (coreDeployments.stopLimit == '') {
     //deploy
-    const stopLimit: StopLimit = await DeployContract(new StopLimit__factory(signer), signer, coreDeployments.master, coreDeployments.bracket, addresses.permit2)
+    const stopLimit: StopLimit = await DeployContract(new StopLimit__factory(signer), signer, coreDeployments.master, coreDeployments.bracket, addresses.permit2, protocolOwner)
     await stopLimit.deploymentTransaction()
     console.log(`Stop Limit deployed to ${config.name} @ ${await stopLimit.getAddress()}`)
     coreDeployments.stopLimit = await stopLimit.getAddress()
@@ -289,7 +289,7 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
       Promise.all([
         hre.run("verify:verify", {
           address: await stopLimit.getAddress(),
-          constructorArguments: [coreDeployments.master, coreDeployments.bracket, addresses.permit2],
+          constructorArguments: [coreDeployments.master, coreDeployments.bracket, addresses.permit2, protocolOwner],
         }),
       ])
     }
@@ -297,7 +297,7 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
 
   if (coreDeployments.oracleLess == '') {
     //deploy
-    const oracleLess: OracleLess = await DeployContract(new OracleLess__factory(signer), signer, coreDeployments.master, addresses.permit2)
+    const oracleLess: OracleLess = await DeployContract(new OracleLess__factory(signer), signer, coreDeployments.master, addresses.permit2, protocolOwner)
     await oracleLess.deploymentTransaction()
     console.log(`OracleLess deployed to ${config.name} @ ${await oracleLess.getAddress()}`)
     coreDeployments.oracleLess = await oracleLess.getAddress()
@@ -315,7 +315,7 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
       Promise.all([
         hre.run("verify:verify", {
           address: await oracleLess.getAddress(),
-          constructorArguments: [coreDeployments.master, addresses.permit2],
+          constructorArguments: [coreDeployments.master, addresses.permit2, protocolOwner],
         }),
       ])
     }

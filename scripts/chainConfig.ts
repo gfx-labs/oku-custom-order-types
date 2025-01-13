@@ -2,6 +2,20 @@ import * as dotenv from "dotenv";
 
 dotenv.config();
 
+
+
+export type OraclePair = {
+    token: string,
+    oracle: string
+}
+
+export type CoreDeployments = {
+    master: string,
+    bracket: string,
+    stopLimit: string,
+    oracleLess: string
+}
+
 export type ChainConfig = {
     name: string,
     chainId: number,
