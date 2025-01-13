@@ -45,8 +45,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         }
     }
 
-
-
     function getPendingOrders() external view returns (uint96[] memory) {
         return pendingOrderIds;
     }
@@ -383,6 +381,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         bool permit,
         bytes calldata permitPayload
     ) internal {
+        //don't check minOrderSize when filling bracket order
+        if (direction == InitializeOrderDirection.NEWORDER) {
+            MASTER.checkMinOrderSize(tokenIn, amountIn);
+        }
+
         //determine if we are doing a swap first
         if (swapPayload.length != 0) {
             SwapParams memory swapParams = abi.decode(
@@ -505,8 +508,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
                 feeBips <= 10000,
             "BIPS > 10k"
         );
-
-        MASTER.checkMinOrderSize(tokenIn, amountIn);
 
         //generate random but unique order id if there is not an existing orderId from a stop limit order
         if (existingOrderId == 0) {

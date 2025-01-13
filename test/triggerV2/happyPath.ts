@@ -440,7 +440,7 @@ describe("Execute Stop-Limit with swap on fill", () => {
 
 
 /**
- * stop-loss-limit orders create a limit order with an added stop loss
+ * bracket orders create a limit order with an added stop loss
  * stop price is the fill price for the stop loss
  * strike price is the fill price for the limit order 
  * the stop and limit fill each have their own slippage
@@ -472,7 +472,7 @@ describe("Execute Bracket Upkeep", () => {
 
     })
 
-    it("Create stop-loss-limit order with swap USDC => WETH => USDC", async () => {
+    it("Create bracket order with swap USDC => WETH => USDC", async () => {
         const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
         await s.USDC.connect(s.Bob).approve(await s.Bracket.getAddress(), s.usdcAmount)
         const swapInData = await generateUniTxData(
@@ -505,6 +505,22 @@ describe("Execute Bracket Upkeep", () => {
             ["tuple(address,uint256,address,uint32,bytes)"], // Struct as a tuple
             [swapParamsTuple]                                // Data as a single tuple
         );
+
+        //check for minOrderSize
+        expect (s.Bracket.connect(s.Bob).createOrder(
+            swapPayload,
+            currentPrice + strikeDelta,
+            currentPrice - stopDelta,
+            1n,//tiny input amount
+            await s.WETH.getAddress(),
+            await s.USDC.getAddress(),
+            await s.Bob.getAddress(),
+            5,//5 bips fee
+            strikeBips,
+            stopBips,
+            false,//no permit
+            "0x"
+        )).to.be.revertedWith("order too small")
 
         await s.Bracket.connect(s.Bob).createOrder(
             swapPayload,
@@ -660,7 +676,7 @@ describe("Bracket order with order modification", () => {
 
     })
 
-    it("Create stop-loss-limit order with swap USDC => WETH => USDC", async () => {
+    it("Create bracket order with swap USDC => WETH => USDC", async () => {
         const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
         await s.USDC.connect(s.Bob).approve(await s.Bracket.getAddress(), s.usdcAmount)
         const swapInData = await generateUniTxData(
