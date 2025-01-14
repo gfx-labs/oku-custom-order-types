@@ -298,6 +298,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
                 "Oracle !exist"
             );
         }
+        require(order.tokenIn != _tokenOut, "tokenIn == tokenOut");
 
         //construct new order
         Order memory newOrder = Order({
@@ -508,6 +509,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
                 feeBips <= 10000,
             "BIPS > 10k"
         );
+        require(tokenIn != tokenOut, "tokenIn == tokenOut");
 
         //generate random but unique order id if there is not an existing orderId from a stop limit order
         if (existingOrderId == 0) {
