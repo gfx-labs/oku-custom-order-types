@@ -35,7 +35,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         _transferOwnership(owner);
     }
 
-    function pause(bool __pause) external override{
+    function pause(bool __pause) external override {
         require(
             msg.sender == address(MASTER) || msg.sender == owner(),
             "Not Authorized"
@@ -300,6 +300,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
                 );
             }
         }
+        
+        require(order.tokenIn != _tokenOut, "tokenIn == tokenOut");
 
         //check for oracles
         if (_tokenOut != order.tokenOut) {

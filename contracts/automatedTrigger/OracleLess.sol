@@ -36,11 +36,14 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         payable(owner()).transfer(orderFee);
     }
 
-    function pause(bool __pause) external override{
-        require(msg.sender == address(MASTER) || msg.sender == owner(), "Not Authorized");
-        if(__pause){
+    function pause(bool __pause) external override {
+        require(
+            msg.sender == address(MASTER) || msg.sender == owner(),
+            "Not Authorized"
+        );
+        if (__pause) {
             _pause();
-        }else{
+        } else {
             _unpause();
         }
     }
@@ -72,8 +75,17 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         uint16 feeBips,
         bool permit,
         bytes calldata permitPayload
-    ) external payable override paysFee nonReentrant whenNotPaused returns (uint96 orderId) {
+    )
+        external
+        payable
+        override
+        paysFee
+        nonReentrant
+        whenNotPaused
+        returns (uint96 orderId)
+    {
         require(amountIn != 0, "amountIn == 0");
+        require(tokenIn != tokenOut, "tokenIn == tokenOut");
 
         //procure tokens
         procureTokens(tokenIn, amountIn, msg.sender, permit, permitPayload);
@@ -110,7 +122,9 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(uint96 pendingOrderIdx) external nonReentrant whenNotPaused {
+    function cancelOrder(
+        uint96 pendingOrderIdx
+    ) external nonReentrant whenNotPaused {
         Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
         require(msg.sender == order.recipient, "Only Order Owner");
         _cancelOrder(order, pendingOrderIdx);
@@ -224,6 +238,8 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
             "order doesn't exist"
         );
         require(msg.sender == order.recipient, "only order owner");
+
+        require(order.tokenIn != _tokenOut, "tokenIn == tokenOut");
 
         //deduce any amountIn changes
         uint256 newAmountIn = order.amountIn;
