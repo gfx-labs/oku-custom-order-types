@@ -70,6 +70,16 @@ describe("Automated Trigger Testing on Arbitrum", () => {
 
     it("Register", async () => {
 
+        //whitelist target setters
+        //now bob can set the target
+        expect(s.Master.connect(s.Bob).whitelistTargetSetter(await s.Bob.getAddress(), true)).to.be.revertedWith('only owner')
+        await s.Master.connect(s.Frank).whitelistTargetSetter(await s.Bob.getAddress(), true)
+
+        //whitelist targets
+        expect(s.Master.connect(s.Frank).whitelistTargets([s.router02])).to.be.revertedWith("!Allowed to set targets")
+        await s.Master.connect(s.Bob).whitelistTargets([s.router02])
+        
+
         //register sup keepers
         await s.Master.connect(s.Frank).registerSubKeepers(
             await s.StopLimit.getAddress(),

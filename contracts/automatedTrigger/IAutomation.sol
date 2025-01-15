@@ -76,7 +76,7 @@ interface IAutomationMaster is IAutomation {
     function oracles(IERC20 token) external view returns (IPythRelay);
     function maxPendingOrders() external view returns (uint16);
     function pauseAll(bool, IOracleLess) external;
-
+    function validateTarget(address) external;
     function getExchangeRate(
         IERC20 tokenIn,
         IERC20 tokenOut

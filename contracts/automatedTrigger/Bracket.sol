@@ -574,6 +574,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         IERC20 tokenOut,
         uint16 bips
     ) internal returns (uint256 swapAmountOut, uint256 tokenInRefund) {
+        //validate target
+        MASTER.validateTarget(target);
+
         //update accounting
         uint256 initialTokenIn = tokenIn.balanceOf(address(this));
         uint256 initialTokenOut = tokenOut.balanceOf(address(this));

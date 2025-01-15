@@ -165,6 +165,9 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         address target,
         bytes calldata txData
     ) external override nonReentrant whenNotPaused {
+        //validate target
+        MASTER.validateTarget(target);
+
         //fetch order
         Order memory order = orders[orderId];
 

@@ -25,6 +25,12 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     IStopLimit public STOP_LIMIT_CONTRACT;
     IBracket public BRACKET_CONTRACT;
 
+    //whitelist of possible target contracts to execute swaps
+    mapping(address => bool) public safeTargets;
+
+    //whitelist of wallets allowed to set targets
+    mapping(address => bool) public targetSetters;
+
     ///each token must have a registered oracle in order to be tradable
     mapping(IERC20 => IPythRelay) public oracles;
     mapping(IERC20 => bytes32) public pythIds;
@@ -46,6 +52,22 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
         STOP_LIMIT_CONTRACT.pause(pause);
         BRACKET_CONTRACT.pause(pause);
         oracleLessContract.pause(pause);
+    }
+
+    function whitelistTargetSetter(address wallet, bool canSet) external onlyOwner {
+        targetSetters[wallet] = canSet;
+    }
+
+    ///@notice toggle each idx in @param targets to be true/false as a valid target
+    function whitelistTargets(address[] calldata targets) external {
+        require(targetSetters[msg.sender], "!Allowed to set targets");
+        for(uint i = 0; i < targets.length; i++){
+            safeTargets[targets[i]] = !safeTargets[targets[i]];
+        }
+    }
+
+    function validateTarget(address target) external view override {
+        require(safeTargets[target], "Target !Valid");
     }
 
     ///@notice register Stop Limit and Bracket order contracts
