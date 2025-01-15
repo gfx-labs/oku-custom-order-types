@@ -86,6 +86,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     {
         require(amountIn != 0, "amountIn == 0");
         require(tokenIn != tokenOut, "tokenIn == tokenOut");
+        require(feeBips <= 10000, "BIPS > 10k");
 
         //procure tokens
         procureTokens(tokenIn, amountIn, msg.sender, permit, permitPayload);
