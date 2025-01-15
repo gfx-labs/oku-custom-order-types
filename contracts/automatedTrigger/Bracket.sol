@@ -509,6 +509,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
                 feeBips <= 10000,
             "BIPS > 10k"
         );
+        require(recipient != address(0x0), "recipient == zero address");
         require(tokenIn != tokenOut, "tokenIn == tokenOut");
 
         //generate random but unique order id if there is not an existing orderId from a stop limit order

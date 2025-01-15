@@ -10,6 +10,7 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../interfaces/openzeppelin/Pausable.sol";
 
+
 ///@notice This contract owns and handles all logic associated with STOP_LIMIT orders
 ///STOP_LIMIT orders create a new Bracket order order with the same order ID once filled
 contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
@@ -300,7 +301,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
                 );
             }
         }
-        
+
         require(order.tokenIn != _tokenOut, "tokenIn == tokenOut");
 
         //check for oracles
@@ -309,13 +310,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
                 address(MASTER.oracles(_tokenOut)) != address(0x0),
                 "Oracle !exist"
             );
-        }
-        bool bracketDirection = MASTER.getExchangeRate(
-            order.tokenIn,
-            _tokenOut
-        ) > _takeProfit;
-        if (_swapOnFill) {
-            !bracketDirection;
         }
 
         //construct order
@@ -334,7 +328,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
             recipient: _recipient,
             direction: MASTER.getExchangeRate(order.tokenIn, _tokenOut) >
                 _stopLimitPrice,
-            bracketDirection: bracketDirection,
+            bracketDirection: MASTER.getExchangeRate(order.tokenIn, _tokenOut) >
+                _takeProfit,
             swapOnFill: _swapOnFill
         });
 
@@ -393,18 +388,10 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
                 feeBips <= 10000,
             "BIPS > 10k"
         );
-
         require(tokenIn != tokenOut, "tokenIn == tokenOut");
+        require(recipient != address(0x0), "recipient == zero address");
 
         uint96 orderId = MASTER.generateOrderId(msg.sender);
-
-        //deduce tokenIn / out for resulting bracket order
-        //if ! swap on fill, then no change,
-        bool bracketDirection = MASTER.getExchangeRate(tokenIn, tokenOut) >
-            takeProfit;
-        if (swapOnFill) {
-            !bracketDirection;
-        }
 
         orders[orderId] = Order({
             orderId: orderId,
@@ -421,7 +408,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
             recipient: recipient,
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) >
                 stopLimitPrice, //compare to stop price for this order's direction
-            bracketDirection: bracketDirection,
+            bracketDirection: MASTER.getExchangeRate(tokenIn, tokenOut) >
+                takeProfit,
             swapOnFill: swapOnFill
         });
         pendingOrderIds.push(uint96(orderId));
