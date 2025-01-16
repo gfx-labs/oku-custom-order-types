@@ -10,7 +10,6 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../interfaces/openzeppelin/Pausable.sol";
 
-
 ///@notice This contract owns and handles all logic associated with STOP_LIMIT orders
 ///STOP_LIMIT orders create a new Bracket order order with the same order ID once filled
 contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
@@ -254,6 +253,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         );
         //only order owner
         require(msg.sender == order.recipient, "only order owner");
+        require(_recipient != address(0x0), "recipient == zero address");
+
         //deduce any amountIn changes
         uint256 newAmountIn = order.amountIn;
         if (_amountInDelta != 0) {

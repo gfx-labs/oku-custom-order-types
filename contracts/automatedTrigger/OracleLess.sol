@@ -147,6 +147,8 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
             orderId == pendingOrderIds[pendingOrderIdx],
             "order doesn't exist"
         );
+        require(_recipient != address(0x0), "recipient == zero address");
+
         _modifyOrder(
             orderId,
             _tokenOut,

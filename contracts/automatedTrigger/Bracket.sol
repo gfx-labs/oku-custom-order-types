@@ -263,6 +263,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
 
         //only order owner
         require(msg.sender == order.recipient, "only order owner");
+        require(_recipient != address(0x0), "recipient == zero address");
 
         //deduce any amountIn changes
         uint256 newAmountIn = order.amountIn;
