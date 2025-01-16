@@ -33,6 +33,14 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         _transferOwnership(owner);
     }
 
+    modifier paysFee() {
+        uint256 orderFee = MASTER.orderFee();
+        require(msg.value >= orderFee, "Insufficient funds for order fee");
+        _;
+        // Transfer the fee to the contract owner
+        payable(address(MASTER)).transfer(orderFee);
+    }
+
     function pause(bool __pause) external override {
         require(
             msg.sender == address(MASTER) || msg.sender == owner(),
@@ -220,7 +228,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         uint16 stopSlippage,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant whenNotPaused {
+    ) external payable override nonReentrant whenNotPaused paysFee {
         _initializeOrder(
             swapPayload,
             takeProfit,
@@ -253,7 +261,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant whenNotPaused {
+    ) external payable override nonReentrant whenNotPaused paysFee {
         //get order
         Order memory order = orders[orderId];
         require(

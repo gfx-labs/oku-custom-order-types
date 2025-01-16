@@ -21,6 +21,9 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     ///@notice minumum USD value required to create a new order, in 1e8 terms
     uint256 public minOrderSize;
 
+    ///@notice fee to create an order, in order to deter spam
+    uint256 public orderFee;
+
     ///sub keeper contracts
     IStopLimit public STOP_LIMIT_CONTRACT;
     IBracket public BRACKET_CONTRACT;
@@ -36,9 +39,11 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     mapping(IERC20 => bytes32) public pythIds;
     mapping(address => uint96) private nonces;
 
-    constructor(address owner){
+    constructor(address owner) {
         _transferOwnership(owner);
     }
+
+    receive() external payable {}
 
     function pauseAll(
         bool pause,
@@ -54,14 +59,24 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
         oracleLessContract.pause(pause);
     }
 
-    function whitelistTargetSetter(address wallet, bool canSet) external onlyOwner {
+    ///@notice set the fee to create / modify orders
+    ///@notice fee is taken from msg.value in the native gas token
+    ///@param _orderFee is in wei
+    function setOrderFee(uint256 _orderFee) external override onlyOwner {
+        orderFee = _orderFee;
+    }
+
+    function whitelistTargetSetter(
+        address wallet,
+        bool canSet
+    ) external onlyOwner {
         targetSetters[wallet] = canSet;
     }
 
     ///@notice toggle each idx in @param targets to be true/false as a valid target
     function whitelistTargets(address[] calldata targets) external {
         require(targetSetters[msg.sender], "!Allowed to set targets");
-        for(uint i = 0; i < targets.length; i++){
+        for (uint i = 0; i < targets.length; i++) {
             safeTargets[targets[i]] = !safeTargets[targets[i]];
         }
     }
@@ -103,8 +118,21 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     ///@notice sweep the entire balance of @param token to the owner
     ///@notice this contract should not hold funds other than collected fees,
     ///which are forwarded here after each transaction
-    function sweep(IERC20 token) external onlyOwner {
-        token.safeTransfer(owner(), token.balanceOf(address(this)));
+    function sweep(IERC20 token, address recipient) external onlyOwner {
+        token.safeTransfer(recipient, token.balanceOf(address(this)));
+    }
+
+    function sweepEther(address payable recipient) external onlyOwner {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No Ether to withdraw");
+        require(
+            recipient != address(0),
+            "Recipient cannot be the zero address"
+        );
+
+        (bool success, ) = recipient.call{value: balance}("");
+
+        require(success, "Ether transfer failed");
     }
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms

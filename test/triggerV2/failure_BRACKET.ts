@@ -53,7 +53,8 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             smallSlippage,
             smallSlippage,
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         )
 
 
@@ -136,7 +137,8 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             smallSlippage,
             smallSlippage,
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         )).to.be.revertedWith("ERC20: transfer amount exceeds balance")
 
     })
@@ -158,7 +160,8 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             steveBips,
             steveBips,
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         )
 
         //adjust oracle
@@ -247,7 +250,8 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             steveBips,
             steveBips,
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         )).to.be.revertedWith("EnforcedPause()") 
 
         //unpause

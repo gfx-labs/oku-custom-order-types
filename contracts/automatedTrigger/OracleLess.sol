@@ -14,9 +14,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     AutomationMaster public immutable MASTER;
     IPermit2 public immutable permit2;
 
-    ///@notice fee to create an order, in order to deter spam
-    uint256 public orderFee;
-
     uint96 public orderCount;
 
     uint96[] public pendingOrderIds;
@@ -30,10 +27,11 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     }
 
     modifier paysFee() {
+        uint256 orderFee = MASTER.orderFee();
         require(msg.value >= orderFee, "Insufficient funds for order fee");
         _;
         // Transfer the fee to the contract owner
-        payable(owner()).transfer(orderFee);
+        payable(address(MASTER)).transfer(orderFee);
     }
 
     function pause(bool __pause) external override {
@@ -60,10 +58,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
             Order memory order = orders[pendingOrderIds[i]];
             pendingOrders[i] = order;
         }
-    }
-
-    function setOrderFee(uint256 _orderFee) external onlyOwner {
-        orderFee = _orderFee;
     }
 
     function createOrder(

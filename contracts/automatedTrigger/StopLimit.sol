@@ -35,6 +35,14 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         _transferOwnership(owner);
     }
 
+    modifier paysFee() {
+        uint256 orderFee = MASTER.orderFee();
+        require(msg.value >= orderFee, "Insufficient funds for order fee");
+        _;
+        // Transfer the fee to the contract owner
+        payable(address(MASTER)).transfer(orderFee);
+    }
+
     function pause(bool __pause) external override {
         require(
             msg.sender == address(MASTER) || msg.sender == owner(),
@@ -195,7 +203,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         bool swapOnFill,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant whenNotPaused {
+    ) external payable override nonReentrant whenNotPaused {
         if (permit) {
             require(amountIn < type(uint160).max, "uint160 overflow");
             handlePermit(
@@ -244,7 +252,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant whenNotPaused {
+    ) external payable override nonReentrant whenNotPaused {
         //get existing order
         Order memory order = orders[orderId];
         require(
