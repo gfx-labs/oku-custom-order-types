@@ -13,9 +13,6 @@ import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../interfaces/openzeppelin/Pausable.sol";
 import "../interfaces/openzeppelin/EnumerableSet.sol";
 
-//testing
-import "hardhat/console.sol";
-
 ///@notice This contract owns and handles all logic associated with the following order types:
 /// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independant slippapge for each option
 /// LIMIT_ORDER - BRACKET_ORDER at specified take profit price, with STOP set to 0
@@ -269,7 +266,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         Order memory order = orders[orderId];
         require(
             dataSet.contains(order.orderId),
-            "order doesn't exist"
+            "order not active"
         );
 
         //only order owner
@@ -562,7 +559,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     }
 
     function _cancelOrder(Order memory order) internal {
-        //remove from pending array
+        //remove from pending set
         dataSet.remove(order.orderId);
 
         //refund tokenIn amountIn to recipient

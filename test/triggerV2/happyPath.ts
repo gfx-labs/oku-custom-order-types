@@ -227,7 +227,7 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(balance).to.be.eq(0n, "WETH removed from stopLimit")
 
         //pending order removed and length == 0
-        expect(await s.StopLimit.pendingOrderIds.length).to.eq(0, "no pending orders left")
+        expect((await s.StopLimit.getPendingOrders()).length).to.eq(0, "no pending orders left")
 
         //stop-limit order filled event
         const Filter = s.StopLimit.filters.OrderProcessed
@@ -258,7 +258,7 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(balance).to.eq(s.wethAmount, "WETH received")
 
         //cancel limit order for future tests
-        await s.Bracket.connect(s.Bob).cancelOrder(orderId)
+        await s.Bracket.connect(s.Bob).cancelOrder(orderId as bigint)
     })
 })
 

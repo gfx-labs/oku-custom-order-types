@@ -195,7 +195,6 @@ interface IStopLimit is IAutomation {
         uint16 swapSlippage,
         bool swapOnFill,
         bool increasePosition,
-        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
     ) external payable;
