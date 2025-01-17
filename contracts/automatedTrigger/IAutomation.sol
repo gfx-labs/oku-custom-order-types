@@ -302,7 +302,6 @@ interface IBracket is IAutomation {
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         bool increasePosition,
-        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
     ) external payable;

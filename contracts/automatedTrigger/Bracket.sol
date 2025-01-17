@@ -11,6 +11,10 @@ import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../interfaces/openzeppelin/Pausable.sol";
+import "../interfaces/openzeppelin/EnumerableSet.sol";
+
+//testing
+import "hardhat/console.sol";
 
 ///@notice This contract owns and handles all logic associated with the following order types:
 /// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independant slippapge for each option
@@ -19,13 +23,13 @@ import "../interfaces/openzeppelin/Pausable.sol";
 /// In order to configure a LIMIT_ORDER or STOP_ORDER, simply set the take profit or stop price to either 0 for the lower bound or 2^256 - 1 for the upper bound
 contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
+    using EnumerableSet for EnumerableSet.UintSet;
 
     IAutomationMaster public immutable MASTER;
     IPermit2 public immutable permit2;
 
-    uint96[] public pendingOrderIds;
-
     mapping(uint96 => Order) public orders;
+    EnumerableSet.UintSet private dataSet;
 
     constructor(IAutomationMaster _master, IPermit2 _permit2, address owner) {
         MASTER = _master;
@@ -53,8 +57,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         }
     }
 
-    function getPendingOrders() external view returns (uint96[] memory) {
-        return pendingOrderIds;
+    function getPendingOrders() external view returns (Order[] memory pendingOrders) {
+        pendingOrders = new Order[](dataSet.length());
+        for(uint256 i; i < dataSet.length(); i++){
+           pendingOrders[i] = orders[uint96(dataSet.at(i))];
+        }
     }
 
     function checkUpkeep(
@@ -66,16 +73,16 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         returns (bool upkeepNeeded, bytes memory performData)
     {
         uint96 i = 0;
-        uint96 length = uint96(pendingOrderIds.length);
+        uint96 length = uint96(dataSet.length());
         if (checkData.length == 64) {
             //decode start and end idxs
             (i, length) = abi.decode(checkData, (uint96, uint96));
-            if (length > uint96(pendingOrderIds.length)) {
-                length = uint96(pendingOrderIds.length);
+            if (length > uint96(dataSet.length())) {
+                length = uint96(dataSet.length());
             }
         }
-        for (i; i < length; i++) {
-            Order memory order = orders[pendingOrderIds[i]];
+        for (i; i < dataSet.length(); i++) {
+            Order memory order = orders[uint96(dataSet.at(i))];
             (
                 bool inRange,
                 bool takeProfit,
@@ -119,10 +126,10 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             performData,
             (MasterUpkeepData)
         );
-        Order memory order = orders[pendingOrderIds[data.pendingOrderIdx]];
+        Order memory order = orders[uint96(dataSet.at(data.pendingOrderIdx))];
 
         require(
-            order.orderId == pendingOrderIds[data.pendingOrderIdx],
+            order.orderId == uint96(dataSet.at(data.pendingOrderIdx)),
             "Order Fill Mismatch"
         );
 
@@ -145,11 +152,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         );
 
         //handle accounting
-        //remove from pending array
-        pendingOrderIds = ArrayMutation.removeFromArray(
-            data.pendingOrderIdx,
-            pendingOrderIds
-        );
+        //remove from pending dataSet
+        dataSet.remove(order.orderId);
 
         //handle fee
         (uint256 feeAmount, uint256 adjustedAmount) = applyFee(
@@ -258,14 +262,13 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         uint16 _takeProfitSlippage,
         uint16 _stopSlippage,
         bool increasePosition,
-        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
     ) external payable override nonReentrant whenNotPaused paysFee {
         //get order
         Order memory order = orders[orderId];
         require(
-            order.orderId == pendingOrderIds[pendingOrderIdx],
+            dataSet.contains(order.orderId),
             "order doesn't exist"
         );
 
@@ -333,20 +336,20 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
     ///@notice only pending orders can be cancelled
     function adminCancelOrder(
-        uint96 pendingOrderIdx
+        uint96 orderId
     ) external onlyOwner nonReentrant {
-        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
-        _cancelOrder(order, pendingOrderIdx);
+        Order memory order = orders[orderId];
+        _cancelOrder(order);
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
     function cancelOrder(
-        uint96 pendingOrderIdx
+        uint96 orderId
     ) external nonReentrant whenNotPaused {
-        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
+        Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
-        _cancelOrder(order, pendingOrderIdx);
+        _cancelOrder(order);
     }
 
     function procureTokens(
@@ -509,7 +512,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             "Oracle !exist"
         );
         require(
-            pendingOrderIds.length < MASTER.maxPendingOrders(),
+            dataSet.length() < MASTER.maxPendingOrders(),
             "Max Order Count Reached"
         );
         require(
@@ -553,17 +556,14 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         });
 
         //store pending order
-        pendingOrderIds.push(existingOrderId);
+        dataSet.add(existingOrderId);
 
         emit OrderCreated(existingOrderId);
     }
 
-    function _cancelOrder(Order memory order, uint96 pendingOrderIdx) internal {
+    function _cancelOrder(Order memory order) internal {
         //remove from pending array
-        pendingOrderIds = ArrayMutation.removeFromArray(
-            pendingOrderIdx,
-            pendingOrderIds
-        );
+        dataSet.remove(order.orderId);
 
         //refund tokenIn amountIn to recipient
         order.tokenIn.safeTransfer(order.recipient, order.amountIn);

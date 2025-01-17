@@ -258,10 +258,7 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(balance).to.eq(s.wethAmount, "WETH received")
 
         //cancel limit order for future tests
-        //get order index
-        const orders = await s.Bracket.getPendingOrders()
-        const orderIndex = orders.findIndex((id: bigint) => id === orderId)
-        await s.Bracket.connect(s.Bob).cancelOrder(orderIndex)
+        await s.Bracket.connect(s.Bob).cancelOrder(orderId)
     })
 })
 
@@ -393,7 +390,8 @@ describe("Execute Stop-Limit with swap on fill", () => {
 
         //stop loss limit order created
         expect((await s.Bracket.getPendingOrders()).length).to.eq(1, "new pending order")
-        expect(await s.Bracket.pendingOrderIds(0)).to.eq(charlesOrder, "Charles's order is pending")
+        const pendingOrders = await s.Bracket.getPendingOrders()
+        expect(pendingOrders[0].orderId).to.eq(charlesOrder, "Charles's order is pending")
     })
 
     it("Check Upkeep", async () => {
@@ -649,7 +647,7 @@ describe("Execute Bracket Upkeep", () => {
         expect(usdcBalance).to.be.gt(0n, "USDC received")
 
         //pending order removed and length == 0
-        expect(await s.Bracket.pendingOrderIds.length).to.eq(0, "no pending orders left")
+        expect((await s.Bracket.getPendingOrders()).length).to.eq(0, "no pending orders left")
 
         //event
         const filter = s.Bracket.filters.OrderProcessed
@@ -784,7 +782,6 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             true,
-            pendingOrders.findIndex((id: bigint) => id === orderId),
             false,
             "0x",
             { value: s.fee }
@@ -813,7 +810,6 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
-            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x",
             { value: s.fee }
@@ -846,7 +842,6 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
-            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x",
             { value: s.fee }
@@ -865,7 +860,6 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
-            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x",
             { value: s.fee }
@@ -884,7 +878,6 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
-            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x",
             { value: s.fee }
@@ -906,7 +899,6 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
-            pendingOrders.findIndex((id) => id === orderId),
             false,
             "0x",
             { value: s.fee }
@@ -980,7 +972,7 @@ describe("Bracket order with order modification", () => {
         expect(usdcBalance).to.be.gt(0n, "USDC received")
 
         //pending order removed and length == 0
-        expect(await s.Bracket.pendingOrderIds.length).to.eq(0, "no pending orders left")
+        expect((await s.Bracket.getPendingOrders()).length).to.eq(0, "no pending orders left")
 
         //event
         const filter = s.Bracket.filters.OrderProcessed
