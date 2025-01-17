@@ -223,7 +223,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         bool swapOnFill,
         bool permit,
         bytes calldata permitPayload
-    ) external payable override nonReentrant whenNotPaused {
+    ) external payable override nonReentrant whenNotPaused paysFee{
         if (permit) {
             require(amountIn < type(uint160).max, "uint160 overflow");
             handlePermit(
@@ -271,7 +271,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         bool increasePosition,
         bool permit,
         bytes calldata permitPayload
-    ) external payable override nonReentrant whenNotPaused {
+    ) external payable override nonReentrant whenNotPaused paysFee {
         //get existing order
         Order memory order = orders[orderId];
         require(dataSet.contains(order.orderId), "order not active");
