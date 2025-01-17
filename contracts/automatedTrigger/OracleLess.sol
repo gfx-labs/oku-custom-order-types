@@ -126,9 +126,14 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     ///@notice allow administrator to cancel any order
     ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
     ///@notice only pending orders can be cancelled
-    function adminCancelOrder(uint96 orderId) external onlyOwner nonReentrant {
+    ///NOTE if @param refund is false, then the order's tokens will not be refunded and will be stuck on this contract possibly forever
+    ///@notice ONLY SET @param refund TO FALSE IN THE CASE OF A BROKEN ORDER CAUSING cancelOrder() TO REVERT
+    function adminCancelOrder(
+        uint96 orderId,
+        bool refund
+    ) external onlyOwner nonReentrant {
         Order memory order = orders[orderId];
-        _cancelOrder(order);
+        _cancelOrder(order, refund);
     }
 
     ///@notice only the order recipient can cancel their order
@@ -136,7 +141,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     function cancelOrder(uint96 orderId) external nonReentrant whenNotPaused {
         Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
-        _cancelOrder(order);
+        _cancelOrder(order, true);
     }
 
     function modifyOrder(
@@ -212,13 +217,14 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         }
     }
 
-    function _cancelOrder(Order memory order) internal {
+    function _cancelOrder(Order memory order, bool refund) internal {
         //remove from pending set
         dataSet.remove(order.orderId);
 
         //refund tokenIn amountIn to recipient
-        order.tokenIn.safeTransfer(order.recipient, order.amountIn);
-
+        if (refund) {
+            order.tokenIn.safeTransfer(order.recipient, order.amountIn);
+        }
         //emit event
         emit OrderCancelled(order.orderId);
     }
