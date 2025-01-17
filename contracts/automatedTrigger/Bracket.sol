@@ -54,11 +54,32 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         }
     }
 
-    function getPendingOrders() external view returns (Order[] memory pendingOrders) {
+    function getPendingOrders()
+        external
+        view
+        returns (Order[] memory pendingOrders)
+    {
         pendingOrders = new Order[](dataSet.length());
-        for(uint256 i; i < dataSet.length(); i++){
-           pendingOrders[i] = orders[uint96(dataSet.at(i))];
+        for (uint256 i; i < dataSet.length(); i++) {
+            pendingOrders[i] = orders[uint96(dataSet.at(i))];
         }
+    }
+
+    function getSpecificPendingOrders(
+        uint256 start,
+        uint256 count
+    ) external view returns (Order[] memory) {
+        // Validate start and count
+        uint256 end = start + count;
+        if (end > dataSet.length()) {
+            end = dataSet.length();
+        }
+
+        Order[] memory ordersSubset = new Order[](end - start);
+        for (uint256 i = start; i < end; i++) {
+            ordersSubset[i - start] = orders[uint96(dataSet.at(i))];
+        }
+        return ordersSubset;
     }
 
     function checkUpkeep(
@@ -264,10 +285,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     ) external payable override nonReentrant whenNotPaused paysFee {
         //get order
         Order memory order = orders[orderId];
-        require(
-            dataSet.contains(order.orderId),
-            "order not active"
-        );
+        require(dataSet.contains(order.orderId), "order not active");
 
         //only order owner
         require(msg.sender == order.recipient, "only order owner");
@@ -332,18 +350,14 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     ///@notice allow administrator to cancel any order
     ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
     ///@notice only pending orders can be cancelled
-    function adminCancelOrder(
-        uint96 orderId
-    ) external onlyOwner nonReentrant {
+    function adminCancelOrder(uint96 orderId) external onlyOwner nonReentrant {
         Order memory order = orders[orderId];
         _cancelOrder(order);
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(
-        uint96 orderId
-    ) external nonReentrant whenNotPaused {
+    function cancelOrder(uint96 orderId) external nonReentrant whenNotPaused {
         Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         _cancelOrder(order);

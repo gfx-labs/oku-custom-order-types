@@ -1027,8 +1027,6 @@ describe("Oracle Less", () => {
         const delta = 10000000n
         const initialWeth = await s.WETH.balanceOf(await s.Oscar.getAddress())
 
-        const pendingOrders = await s.OracleLess.getPendingOrders()
-
         //imposter
         expect(s.OracleLess.connect(s.Bob).modifyOrder(
             orderId,
@@ -1037,7 +1035,6 @@ describe("Oracle Less", () => {
             order.minAmountOut,
             order.recipient,
             false,
-            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x",
             { value: s.fee }
@@ -1051,7 +1048,6 @@ describe("Oracle Less", () => {
             order.minAmountOut,
             order.recipient,
             false,
-            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x",
             { value: s.fee }
@@ -1068,7 +1064,6 @@ describe("Oracle Less", () => {
             order.minAmountOut,
             order.recipient,
             true,
-            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x",
             { value: s.fee }
@@ -1078,7 +1073,6 @@ describe("Oracle Less", () => {
     })
 
     it("Modify Amount Received", async () => {
-        const pendingOrders = await s.OracleLess.getPendingOrders()
 
         const order = await s.OracleLess.orders(orderId)
         //increase min amount down
@@ -1089,7 +1083,6 @@ describe("Oracle Less", () => {
             expectedAmountOut + 50n,
             order.recipient,
             false,
-            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x",
             { value: s.fee }
@@ -1115,7 +1108,6 @@ describe("Oracle Less", () => {
             minAmountOut,
             order.recipient,
             false,
-            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x",
             { value: s.fee }

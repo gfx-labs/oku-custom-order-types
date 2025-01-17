@@ -347,7 +347,6 @@ interface IOracleLess {
         uint256 _minAmountOut,
         address _recipient,
         bool increasePosition,
-        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
     ) external payable;

@@ -7,10 +7,13 @@ import "../interfaces/openzeppelin/ERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../interfaces/openzeppelin/Pausable.sol";
+import "../interfaces/openzeppelin/EnumerableSet.sol";
 import "../libraries/ArrayMutation.sol";
 
 contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
+    using EnumerableSet for EnumerableSet.UintSet;
+
     AutomationMaster public immutable MASTER;
     IPermit2 public immutable permit2;
 
@@ -19,6 +22,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     uint96[] public pendingOrderIds;
 
     mapping(uint96 => Order) public orders;
+    EnumerableSet.UintSet private dataSet;
 
     constructor(AutomationMaster _master, IPermit2 _permit2, address owner) {
         MASTER = _master;
@@ -46,18 +50,32 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         }
     }
 
-    ///@return pendingOrders a full list of all pending orders with full order details
-    ///@notice this should not be called in a write function due to gas usage
     function getPendingOrders()
         external
         view
         returns (Order[] memory pendingOrders)
     {
-        pendingOrders = new Order[](pendingOrderIds.length);
-        for (uint96 i = 0; i < pendingOrderIds.length; i++) {
-            Order memory order = orders[pendingOrderIds[i]];
-            pendingOrders[i] = order;
+        pendingOrders = new Order[](dataSet.length());
+        for (uint256 i; i < dataSet.length(); i++) {
+            pendingOrders[i] = orders[uint96(dataSet.at(i))];
         }
+    }
+
+    function getSpecificPendingOrders(
+        uint256 start,
+        uint256 count
+    ) external view returns (Order[] memory) {
+        // Validate start and count
+        uint256 end = start + count;
+        if (end > dataSet.length()) {
+            end = dataSet.length();
+        }
+
+        Order[] memory ordersSubset = new Order[](end - start);
+        for (uint256 i = start; i < end; i++) {
+            ordersSubset[i - start] = orders[uint96(dataSet.at(i))];
+        }
+        return ordersSubset;
     }
 
     function createOrder(
@@ -99,7 +117,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         });
 
         //store pending order
-        pendingOrderIds.push(orderId);
+        dataSet.add(orderId);
 
         orderCount++;
 
@@ -109,21 +127,17 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     ///@notice allow administrator to cancel any order
     ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
     ///@notice only pending orders can be cancelled
-    function adminCancelOrder(
-        uint96 pendingOrderIdx
-    ) external onlyOwner nonReentrant {
-        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
-        _cancelOrder(order, pendingOrderIdx);
+    function adminCancelOrder(uint96 orderId) external onlyOwner nonReentrant {
+        Order memory order = orders[orderId];
+        _cancelOrder(order);
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(
-        uint96 pendingOrderIdx
-    ) external nonReentrant whenNotPaused {
-        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
+    function cancelOrder(uint96 orderId) external nonReentrant whenNotPaused {
+        Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
-        _cancelOrder(order, pendingOrderIdx);
+        _cancelOrder(order);
     }
 
     function modifyOrder(
@@ -133,14 +147,10 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         uint256 _minAmountOut,
         address _recipient,
         bool increasePosition,
-        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
     ) external payable override nonReentrant paysFee whenNotPaused {
-        require(
-            orderId == pendingOrderIds[pendingOrderIdx],
-            "order doesn't exist"
-        );
+        require(dataSet.contains(orderId), "order not active");
         require(_recipient != address(0x0), "recipient == zero address");
 
         _modifyOrder(
@@ -150,7 +160,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
             _minAmountOut,
             _recipient,
             increasePosition,
-            pendingOrderIdx,
             permit,
             permitPayload
         );
@@ -170,7 +179,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         Order memory order = orders[orderId];
 
         require(
-            order.orderId == pendingOrderIds[pendingOrderIdx],
+            order.orderId == uint96(dataSet.at(pendingOrderIdx)),
             "Order Fill Mismatch"
         );
 
@@ -182,11 +191,8 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         );
 
         //handle accounting
-        //remove from array
-        pendingOrderIds = ArrayMutation.removeFromArray(
-            pendingOrderIdx,
-            pendingOrderIds
-        );
+        //remove from pending dataSet
+        dataSet.remove(order.orderId);
 
         //handle fee
         (uint256 feeAmount, uint256 adjustedAmount) = applyFee(
@@ -207,12 +213,9 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         }
     }
 
-    function _cancelOrder(Order memory order, uint96 pendingOrderIdx) internal {
-        //remove from pending array
-        pendingOrderIds = ArrayMutation.removeFromArray(
-            pendingOrderIdx,
-            pendingOrderIds
-        );
+    function _cancelOrder(Order memory order) internal {
+        //remove from pending set
+        dataSet.remove(order.orderId);
 
         //refund tokenIn amountIn to recipient
         order.tokenIn.safeTransfer(order.recipient, order.amountIn);
@@ -228,16 +231,12 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         uint256 _minAmountOut,
         address _recipient,
         bool increasePosition,
-        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
     ) internal {
         //fetch order
         Order memory order = orders[orderId];
-        require(
-            order.orderId == pendingOrderIds[pendingOrderIdx],
-            "order doesn't exist"
-        );
+        require(dataSet.contains(orderId), "order not active");
         require(msg.sender == order.recipient, "only order owner");
 
         require(order.tokenIn != _tokenOut, "tokenIn == tokenOut");

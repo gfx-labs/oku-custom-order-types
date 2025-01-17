@@ -67,6 +67,23 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         }
     }
 
+    function getSpecificPendingOrders(
+        uint256 start,
+        uint256 count
+    ) external view returns (Order[] memory) {
+        // Validate start and count
+        uint256 end = start + count;
+        if (end > dataSet.length()) {
+            end = dataSet.length();
+        }
+
+        Order[] memory ordersSubset = new Order[](end - start);
+        for (uint256 i = start; i < end; i++) {
+            ordersSubset[i - start] = orders[uint96(dataSet.at(i))];
+        }
+        return ordersSubset;
+    }
+
     ///@notice this should never be called inside of a write function due to high gas usage
     function checkUpkeep(
         bytes calldata checkData
