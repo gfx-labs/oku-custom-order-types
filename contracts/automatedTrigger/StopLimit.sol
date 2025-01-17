@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import "./IAutomation.sol";
-import "../libraries/ArrayMutation.sol";
 import "../interfaces/uniswapV3/IPermit2.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
