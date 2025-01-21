@@ -296,6 +296,11 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         //update accounting
         uint256 initialTokenIn = order.tokenIn.balanceOf(address(this));
         uint256 initialTokenOut = order.tokenOut.balanceOf(address(this));
+        uint256[] memory initBalances = verifyTokenBalances(
+            new uint256[](0),
+            order.tokenIn,
+            order.tokenOut
+        );
 
         //approve 0
         order.tokenIn.safeDecreaseAllowance(
@@ -330,6 +335,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
 
         amountOut = finalTokenOut - initialTokenOut;
         tokenInRefund = order.amountIn - (initialTokenIn - finalTokenIn);
+        verifyTokenBalances(initBalances, order.tokenIn, order.tokenOut);
     }
 
     function procureTokens(
@@ -356,6 +362,35 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
             );
         } else {
             token.safeTransferFrom(owner, address(this), amount);
+        }
+    }
+
+    ///@notice compare all balances of all tokens not involved in the swap
+    function verifyTokenBalances(
+        uint256[] memory initBalances,
+        IERC20 tokenIn,
+        IERC20 tokenOut
+    ) internal view returns (uint256[] memory balances) {
+        bool check = initBalances.length != 0;
+        if (check) {
+            require(
+                initBalances.length == dataSet.length(),
+                "balance set length mismatch"
+            );
+        }
+        balances = new uint256[](dataSet.length());
+        for (uint i; i < balances.length; i++) {
+            //get tokenIn balance
+            Order memory order = orders[uint96(dataSet.at(i))];
+            uint256 balance = order.tokenIn.balanceOf(address(this));
+
+            if (check) {
+                //don't compare balances for tokenIn / tokenOut as we already check for this
+                if (order.tokenOut != tokenOut || order.tokenIn != tokenIn) {
+                    require(balance == initBalances[i], "balance mismatch");
+                }
+            }
+            balances[i] = balance;
         }
     }
 
