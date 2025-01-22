@@ -20,6 +20,7 @@ import "../interfaces/openzeppelin/EnumerableSet.sol";
 contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.UintSet;
+    using EnumerableSet for EnumerableSet.AddressSet;
 
     IAutomationMaster public immutable MASTER;
     IPermit2 public immutable permit2;
@@ -716,25 +717,29 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         IERC20 tokenIn,
         IERC20 tokenOut
     ) internal view returns (uint256[] memory balances) {
+        IERC20[] memory tokens = MASTER.getRegisteredTokens(); // Get all unique registered tokens
         bool check = initBalances.length != 0;
+
         if (check) {
             require(
-                initBalances.length == dataSet.length(),
+                initBalances.length == tokens.length,
                 "balance set length mismatch"
             );
         }
-        balances = new uint256[](dataSet.length());
-        for (uint i; i < balances.length; i++) {
-            //get tokenIn balance
-            Order memory order = orders[uint96(dataSet.at(i))];
-            uint256 balance = order.tokenIn.balanceOf(address(this));
+
+        balances = new uint256[](tokens.length);
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            IERC20 token = tokens[i];
+            uint256 balance = token.balanceOf(address(this)); // Get balance of the token held by the contract
 
             if (check) {
-                //don't compare balances for tokenIn / tokenOut as we already check for this
-                if (order.tokenOut != tokenOut || order.tokenIn != tokenIn) {
+                // Skip balance comparison for tokenIn and tokenOut
+                if (token != tokenIn && token != tokenOut) {
                     require(balance == initBalances[i], "balance mismatch");
                 }
             }
+
             balances[i] = balance;
         }
     }

@@ -79,6 +79,7 @@ interface IAutomationMaster is IAutomation {
     function pauseAll(bool, IOracleLess) external;
     function setOrderFee(uint256 _orderFee) external;
     function validateTarget(address) external;
+    function getRegisteredTokens() external view returns (IERC20[] memory);
     function getExchangeRate(
         IERC20 tokenIn,
         IERC20 tokenOut
