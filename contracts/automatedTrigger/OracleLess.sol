@@ -21,6 +21,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     uint96[] public pendingOrderIds;
 
     mapping(uint96 => Order) public orders;
+    mapping(IERC20 => bool) public whitelistedTokens;
     EnumerableSet.UintSet private dataSet;
 
     constructor(AutomationMaster _master, IPermit2 _permit2, address owner) {
@@ -46,6 +47,13 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
             _pause();
         } else {
             _unpause();
+        }
+    }
+
+    function whitelistTokens(IERC20[] calldata tokens, bool[] calldata approved) external onlyOwner {
+        require(tokens.length == approved.length, "array mismatch");
+        for(uint i = 0; i < tokens.length; i++){
+            whitelistedTokens[tokens[i]] = approved[i];
         }
     }
 
@@ -99,6 +107,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         require(tokenIn != tokenOut, "tokenIn == tokenOut");
         require(feeBips <= 10000, "BIPS > 10k");
         require(recipient != address(0x0), "recipient == zero address");
+        require(whitelistedTokens[tokenIn] && whitelistedTokens[tokenOut], "tokens not whitelisted");
 
         //procure tokens
         procureTokens(tokenIn, amountIn, msg.sender, permit, permitPayload);
@@ -243,8 +252,8 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         Order memory order = orders[orderId];
         require(dataSet.contains(orderId), "order not active");
         require(msg.sender == order.recipient, "only order owner");
-
         require(order.tokenIn != _tokenOut, "tokenIn == tokenOut");
+        require(whitelistedTokens[_tokenOut], "token not whitelisted");
 
         //deduce any amountIn changes
         uint256 newAmountIn = order.amountIn;

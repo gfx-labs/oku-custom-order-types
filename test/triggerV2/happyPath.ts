@@ -1000,6 +1000,7 @@ describe("Oracle Less", () => {
 
     before(async () => {
         s.OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2, await s.Frank.getAddress())
+        await s.OracleLess.whitelistTokens([await s.WETH.getAddress(), await s.USDC.getAddress()], [true, true])
         await stealMoney(s.wethWhale, await s.Oscar.getAddress(), await s.WETH.getAddress(), s.wethAmount)
     })
 
