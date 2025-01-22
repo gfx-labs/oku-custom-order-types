@@ -1,5 +1,5 @@
 import hre, { network } from "hardhat";
-import { currentBlock, resetCurrentArb, resetCurrentBase, resetCurrentOP } from "../util/block";
+import { currentBlock, resetCurrentArb, resetCurrentBase, resetCurrentOP, resetCurrentOPblock } from "../util/block";
 import { AutomationMaster, AutomationMaster__factory, Bracket, Bracket__factory, ERC20__factory, IERC20, IERC20__factory, IOracleRelay, IOracleRelay__factory, IPermit2__factory, IUniswapV3Factory, IUniswapV3Factory__factory, oracle, OracleLess, OracleLess__factory, PermitTest, PermitTest__factory, StopLimit, StopLimit__factory, UniswapV3Pool__factory } from "../typechain-types";
 import { AbiCoder, formatUnits, getBytes, Signer } from "ethers";
 import { impersonateAccount } from "../util/impersonator";
@@ -80,8 +80,9 @@ const main = async () => {
     USDC = IERC20__factory.connect((addrs.allTokens.find(token => token.symbol === "USDC"))!.token, signer)
 
     factory = IUniswapV3Factory__factory.connect("0x1F98431c8aD98523631AE4a59f267346ea31F984", signer)
-    
-    await fillOracleLessOrder(signer)
+
+    //await fillOracleLessOrder(signer)
+    await check(signer)
 }
 
 type olOrder = {
@@ -107,7 +108,7 @@ const fillOracleLessOrder = async (signer: Signer) => {
         console.log("Current: ", currentMinAmount)
         console.log("Targett: ", orders[i].minAmountOut)
 
-        if(orders[i].minAmountOut <= currentMinAmount){
+        if (orders[i].minAmountOut <= currentMinAmount) {
             console.log("FILLING ORDER: ", order.orderId)
             const tokenIn = ERC20__factory.connect(order.tokenIn, signer)
             const tokenOut = ERC20__factory.connect(order.tokenOut, signer)
@@ -120,11 +121,12 @@ const fillOracleLessOrder = async (signer: Signer) => {
             const balanceTokenIn = await tokenIn.balanceOf(await pool.getAddress())
             const valueTokenIn = (balanceTokenIn * currentPrice) / 100000000n
             const adjustedValue = ethers.formatUnits(valueTokenIn, await tokenIn.decimals())
-            if(adjustedValue < 1000){
+            if (adjustedValue < 1000) {
                 console.log("Insufficient liquidity in pool, moving to 3k fee tier")
                 pool = UniswapV3Pool__factory.connect(await factory.getPool(order.tokenIn, order.tokenOut, 3000), signer)
                 console.log("Got 3k pool: ", await pool.getAddress())
             }
+            console.log("TOKEN IN HAD: ", await tokenIn.balanceOf(await oracleLess.getAddress()))
             const txData = await generateUniTxData(
                 tokenIn,
                 order.tokenOut,
@@ -141,7 +143,32 @@ const fillOracleLessOrder = async (signer: Signer) => {
         }
     }
 }
+/**
+ * between 130723648 and 130723648
+ * block 130723203 ?
+ * 
+ */
+const check = async (signer: Signer) => {
+    let start = 130723203
 
+
+    await resetCurrentOPblock(start)
+    let balance = await WETH.balanceOf(await oracleLess.getAddress())
+    console.log("ORACLELESS: ", await oracleLess.getAddress())
+
+    while(balance != 0n){
+        await resetCurrentOPblock(start)
+        balance = await WETH.balanceOf(await oracleLess.getAddress())
+        console.log("Checked block: ", start)
+        await sleep(10000)
+        start += 1
+
+    }
+    console.log("FINISH: ", start)    
+}
+async function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
 
 
 
