@@ -159,6 +159,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         takeProfit ? bips = order.takeProfitSlippage : bips = order
             .stopSlippage;
 
+        uint256[] memory initBalances = verifyTokenBalances(
+            new uint256[](0),
+            order.tokenIn,
+            order.tokenOut
+        );
         (uint256 swapAmountOut, uint256 tokenInRefund) = execute(
             data.target,
             data.txData,
@@ -167,6 +172,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             order.tokenOut,
             bips
         );
+        verifyTokenBalances(initBalances, order.tokenIn, order.tokenOut);
 
         //handle accounting
         //remove from pending dataSet
@@ -477,6 +483,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     ) internal {
         require(swapParams.swapSlippage <= 10000, "BIPS > 10k");
 
+        uint256[] memory initBalances = verifyTokenBalances(
+            new uint256[](0),
+            swapParams.swapTokenIn,
+            tokenIn
+        );
         //execute the swap
         (uint256 swapAmountOut, uint256 tokenInRefund) = execute(
             swapParams.swapTarget,
@@ -486,6 +497,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             tokenIn,
             swapParams.swapSlippage
         );
+        verifyTokenBalances(initBalances, swapParams.swapTokenIn, tokenIn);
 
         _createOrder(
             takeProfit,
@@ -695,6 +707,35 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             if (exchangeRate <= order.stopPrice) {
                 return (true, false, exchangeRate);
             }
+        }
+    }
+
+    ///@notice compare all balances of all tokens not involved in the swap
+    function verifyTokenBalances(
+        uint256[] memory initBalances,
+        IERC20 tokenIn,
+        IERC20 tokenOut
+    ) internal view returns (uint256[] memory balances) {
+        bool check = initBalances.length != 0;
+        if (check) {
+            require(
+                initBalances.length == dataSet.length(),
+                "balance set length mismatch"
+            );
+        }
+        balances = new uint256[](dataSet.length());
+        for (uint i; i < balances.length; i++) {
+            //get tokenIn balance
+            Order memory order = orders[uint96(dataSet.at(i))];
+            uint256 balance = order.tokenIn.balanceOf(address(this));
+
+            if (check) {
+                //don't compare balances for tokenIn / tokenOut as we already check for this
+                if (order.tokenOut != tokenOut || order.tokenIn != tokenIn) {
+                    require(balance == initBalances[i], "balance mismatch");
+                }
+            }
+            balances[i] = balance;
         }
     }
 
