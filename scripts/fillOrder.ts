@@ -97,7 +97,7 @@ const fillOracleLessOrder = async (signer: Signer) => {
 
     //get orders
     const orders = await oracleLess.getPendingOrders()
-    //console.log("Orders: ", orders)
+    console.log("FILLING ON ORACLELESS: ", await oracleLess.getAddress())
 
     for (let i = 0; i < orders.length; i++) {
         const order = orders[i]
