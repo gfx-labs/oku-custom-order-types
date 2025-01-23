@@ -697,6 +697,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             }
             //check for stop price
             if (exchangeRate >= order.stopPrice) {
+                if (exchangeRate >= order.takeProfit) {
+                    return (true, true, exchangeRate);
+                }
                 return (true, false, exchangeRate);
             }
         } else {
@@ -706,6 +709,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             }
             //check for stop price
             if (exchangeRate <= order.stopPrice) {
+                if (exchangeRate <= order.takeProfit) {
+                    return (true, true, exchangeRate);
+                }
                 return (true, false, exchangeRate);
             }
         }
