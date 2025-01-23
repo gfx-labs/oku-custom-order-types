@@ -57,7 +57,8 @@ describe("Test for failure - STOP LIMIT", () => {
             0,
             false,
             false,//no permit
-            "0x"
+            "0x",
+            { value: s.fee }
         )).to.be.revertedWith("ERC20: transfer amount exceeds balance")
     })
 
@@ -81,7 +82,8 @@ describe("Test for failure - STOP LIMIT", () => {
             0,
             false,
             false,//no permit
-            "0x"
+            "0x",
+            { value: s.fee }
         )).to.be.revertedWith("EnforcedPause()")
 
         //unpause

@@ -2,26 +2,26 @@
 pragma solidity ^0.8.20;
 
 import "./IAutomation.sol";
-import "../libraries/ArrayMutation.sol";
 import "../interfaces/uniswapV3/IPermit2.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../interfaces/openzeppelin/Pausable.sol";
+import "../interfaces/openzeppelin/EnumerableSet.sol";
 
 ///@notice This contract owns and handles all logic associated with STOP_LIMIT orders
 ///STOP_LIMIT orders create a new Bracket order order with the same order ID once filled
 contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
+    using EnumerableSet for EnumerableSet.UintSet;
 
     IAutomationMaster public immutable MASTER;
     IBracket public immutable BRACKET_CONTRACT;
     IPermit2 public immutable permit2;
 
-    uint96[] public pendingOrderIds;
-
     mapping(uint96 => Order) public orders;
+    EnumerableSet.UintSet private dataSet;
 
     constructor(
         IAutomationMaster _master,
@@ -33,6 +33,14 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         BRACKET_CONTRACT = _bracket;
         permit2 = _permit2;
         _transferOwnership(owner);
+    }
+
+    modifier paysFee() {
+        uint256 orderFee = MASTER.orderFee();
+        require(msg.value >= orderFee, "Insufficient funds for order fee");
+        _;
+        // Transfer the fee to the contract owner
+        payable(address(MASTER)).transfer(orderFee);
     }
 
     function pause(bool __pause) external override {
@@ -47,8 +55,32 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         }
     }
 
-    function getPendingOrders() external view returns (uint96[] memory) {
-        return pendingOrderIds;
+    function getPendingOrders()
+        external
+        view
+        returns (Order[] memory pendingOrders)
+    {
+        pendingOrders = new Order[](dataSet.length());
+        for (uint256 i; i < dataSet.length(); i++) {
+            pendingOrders[i] = orders[uint96(dataSet.at(i))];
+        }
+    }
+
+    function getSpecificPendingOrders(
+        uint256 start,
+        uint256 count
+    ) external view returns (Order[] memory) {
+        // Validate start and count
+        uint256 end = start + count;
+        if (end > dataSet.length()) {
+            end = dataSet.length();
+        }
+
+        Order[] memory ordersSubset = new Order[](end - start);
+        for (uint256 i = start; i < end; i++) {
+            ordersSubset[i - start] = orders[uint96(dataSet.at(i))];
+        }
+        return ordersSubset;
     }
 
     ///@notice this should never be called inside of a write function due to high gas usage
@@ -61,17 +93,16 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         returns (bool upkeepNeeded, bytes memory performData)
     {
         uint96 i = 0;
-        uint96 length = uint96(pendingOrderIds.length);
-        bytes memory checkDataBytes = checkData;
-        if (checkDataBytes.length == 64) {
+        uint96 length = uint96(dataSet.length());
+        if (checkData.length == 64) {
             //decode start and end idxs
             (i, length) = abi.decode(checkData, (uint96, uint96));
-            if (length > uint96(pendingOrderIds.length)) {
-                length = uint96(pendingOrderIds.length);
+            if (length > uint96(dataSet.length())) {
+                length = uint96(dataSet.length());
             }
         }
         for (i; i < length; i++) {
-            Order memory order = orders[pendingOrderIds[i]];
+            Order memory order = orders[uint96(dataSet.at(i))];
             (bool inRange, uint256 exchangeRate) = checkInRange(order);
             if (inRange) {
                 return (
@@ -104,10 +135,10 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
             performData,
             (MasterUpkeepData)
         );
-        Order memory order = orders[pendingOrderIds[data.pendingOrderIdx]];
+        Order memory order = orders[uint96(dataSet.at(data.pendingOrderIdx))];
 
         require(
-            order.orderId == pendingOrderIds[data.pendingOrderIdx],
+            order.orderId == uint96(dataSet.at(data.pendingOrderIdx)),
             "Order Fill Mismatch"
         );
 
@@ -115,11 +146,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         (bool inRange, ) = checkInRange(order);
         require(inRange, "order ! in range");
 
-        //remove from pending array
-        pendingOrderIds = ArrayMutation.removeFromArray(
-            data.pendingOrderIdx,
-            pendingOrderIds
-        );
+        //remove from pending dataSet
+        dataSet.remove(order.orderId);
 
         //approve 0
         order.tokenIn.safeDecreaseAllowance(
@@ -195,7 +223,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         bool swapOnFill,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant whenNotPaused {
+    ) external payable override nonReentrant whenNotPaused paysFee{
         if (permit) {
             require(amountIn < type(uint160).max, "uint160 overflow");
             handlePermit(
@@ -241,18 +269,16 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         uint16 _swapSlippage,
         bool _swapOnFill,
         bool increasePosition,
-        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant whenNotPaused {
+    ) external payable override nonReentrant whenNotPaused paysFee {
         //get existing order
         Order memory order = orders[orderId];
-        require(
-            order.orderId == pendingOrderIds[pendingOrderIdx],
-            "order doesn't exist"
-        );
+        require(dataSet.contains(order.orderId), "order not active");
         //only order owner
         require(msg.sender == order.recipient, "only order owner");
+        require(_recipient != address(0x0), "recipient == zero address");
+
         //deduce any amountIn changes
         uint256 newAmountIn = order.amountIn;
         if (_amountInDelta != 0) {
@@ -300,7 +326,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
                 );
             }
         }
-        
+
         require(order.tokenIn != _tokenOut, "tokenIn == tokenOut");
 
         //check for oracles
@@ -309,13 +335,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
                 address(MASTER.oracles(_tokenOut)) != address(0x0),
                 "Oracle !exist"
             );
-        }
-        bool bracketDirection = MASTER.getExchangeRate(
-            order.tokenIn,
-            _tokenOut
-        ) > _takeProfit;
-        if (_swapOnFill) {
-            !bracketDirection;
         }
 
         //construct order
@@ -334,7 +353,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
             recipient: _recipient,
             direction: MASTER.getExchangeRate(order.tokenIn, _tokenOut) >
                 _stopLimitPrice,
-            bracketDirection: bracketDirection,
+            bracketDirection: MASTER.getExchangeRate(order.tokenIn, _tokenOut) >
+                _takeProfit,
             swapOnFill: _swapOnFill
         });
 
@@ -345,21 +365,22 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
     ///@notice allow administrator to cancel any order
     ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
     ///@notice only pending orders can be cancelled
+    ///NOTE if @param refund is false, then the order's tokens will not be refunded and will be stuck on this contract possibly forever
+    ///@notice ONLY SET @param refund TO FALSE IN THE CASE OF A BROKEN ORDER CAUSING cancelOrder() TO REVERT
     function adminCancelOrder(
-        uint96 pendingOrderIdx
+        uint96 orderId,
+        bool refund
     ) external onlyOwner nonReentrant {
-        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
-        _cancelOrder(order, pendingOrderIdx);
+        Order memory order = orders[orderId];
+        _cancelOrder(order, refund);
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(
-        uint96 pendingOrderIdx
-    ) external nonReentrant whenNotPaused {
-        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
+    function cancelOrder(uint96 orderId) external nonReentrant whenNotPaused {
+        Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
-        _cancelOrder(order, pendingOrderIdx);
+        _cancelOrder(order, true);
     }
 
     function _createOrder(
@@ -383,7 +404,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
             "Oracle !exist"
         );
         require(
-            pendingOrderIds.length < MASTER.maxPendingOrders(),
+            dataSet.length() < MASTER.maxPendingOrders(),
             "Max Order Count Reached"
         );
         require(
@@ -393,18 +414,11 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
                 feeBips <= 10000,
             "BIPS > 10k"
         );
-
         require(tokenIn != tokenOut, "tokenIn == tokenOut");
+        require(amountIn != 0, "amountIn == 0");
+        require(recipient != address(0x0), "recipient == zero address");
 
         uint96 orderId = MASTER.generateOrderId(msg.sender);
-
-        //deduce tokenIn / out for resulting bracket order
-        //if ! swap on fill, then no change,
-        bool bracketDirection = MASTER.getExchangeRate(tokenIn, tokenOut) >
-            takeProfit;
-        if (swapOnFill) {
-            !bracketDirection;
-        }
 
         orders[orderId] = Order({
             orderId: orderId,
@@ -421,24 +435,26 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
             recipient: recipient,
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) >
                 stopLimitPrice, //compare to stop price for this order's direction
-            bracketDirection: bracketDirection,
+            bracketDirection: MASTER.getExchangeRate(tokenIn, tokenOut) >
+                takeProfit,
             swapOnFill: swapOnFill
         });
-        pendingOrderIds.push(uint96(orderId));
+
+        //store pending order
+        dataSet.add(orderId);
+
         //emit
         emit OrderCreated(orderId);
     }
 
-    function _cancelOrder(Order memory order, uint96 pendingOrderIdx) internal {
-        //remove from pending array
-        pendingOrderIds = ArrayMutation.removeFromArray(
-            pendingOrderIdx,
-            pendingOrderIds
-        );
+    function _cancelOrder(Order memory order, bool refund) internal {
+        //remove from pending set
+        dataSet.remove(order.orderId);
 
         //refund tokenIn amountIn to recipient
-        order.tokenIn.safeTransfer(order.recipient, order.amountIn);
-
+        if (refund) {
+            order.tokenIn.safeTransfer(order.recipient, order.amountIn);
+        }
         //emit event
         emit OrderCancelled(order.orderId);
     }

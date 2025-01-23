@@ -75,8 +75,11 @@ interface IAutomationMaster is IAutomation {
     function STOP_LIMIT_CONTRACT() external view returns (IStopLimit);
     function oracles(IERC20 token) external view returns (IPythRelay);
     function maxPendingOrders() external view returns (uint16);
+    function orderFee() external view returns (uint256);
     function pauseAll(bool, IOracleLess) external;
-
+    function setOrderFee(uint256 _orderFee) external;
+    function validateTarget(address) external;
+    function getRegisteredTokens() external view returns (IERC20[] memory);
     function getExchangeRate(
         IERC20 tokenIn,
         IERC20 tokenOut
@@ -162,7 +165,7 @@ interface IStopLimit is IAutomation {
         bool swapOnFill,
         bool permit,
         bytes calldata permitPayload
-    ) external;
+    ) external payable;
 
     ///@param orderId unique id to reference the order being modified
     ///@param stopLimitPrice new execution price to fill the Stop Limit order
@@ -193,10 +196,9 @@ interface IStopLimit is IAutomation {
         uint16 swapSlippage,
         bool swapOnFill,
         bool increasePosition,
-        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
-    ) external;
+    ) external payable;
 }
 
 interface IBracket is IAutomation {
@@ -256,7 +258,7 @@ interface IBracket is IAutomation {
         uint16 stopSlippage,
         bool permit,
         bytes calldata permitPayload
-    ) external;
+    ) external payable;
 
     ///@notice create a new Bracket order as a Stop Limit order is filled
     ///@notice @param existingOrderId allows the use of the same orderId for the resulting Bracket order
@@ -300,10 +302,9 @@ interface IBracket is IAutomation {
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         bool increasePosition,
-        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
-    ) external;
+    ) external payable;
 }
 
 interface IOracleLess {
@@ -347,7 +348,6 @@ interface IOracleLess {
         uint256 _minAmountOut,
         address _recipient,
         bool increasePosition,
-        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
     ) external payable;

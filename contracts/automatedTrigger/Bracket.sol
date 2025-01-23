@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import "./IAutomation.sol";
-import "../libraries/ArrayMutation.sol";
 import "../interfaces/uniswapV3/UniswapV3Pool.sol";
 import "../interfaces/uniswapV3/IPermit2.sol";
 import "../interfaces/uniswapV3/ISwapRouter02.sol";
@@ -11,6 +10,7 @@ import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../interfaces/openzeppelin/Pausable.sol";
+import "../interfaces/openzeppelin/EnumerableSet.sol";
 
 ///@notice This contract owns and handles all logic associated with the following order types:
 /// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independant slippapge for each option
@@ -19,18 +19,27 @@ import "../interfaces/openzeppelin/Pausable.sol";
 /// In order to configure a LIMIT_ORDER or STOP_ORDER, simply set the take profit or stop price to either 0 for the lower bound or 2^256 - 1 for the upper bound
 contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
+    using EnumerableSet for EnumerableSet.UintSet;
+    using EnumerableSet for EnumerableSet.AddressSet;
 
     IAutomationMaster public immutable MASTER;
     IPermit2 public immutable permit2;
 
-    uint96[] public pendingOrderIds;
-
     mapping(uint96 => Order) public orders;
+    EnumerableSet.UintSet private dataSet;
 
     constructor(IAutomationMaster _master, IPermit2 _permit2, address owner) {
         MASTER = _master;
         permit2 = _permit2;
         _transferOwnership(owner);
+    }
+
+    modifier paysFee() {
+        uint256 orderFee = MASTER.orderFee();
+        require(msg.value >= orderFee, "Insufficient funds for order fee");
+        _;
+        // Transfer the fee to the contract owner
+        payable(address(MASTER)).transfer(orderFee);
     }
 
     function pause(bool __pause) external override {
@@ -45,8 +54,32 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         }
     }
 
-    function getPendingOrders() external view returns (uint96[] memory) {
-        return pendingOrderIds;
+    function getPendingOrders()
+        external
+        view
+        returns (Order[] memory pendingOrders)
+    {
+        pendingOrders = new Order[](dataSet.length());
+        for (uint256 i; i < dataSet.length(); i++) {
+            pendingOrders[i] = orders[uint96(dataSet.at(i))];
+        }
+    }
+
+    function getSpecificPendingOrders(
+        uint256 start,
+        uint256 count
+    ) external view returns (Order[] memory) {
+        // Validate start and count
+        uint256 end = start + count;
+        if (end > dataSet.length()) {
+            end = dataSet.length();
+        }
+
+        Order[] memory ordersSubset = new Order[](end - start);
+        for (uint256 i = start; i < end; i++) {
+            ordersSubset[i - start] = orders[uint96(dataSet.at(i))];
+        }
+        return ordersSubset;
     }
 
     function checkUpkeep(
@@ -58,16 +91,16 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         returns (bool upkeepNeeded, bytes memory performData)
     {
         uint96 i = 0;
-        uint96 length = uint96(pendingOrderIds.length);
+        uint96 length = uint96(dataSet.length());
         if (checkData.length == 64) {
             //decode start and end idxs
             (i, length) = abi.decode(checkData, (uint96, uint96));
-            if (length > uint96(pendingOrderIds.length)) {
-                length = uint96(pendingOrderIds.length);
+            if (length > uint96(dataSet.length())) {
+                length = uint96(dataSet.length());
             }
         }
-        for (i; i < length; i++) {
-            Order memory order = orders[pendingOrderIds[i]];
+        for (i; i < dataSet.length(); i++) {
+            Order memory order = orders[uint96(dataSet.at(i))];
             (
                 bool inRange,
                 bool takeProfit,
@@ -111,10 +144,10 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             performData,
             (MasterUpkeepData)
         );
-        Order memory order = orders[pendingOrderIds[data.pendingOrderIdx]];
+        Order memory order = orders[uint96(dataSet.at(data.pendingOrderIdx))];
 
         require(
-            order.orderId == pendingOrderIds[data.pendingOrderIdx],
+            order.orderId == uint96(dataSet.at(data.pendingOrderIdx)),
             "Order Fill Mismatch"
         );
 
@@ -127,6 +160,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         takeProfit ? bips = order.takeProfitSlippage : bips = order
             .stopSlippage;
 
+        uint256[] memory initBalances = verifyTokenBalances(
+            new uint256[](0),
+            order.tokenIn,
+            order.tokenOut
+        );
         (uint256 swapAmountOut, uint256 tokenInRefund) = execute(
             data.target,
             data.txData,
@@ -135,13 +173,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             order.tokenOut,
             bips
         );
+        verifyTokenBalances(initBalances, order.tokenIn, order.tokenOut);
 
         //handle accounting
-        //remove from pending array
-        pendingOrderIds = ArrayMutation.removeFromArray(
-            data.pendingOrderIdx,
-            pendingOrderIds
-        );
+        //remove from pending dataSet
+        dataSet.remove(order.orderId);
 
         //handle fee
         (uint256 feeAmount, uint256 adjustedAmount) = applyFee(
@@ -220,7 +256,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         uint16 stopSlippage,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant whenNotPaused {
+    ) external payable override nonReentrant whenNotPaused paysFee {
         _initializeOrder(
             swapPayload,
             takeProfit,
@@ -250,19 +286,16 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         uint16 _takeProfitSlippage,
         uint16 _stopSlippage,
         bool increasePosition,
-        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
-    ) external override nonReentrant whenNotPaused {
+    ) external payable override nonReentrant whenNotPaused paysFee {
         //get order
         Order memory order = orders[orderId];
-        require(
-            order.orderId == pendingOrderIds[pendingOrderIdx],
-            "order doesn't exist"
-        );
+        require(dataSet.contains(order.orderId), "order not active");
 
         //only order owner
         require(msg.sender == order.recipient, "only order owner");
+        require(_recipient != address(0x0), "recipient == zero address");
 
         //deduce any amountIn changes
         uint256 newAmountIn = order.amountIn;
@@ -323,21 +356,22 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     ///@notice allow administrator to cancel any order
     ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
     ///@notice only pending orders can be cancelled
+    ///NOTE if @param refund is false, then the order's tokens will not be refunded and will be stuck on this contract possibly forever
+    ///@notice ONLY SET @param refund TO FALSE IN THE CASE OF A BROKEN ORDER CAUSING cancelOrder() TO REVERT
     function adminCancelOrder(
-        uint96 pendingOrderIdx
+        uint96 orderId,
+        bool refund
     ) external onlyOwner nonReentrant {
-        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
-        _cancelOrder(order, pendingOrderIdx);
+        Order memory order = orders[orderId];
+        _cancelOrder(order, refund);
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(
-        uint96 pendingOrderIdx
-    ) external nonReentrant whenNotPaused {
-        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
+    function cancelOrder(uint96 orderId) external nonReentrant whenNotPaused {
+        Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
-        _cancelOrder(order, pendingOrderIdx);
+        _cancelOrder(order, true);
     }
 
     function procureTokens(
@@ -450,6 +484,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     ) internal {
         require(swapParams.swapSlippage <= 10000, "BIPS > 10k");
 
+        uint256[] memory initBalances = verifyTokenBalances(
+            new uint256[](0),
+            swapParams.swapTokenIn,
+            tokenIn
+        );
         //execute the swap
         (uint256 swapAmountOut, uint256 tokenInRefund) = execute(
             swapParams.swapTarget,
@@ -459,6 +498,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             tokenIn,
             swapParams.swapSlippage
         );
+        verifyTokenBalances(initBalances, swapParams.swapTokenIn, tokenIn);
 
         _createOrder(
             takeProfit,
@@ -500,7 +540,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             "Oracle !exist"
         );
         require(
-            pendingOrderIds.length < MASTER.maxPendingOrders(),
+            dataSet.length() < MASTER.maxPendingOrders(),
             "Max Order Count Reached"
         );
         require(
@@ -509,7 +549,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
                 feeBips <= 10000,
             "BIPS > 10k"
         );
+        require(recipient != address(0x0), "recipient == zero address");
         require(tokenIn != tokenOut, "tokenIn == tokenOut");
+        require(amountIn != 0, "amountIn == 0");
 
         //generate random but unique order id if there is not an existing orderId from a stop limit order
         if (existingOrderId == 0) {
@@ -543,21 +585,19 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         });
 
         //store pending order
-        pendingOrderIds.push(existingOrderId);
+        dataSet.add(existingOrderId);
 
         emit OrderCreated(existingOrderId);
     }
 
-    function _cancelOrder(Order memory order, uint96 pendingOrderIdx) internal {
-        //remove from pending array
-        pendingOrderIds = ArrayMutation.removeFromArray(
-            pendingOrderIdx,
-            pendingOrderIds
-        );
+    function _cancelOrder(Order memory order, bool refund) internal {
+        //remove from pending set
+        dataSet.remove(order.orderId);
 
         //refund tokenIn amountIn to recipient
-        order.tokenIn.safeTransfer(order.recipient, order.amountIn);
-
+        if (refund) {
+            order.tokenIn.safeTransfer(order.recipient, order.amountIn);
+        }
         //emit event
         emit OrderCancelled(order.orderId);
     }
@@ -574,6 +614,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         IERC20 tokenOut,
         uint16 bips
     ) internal returns (uint256 swapAmountOut, uint256 tokenInRefund) {
+        //validate target
+        MASTER.validateTarget(target);
+
         //update accounting
         uint256 initialTokenIn = tokenIn.balanceOf(address(this));
         uint256 initialTokenOut = tokenOut.balanceOf(address(this));
@@ -654,6 +697,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             }
             //check for stop price
             if (exchangeRate >= order.stopPrice) {
+                if (exchangeRate >= order.takeProfit) {
+                    return (true, true, exchangeRate);
+                }
                 return (true, false, exchangeRate);
             }
         } else {
@@ -663,8 +709,44 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             }
             //check for stop price
             if (exchangeRate <= order.stopPrice) {
+                if (exchangeRate <= order.takeProfit) {
+                    return (true, true, exchangeRate);
+                }
                 return (true, false, exchangeRate);
             }
+        }
+    }
+
+    ///@notice compare all balances of all tokens not involved in the swap
+    function verifyTokenBalances(
+        uint256[] memory initBalances,
+        IERC20 tokenIn,
+        IERC20 tokenOut
+    ) internal view returns (uint256[] memory balances) {
+        IERC20[] memory tokens = MASTER.getRegisteredTokens(); // Get all unique registered tokens
+        bool check = initBalances.length != 0;
+
+        if (check) {
+            require(
+                initBalances.length == tokens.length,
+                "balance set length mismatch"
+            );
+        }
+
+        balances = new uint256[](tokens.length);
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            IERC20 token = tokens[i];
+            uint256 balance = token.balanceOf(address(this)); // Get balance of the token held by the contract
+
+            if (check) {
+                // Skip balance comparison for tokenIn and tokenOut
+                if (token != tokenIn && token != tokenOut) {
+                    require(balance == initBalances[i], "balance mismatch");
+                }
+            }
+
+            balances[i] = balance;
         }
     }
 

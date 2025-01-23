@@ -7,21 +7,24 @@ import "../interfaces/openzeppelin/ERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../interfaces/openzeppelin/Pausable.sol";
-import "../libraries/ArrayMutation.sol";
+import "../interfaces/openzeppelin/EnumerableSet.sol";
 
 contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
+    using EnumerableSet for EnumerableSet.UintSet;
+    using EnumerableSet for EnumerableSet.AddressSet;
+
     AutomationMaster public immutable MASTER;
     IPermit2 public immutable permit2;
-
-    ///@notice fee to create an order, in order to deter spam
-    uint256 public orderFee;
 
     uint96 public orderCount;
 
     uint96[] public pendingOrderIds;
 
     mapping(uint96 => Order) public orders;
+    mapping(IERC20 => bool) public whitelistedTokens;
+    EnumerableSet.AddressSet private uniqueTokens;
+    EnumerableSet.UintSet private dataSet;
 
     constructor(AutomationMaster _master, IPermit2 _permit2, address owner) {
         MASTER = _master;
@@ -30,10 +33,11 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     }
 
     modifier paysFee() {
+        uint256 orderFee = MASTER.orderFee();
         require(msg.value >= orderFee, "Insufficient funds for order fee");
         _;
         // Transfer the fee to the contract owner
-        payable(owner()).transfer(orderFee);
+        payable(address(MASTER)).transfer(orderFee);
     }
 
     function pause(bool __pause) external override {
@@ -48,22 +52,54 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         }
     }
 
-    ///@return pendingOrders a full list of all pending orders with full order details
-    ///@notice this should not be called in a write function due to gas usage
+    function whitelistTokens(
+        IERC20[] calldata tokens,
+        bool[] calldata approved
+    ) external onlyOwner {
+        require(tokens.length == approved.length, "array mismatch");
+
+        for (uint i = 0; i < tokens.length; i++) {
+            IERC20 token = tokens[i];
+            bool isApproved = approved[i];
+
+            whitelistedTokens[token] = isApproved;
+
+            if (isApproved) {
+                // Add to the unique token set if approved
+                uniqueTokens.add(address(token));
+            } else {
+                // Remove from the unique token set if not approved
+                uniqueTokens.remove(address(token));
+            }
+        }
+    }
+
     function getPendingOrders()
         external
         view
         returns (Order[] memory pendingOrders)
     {
-        pendingOrders = new Order[](pendingOrderIds.length);
-        for (uint96 i = 0; i < pendingOrderIds.length; i++) {
-            Order memory order = orders[pendingOrderIds[i]];
-            pendingOrders[i] = order;
+        pendingOrders = new Order[](dataSet.length());
+        for (uint256 i; i < dataSet.length(); i++) {
+            pendingOrders[i] = orders[uint96(dataSet.at(i))];
         }
     }
 
-    function setOrderFee(uint256 _orderFee) external onlyOwner {
-        orderFee = _orderFee;
+    function getSpecificPendingOrders(
+        uint256 start,
+        uint256 count
+    ) external view returns (Order[] memory) {
+        // Validate start and count
+        uint256 end = start + count;
+        if (end > dataSet.length()) {
+            end = dataSet.length();
+        }
+
+        Order[] memory ordersSubset = new Order[](end - start);
+        for (uint256 i = start; i < end; i++) {
+            ordersSubset[i - start] = orders[uint96(dataSet.at(i))];
+        }
+        return ordersSubset;
     }
 
     function createOrder(
@@ -86,6 +122,12 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     {
         require(amountIn != 0, "amountIn == 0");
         require(tokenIn != tokenOut, "tokenIn == tokenOut");
+        require(feeBips <= 10000, "BIPS > 10k");
+        require(recipient != address(0x0), "recipient == zero address");
+        require(
+            whitelistedTokens[tokenIn] && whitelistedTokens[tokenOut],
+            "tokens not whitelisted"
+        );
 
         //procure tokens
         procureTokens(tokenIn, amountIn, msg.sender, permit, permitPayload);
@@ -103,7 +145,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         });
 
         //store pending order
-        pendingOrderIds.push(orderId);
+        dataSet.add(orderId);
 
         orderCount++;
 
@@ -113,21 +155,22 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     ///@notice allow administrator to cancel any order
     ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
     ///@notice only pending orders can be cancelled
+    ///NOTE if @param refund is false, then the order's tokens will not be refunded and will be stuck on this contract possibly forever
+    ///@notice ONLY SET @param refund TO FALSE IN THE CASE OF A BROKEN ORDER CAUSING cancelOrder() TO REVERT
     function adminCancelOrder(
-        uint96 pendingOrderIdx
+        uint96 orderId,
+        bool refund
     ) external onlyOwner nonReentrant {
-        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
-        _cancelOrder(order, pendingOrderIdx);
+        Order memory order = orders[orderId];
+        _cancelOrder(order, refund);
     }
 
     ///@notice only the order recipient can cancel their order
     ///@notice only pending orders can be cancelled
-    function cancelOrder(
-        uint96 pendingOrderIdx
-    ) external nonReentrant whenNotPaused {
-        Order memory order = orders[pendingOrderIds[pendingOrderIdx]];
+    function cancelOrder(uint96 orderId) external nonReentrant whenNotPaused {
+        Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
-        _cancelOrder(order, pendingOrderIdx);
+        _cancelOrder(order, true);
     }
 
     function modifyOrder(
@@ -137,14 +180,12 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         uint256 _minAmountOut,
         address _recipient,
         bool increasePosition,
-        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
     ) external payable override nonReentrant paysFee whenNotPaused {
-        require(
-            orderId == pendingOrderIds[pendingOrderIdx],
-            "order doesn't exist"
-        );
+        require(dataSet.contains(orderId), "order not active");
+        require(_recipient != address(0x0), "recipient == zero address");
+
         _modifyOrder(
             orderId,
             _tokenOut,
@@ -152,7 +193,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
             _minAmountOut,
             _recipient,
             increasePosition,
-            pendingOrderIdx,
             permit,
             permitPayload
         );
@@ -165,11 +205,14 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         address target,
         bytes calldata txData
     ) external override nonReentrant whenNotPaused {
+        //validate target
+        MASTER.validateTarget(target);
+
         //fetch order
         Order memory order = orders[orderId];
 
         require(
-            order.orderId == pendingOrderIds[pendingOrderIdx],
+            order.orderId == uint96(dataSet.at(pendingOrderIdx)),
             "Order Fill Mismatch"
         );
 
@@ -181,11 +224,8 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         );
 
         //handle accounting
-        //remove from array
-        pendingOrderIds = ArrayMutation.removeFromArray(
-            pendingOrderIdx,
-            pendingOrderIds
-        );
+        //remove from pending dataSet
+        dataSet.remove(order.orderId);
 
         //handle fee
         (uint256 feeAmount, uint256 adjustedAmount) = applyFee(
@@ -206,16 +246,14 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         }
     }
 
-    function _cancelOrder(Order memory order, uint96 pendingOrderIdx) internal {
-        //remove from pending array
-        pendingOrderIds = ArrayMutation.removeFromArray(
-            pendingOrderIdx,
-            pendingOrderIds
-        );
+    function _cancelOrder(Order memory order, bool refund) internal {
+        //remove from pending set
+        dataSet.remove(order.orderId);
 
         //refund tokenIn amountIn to recipient
-        order.tokenIn.safeTransfer(order.recipient, order.amountIn);
-
+        if (refund) {
+            order.tokenIn.safeTransfer(order.recipient, order.amountIn);
+        }
         //emit event
         emit OrderCancelled(order.orderId);
     }
@@ -227,19 +265,15 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         uint256 _minAmountOut,
         address _recipient,
         bool increasePosition,
-        uint96 pendingOrderIdx,
         bool permit,
         bytes calldata permitPayload
     ) internal {
         //fetch order
         Order memory order = orders[orderId];
-        require(
-            order.orderId == pendingOrderIds[pendingOrderIdx],
-            "order doesn't exist"
-        );
+        require(dataSet.contains(orderId), "order not active");
         require(msg.sender == order.recipient, "only order owner");
-
         require(order.tokenIn != _tokenOut, "tokenIn == tokenOut");
+        require(whitelistedTokens[_tokenOut], "token not whitelisted");
 
         //deduce any amountIn changes
         uint256 newAmountIn = order.amountIn;
@@ -291,6 +325,11 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         //update accounting
         uint256 initialTokenIn = order.tokenIn.balanceOf(address(this));
         uint256 initialTokenOut = order.tokenOut.balanceOf(address(this));
+        uint256[] memory initBalances = verifyTokenBalances(
+            new uint256[](0),
+            order.tokenIn,
+            order.tokenOut
+        );
 
         //approve 0
         order.tokenIn.safeDecreaseAllowance(
@@ -325,6 +364,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
 
         amountOut = finalTokenOut - initialTokenOut;
         tokenInRefund = order.amountIn - (initialTokenIn - finalTokenIn);
+        verifyTokenBalances(initBalances, order.tokenIn, order.tokenOut);
     }
 
     function procureTokens(
@@ -351,6 +391,48 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
             );
         } else {
             token.safeTransferFrom(owner, address(this), amount);
+        }
+    }
+
+    ///@notice compare all balances of all tokens not involved in the swap
+    function verifyTokenBalances(
+        uint256[] memory initBalances,
+        IERC20 tokenIn,
+        IERC20 tokenOut
+    ) internal view returns (uint256[] memory balances) {
+        IERC20[] memory tokens = getWhitelistedTokens(); // Get all unique whitelisted tokens
+        bool check = initBalances.length != 0;
+
+        if (check) {
+            require(
+                initBalances.length == tokens.length,
+                "balance set length mismatch"
+            );
+        }
+
+        balances = new uint256[](tokens.length);
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            IERC20 token = tokens[i];
+            uint256 balance = token.balanceOf(address(this));
+
+            if (check) {
+                // Skip balance comparison for tokenIn and tokenOut
+                if (token != tokenIn && token != tokenOut) {
+                    require(balance == initBalances[i], "balance mismatch");
+                }
+            }
+
+            balances[i] = balance;
+        }
+    }
+
+    function getWhitelistedTokens() internal view returns (IERC20[] memory tokens) {
+        uint256 length = uniqueTokens.length();
+       tokens = new IERC20[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            tokens[i] = IERC20(uniqueTokens.at(i));
         }
     }
 

@@ -9,11 +9,13 @@ import "../interfaces/openzeppelin/ERC20.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/Pausable.sol";
+import "../interfaces/openzeppelin/EnumerableSet.sol";
 
 ///@notice This contract owns and handles all of the settings and accounting logic for automated swaps
 ///@notice This contract should not hold any user funds, only collected fees
 contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     using SafeERC20 for IERC20;
+    using EnumerableSet for EnumerableSet.AddressSet;
 
     ///@notice maximum pending orders that may exist at a time, limiting the compute requriement for checkUpkeep
     uint16 public maxPendingOrders;
@@ -21,18 +23,31 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     ///@notice minumum USD value required to create a new order, in 1e8 terms
     uint256 public minOrderSize;
 
+    ///@notice fee to create an order, in order to deter spam
+    uint256 public orderFee;
+
     ///sub keeper contracts
     IStopLimit public STOP_LIMIT_CONTRACT;
     IBracket public BRACKET_CONTRACT;
+
+    //whitelist of possible target contracts to execute swaps
+    mapping(address => bool) public safeTargets;
+
+    //whitelist of wallets allowed to set targets
+    mapping(address => bool) public targetSetters;
 
     ///each token must have a registered oracle in order to be tradable
     mapping(IERC20 => IPythRelay) public oracles;
     mapping(IERC20 => bytes32) public pythIds;
     mapping(address => uint96) private nonces;
 
-    constructor(address owner){
+    EnumerableSet.AddressSet private uniqueTokens;
+
+    constructor(address owner) {
         _transferOwnership(owner);
     }
+
+    receive() external payable {}
 
     function pauseAll(
         bool pause,
@@ -48,6 +63,32 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
         oracleLessContract.pause(pause);
     }
 
+    ///@notice set the fee to create / modify orders
+    ///@notice fee is taken from msg.value in the native gas token
+    ///@param _orderFee is in wei
+    function setOrderFee(uint256 _orderFee) external override onlyOwner {
+        orderFee = _orderFee;
+    }
+
+    function whitelistTargetSetter(
+        address wallet,
+        bool canSet
+    ) external onlyOwner {
+        targetSetters[wallet] = canSet;
+    }
+
+    ///@notice toggle each idx in @param targets to be true/false as a valid target
+    function whitelistTargets(address[] calldata targets) external {
+        require(targetSetters[msg.sender], "!Allowed to set targets");
+        for (uint i = 0; i < targets.length; i++) {
+            safeTargets[targets[i]] = !safeTargets[targets[i]];
+        }
+    }
+
+    function validateTarget(address target) external view override {
+        require(safeTargets[target], "Target !Valid");
+    }
+
     ///@notice register Stop Limit and Bracket order contracts
     function registerSubKeepers(
         IStopLimit stopLimitContract,
@@ -58,13 +99,26 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     }
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
+    ///@notice to delist a token, the oracle address in the array should be set to address(0x0)
     function registerOracle(
         IERC20[] calldata _tokens,
         IPythRelay[] calldata _oracles
     ) external onlyOwner {
         require(_tokens.length == _oracles.length, "Array Length Mismatch");
-        for (uint i = 0; i < _tokens.length; i++) {
-            oracles[_tokens[i]] = _oracles[i];
+
+        for (uint256 i = 0; i < _tokens.length; i++) {
+            IERC20 token = _tokens[i];
+            IPythRelay oracle = _oracles[i];
+
+            oracles[token] = oracle;
+
+            if (address(oracle) == address(0x0)) {
+                // Remove the token from the unique set if oracle is address(0x0)
+                uniqueTokens.remove(address(token));
+            } else {
+                // Add the token to the unique set otherwise
+                uniqueTokens.add(address(token));
+            }
         }
     }
 
@@ -81,8 +135,35 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     ///@notice sweep the entire balance of @param token to the owner
     ///@notice this contract should not hold funds other than collected fees,
     ///which are forwarded here after each transaction
-    function sweep(IERC20 token) external onlyOwner {
-        token.safeTransfer(owner(), token.balanceOf(address(this)));
+    function sweep(IERC20 token, address recipient) external onlyOwner {
+        token.safeTransfer(recipient, token.balanceOf(address(this)));
+    }
+
+    function sweepEther(address payable recipient) external onlyOwner {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No Ether to withdraw");
+        require(
+            recipient != address(0),
+            "Recipient cannot be the zero address"
+        );
+
+        (bool success, ) = recipient.call{value: balance}("");
+
+        require(success, "Ether transfer failed");
+    }
+
+    ///@notice returns an array of each unique registered token
+    function getRegisteredTokens()
+        external
+        view
+        override
+        returns (IERC20[] memory tokens)
+    {
+        uint256 length = uniqueTokens.length();
+        tokens = new IERC20[](length);
+        for (uint256 i = 0; i < length; i++) {
+            tokens[i] = IERC20(uniqueTokens.at(i));
+        }
     }
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms

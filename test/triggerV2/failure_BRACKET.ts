@@ -10,7 +10,7 @@ import { ethers } from "hardhat"
 
 ///All tests are performed as if on Arbitrum
 ///Testing is on the Arb WETH/USDC.e pool @ 500
-describe("Test for failure - STOP LOSS LIMIT", () => {
+describe("Test for failure - BRACKET", () => {
 
     let currentPrice: bigint
 
@@ -53,7 +53,8 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             smallSlippage,
             smallSlippage,
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         )
 
 
@@ -80,7 +81,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         //confirm pending order to be executed is steve's order
         const data: MasterUpkeepData = await decodeUpkeepData(check.performData, s.Steve)
         const pendingOrders = await s.Bracket.getPendingOrders()
-        expect(pendingOrders[Number(data.pendingOrderIdx)]).to.eq(steveOrder, "steve's order is being filled")
+        expect(pendingOrders[pendingOrders.length - 1].orderId).to.eq(steveOrder, "steve's order is being filled")
 
         //try to fill, fail - slippage too low
         let minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, 500)//bips too high
@@ -97,8 +98,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
 
         //try to cancel order that isn't yours
         let orders = await s.Bracket.getPendingOrders()
-        let orderIndex = orders.findIndex((id: bigint) => id === steveOrder)
-        expect(s.Bracket.connect(s.Bob).cancelOrder(orderIndex)).to.be.revertedWith("Only Order Owner")
+        expect(s.Bracket.connect(s.Bob).cancelOrder(order.orderId)).to.be.revertedWith("Only Order Owner")
 
         minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, data.bips)//actual bips are 0% slippage
 
@@ -116,8 +116,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
 
         //cancel order for future tests
         orders = await s.Bracket.getPendingOrders()
-        orderIndex = orders.findIndex((id: bigint) => id === steveOrder)
-        await s.Bracket.connect(s.Steve).cancelOrder(orderIndex)
+        await s.Bracket.connect(s.Steve).cancelOrder(order.orderId)
 
     })
 
@@ -136,7 +135,8 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             smallSlippage,
             smallSlippage,
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         )).to.be.revertedWith("ERC20: transfer amount exceeds balance")
 
     })
@@ -158,7 +158,8 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             steveBips,
             steveBips,
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         )
 
         //adjust oracle
@@ -180,7 +181,7 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
         expect(order.recipient).to.eq(await s.Steve.getAddress(), "steve's order")
         const data: MasterUpkeepData = await decodeUpkeepData(check.performData, s.Steve)
         const pendingOrders = await s.Bracket.getPendingOrders()
-        expect(pendingOrders[Number(data.pendingOrderIdx)]).to.eq(steveOrder, "steve's order is being filled")
+        expect((pendingOrders[pendingOrders.length - 1]).orderId).to.eq(steveOrder, "steve's order is being filled")
 
         //now that we confirmed we are filling steve's order,
         //how much weth is on the contract, relative to how much we are supposed to be allowed to send (steve's order.amountIn)?
@@ -247,7 +248,8 @@ describe("Test for failure - STOP LOSS LIMIT", () => {
             steveBips,
             steveBips,
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         )).to.be.revertedWith("EnforcedPause()") 
 
         //unpause

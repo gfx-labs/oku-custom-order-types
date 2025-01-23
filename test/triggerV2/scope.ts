@@ -65,6 +65,7 @@ export class TestScope {
 
     maxPendingOrders = 20
     minOrderSize = ethers.parseUnits("10", 8)
+    fee = ethers.parseEther("0.0001")
 
 
 

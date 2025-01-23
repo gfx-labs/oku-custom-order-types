@@ -70,6 +70,16 @@ describe("Automated Trigger Testing on Arbitrum", () => {
 
     it("Register", async () => {
 
+        //whitelist target setters
+        //now bob can set the target
+        expect(s.Master.connect(s.Bob).whitelistTargetSetter(await s.Bob.getAddress(), true)).to.be.revertedWith('only owner')
+        await s.Master.connect(s.Frank).whitelistTargetSetter(await s.Bob.getAddress(), true)
+
+        //whitelist targets
+        expect(s.Master.connect(s.Frank).whitelistTargets([s.router02])).to.be.revertedWith("!Allowed to set targets")
+        await s.Master.connect(s.Bob).whitelistTargets([s.router02])
+
+
         //register sup keepers
         await s.Master.connect(s.Frank).registerSubKeepers(
             await s.StopLimit.getAddress(),
@@ -86,6 +96,9 @@ describe("Automated Trigger Testing on Arbitrum", () => {
 
         //set min order size 1000000000n
         await s.Master.connect(s.Frank).setMinOrderSize(s.minOrderSize)
+
+        //set fee
+        await s.Master.setOrderFee(s.fee)
 
     })
 
@@ -137,7 +150,8 @@ describe("Execute Stop-Limit Upkeep", () => {
             0,//no swap on fill bips
             false,//no swap on fill
             false,//no permit
-            "0x"
+            "0x",
+            { value: s.fee }
         )
 
         const filter = s.StopLimit.filters.OrderCreated
@@ -213,7 +227,7 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(balance).to.be.eq(0n, "WETH removed from stopLimit")
 
         //pending order removed and length == 0
-        expect(await s.StopLimit.pendingOrderIds.length).to.eq(0, "no pending orders left")
+        expect((await s.StopLimit.getPendingOrders()).length).to.eq(0, "no pending orders left")
 
         //stop-limit order filled event
         const Filter = s.StopLimit.filters.OrderProcessed
@@ -244,10 +258,7 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(balance).to.eq(s.wethAmount, "WETH received")
 
         //cancel limit order for future tests
-        //get order index
-        const orders = await s.Bracket.getPendingOrders()
-        const orderIndex = orders.findIndex((id: bigint) => id === orderId)
-        await s.Bracket.connect(s.Bob).cancelOrder(orderIndex)
+        await s.Bracket.connect(s.Bob).cancelOrder(orderId as bigint)
     })
 })
 
@@ -297,7 +308,8 @@ describe("Execute Stop-Limit with swap on fill", () => {
             swapBips,//no swap on fill bips
             true,//swap on fill
             false,//no permit
-            "0x"
+            "0x",
+            { value: s.fee }
         )
 
         const filter = s.StopLimit.filters.OrderCreated
@@ -378,7 +390,8 @@ describe("Execute Stop-Limit with swap on fill", () => {
 
         //stop loss limit order created
         expect((await s.Bracket.getPendingOrders()).length).to.eq(1, "new pending order")
-        expect(await s.Bracket.pendingOrderIds(0)).to.eq(charlesOrder, "Charles's order is pending")
+        const pendingOrders = await s.Bracket.getPendingOrders()
+        expect(pendingOrders[0].orderId).to.eq(charlesOrder, "Charles's order is pending")
     })
 
     it("Check Upkeep", async () => {
@@ -507,7 +520,7 @@ describe("Execute Bracket Upkeep", () => {
         );
 
         //check for minOrderSize
-        expect (s.Bracket.connect(s.Bob).createOrder(
+        expect(s.Bracket.connect(s.Bob).createOrder(
             swapPayload,
             currentPrice + strikeDelta,
             currentPrice - stopDelta,
@@ -519,7 +532,8 @@ describe("Execute Bracket Upkeep", () => {
             strikeBips,
             stopBips,
             false,//no permit
-            "0x"
+            "0x",
+            { value: s.fee }
         )).to.be.revertedWith("order too small")
 
         await s.Bracket.connect(s.Bob).createOrder(
@@ -534,7 +548,8 @@ describe("Execute Bracket Upkeep", () => {
             strikeBips,
             stopBips,
             false,//no permit
-            "0x"
+            "0x",
+            { value: s.fee }
         )
 
 
@@ -632,7 +647,7 @@ describe("Execute Bracket Upkeep", () => {
         expect(usdcBalance).to.be.gt(0n, "USDC received")
 
         //pending order removed and length == 0
-        expect(await s.Bracket.pendingOrderIds.length).to.eq(0, "no pending orders left")
+        expect((await s.Bracket.getPendingOrders()).length).to.eq(0, "no pending orders left")
 
         //event
         const filter = s.Bracket.filters.OrderProcessed
@@ -727,7 +742,8 @@ describe("Bracket order with order modification", () => {
             strikeBips,
             stopBips,
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         )
 
         const filter = s.Bracket.filters.OrderCreated
@@ -766,9 +782,9 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             true,
-            pendingOrders.findIndex((id: bigint) => id === orderId),
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         );
 
         //verify
@@ -794,9 +810,9 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
-            pendingOrders.findIndex((id) => id === orderId),
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         );
 
         balance = await s.WETH.balanceOf(await s.Bob.getAddress())
@@ -826,9 +842,9 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
-            pendingOrders.findIndex((id) => id === orderId),
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         );
         //makes upkeep needed and will fill stop price and slippage
         check = await s.Master.checkUpkeep("0x")
@@ -844,9 +860,9 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
-            pendingOrders.findIndex((id) => id === orderId),
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         )
         check = await s.Master.checkUpkeep("0x")
         expect(check.upkeepNeeded).to.eq(false)
@@ -862,9 +878,9 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
-            pendingOrders.findIndex((id) => id === orderId),
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         )
         //upkeep not needed
         check = await s.Master.checkUpkeep("0x")
@@ -883,9 +899,9 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
-            pendingOrders.findIndex((id) => id === orderId),
             false,
-            "0x"
+            "0x",
+            { value: s.fee }
         )
         check = await s.Master.checkUpkeep("0x")
         expect(check.upkeepNeeded).to.eq(false)
@@ -956,7 +972,7 @@ describe("Bracket order with order modification", () => {
         expect(usdcBalance).to.be.gt(0n, "USDC received")
 
         //pending order removed and length == 0
-        expect(await s.Bracket.pendingOrderIds.length).to.eq(0, "no pending orders left")
+        expect((await s.Bracket.getPendingOrders()).length).to.eq(0, "no pending orders left")
 
         //event
         const filter = s.Bracket.filters.OrderProcessed
@@ -973,16 +989,7 @@ describe("Bracket order with order modification", () => {
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
     })
 
-    it("Verify fee", async () => {
 
-        const usdcBalance = await s.USDC.balanceOf(await s.Master.getAddress())
-        expect(usdcBalance).to.be.gt(0, "USDC fees accumulated")
-
-        await s.Master.connect(s.Frank).sweep(await s.USDC.getAddress())
-
-        expect(await s.USDC.balanceOf(s.Frank)).to.eq(usdcBalance, "Frank received fees")
-
-    })
 })
 
 describe("Oracle Less", () => {
@@ -990,15 +997,11 @@ describe("Oracle Less", () => {
     const minAmountOut = expectedAmountOut - 50n
     let orderId: bigint
 
-    let fee = ethers.parseEther("0.0001")
 
     before(async () => {
         s.OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2, await s.Frank.getAddress())
+        await s.OracleLess.whitelistTokens([await s.WETH.getAddress(), await s.USDC.getAddress()], [true, true])
         await stealMoney(s.wethWhale, await s.Oscar.getAddress(), await s.WETH.getAddress(), s.wethAmount)
-
-        //set fee
-        await s.OracleLess.setOrderFee(fee)
-
     })
 
     it("Create Order", async () => {
@@ -1012,7 +1015,7 @@ describe("Oracle Less", () => {
             25,
             false,
             "0x",
-            { value: fee }
+            { value: s.fee }
         )
         const filter = s.OracleLess.filters.OrderCreated
         const events = await s.OracleLess.queryFilter(filter, -1)
@@ -1025,8 +1028,6 @@ describe("Oracle Less", () => {
         const delta = 10000000n
         const initialWeth = await s.WETH.balanceOf(await s.Oscar.getAddress())
 
-        const pendingOrders = await s.OracleLess.getPendingOrders()
-
         //imposter
         expect(s.OracleLess.connect(s.Bob).modifyOrder(
             orderId,
@@ -1035,10 +1036,9 @@ describe("Oracle Less", () => {
             order.minAmountOut,
             order.recipient,
             false,
-            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x",
-            { value: fee }
+            { value: s.fee }
         )).to.be.revertedWith("only order owner")
 
         //decrease amount
@@ -1049,10 +1049,9 @@ describe("Oracle Less", () => {
             order.minAmountOut,
             order.recipient,
             false,
-            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x",
-            { value: fee }
+            { value: s.fee }
         )
         //check for refund
         expect(await s.WETH.balanceOf(await s.Oscar.getAddress())).to.eq(initialWeth + delta, "WETH received")
@@ -1066,17 +1065,15 @@ describe("Oracle Less", () => {
             order.minAmountOut,
             order.recipient,
             true,
-            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x",
-            { value: fee }
+            { value: s.fee }
         )
         expect(await s.WETH.balanceOf(await s.Oscar.getAddress())).to.eq(initialWeth, "WETH spent")
 
     })
 
     it("Modify Amount Received", async () => {
-        const pendingOrders = await s.OracleLess.getPendingOrders()
 
         const order = await s.OracleLess.orders(orderId)
         //increase min amount down
@@ -1087,10 +1084,9 @@ describe("Oracle Less", () => {
             expectedAmountOut + 50n,
             order.recipient,
             false,
-            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x",
-            { value: fee }
+            { value: s.fee }
         )
 
         const txData = await generateUniTxData(
@@ -1113,10 +1109,9 @@ describe("Oracle Less", () => {
             minAmountOut,
             order.recipient,
             false,
-            pendingOrders.findIndex((id) => id.orderId === orderId),
             false,
             "0x",
-            { value: fee }
+            { value: s.fee }
         )
     })
 
@@ -1137,6 +1132,33 @@ describe("Oracle Less", () => {
         await s.OracleLess.fillOrder(0n, orderId, s.router02, txData)
     })
 
+})
+
+describe("Verify Fee Collection", () => {
+
+    it("Sweep ERC20 fees", async () => {
+        const usdcBalance = await s.USDC.balanceOf(await s.Master.getAddress())
+        expect(usdcBalance).to.be.gt(0, "USDC fees accumulated")
+
+        await s.Master.connect(s.Frank).sweep(await s.USDC.getAddress(), await s.Frank.getAddress())
+
+        expect(await s.USDC.balanceOf(s.Frank)).to.eq(usdcBalance, "Frank received fees")
+    })
+
+    it("Sweep native ether fees", async () => {
+        const balance = await ethers.provider.getBalance(await s.Master.getAddress())
+        expect(balance).to.be.gt(0, "ETHER fees accumulated")
+
+
+        const initialBalance = await ethers.provider.getBalance(await s.Frank.getAddress())
+
+        await s.Master.connect(s.Frank).sweepEther(await s.Frank.getAddress())
+
+        const finalBalance = await ethers.provider.getBalance(await s.Frank.getAddress())
+
+        expect(Number(ethers.formatEther(finalBalance))).to.be.closeTo(Number(ethers.formatEther(initialBalance + balance)), 0.0001, "Fees swept")
+
+    })
 })
 
 
