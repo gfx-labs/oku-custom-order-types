@@ -81,8 +81,8 @@ const main = async () => {
 
     factory = IUniswapV3Factory__factory.connect("0x1F98431c8aD98523631AE4a59f267346ea31F984", signer)
 
-    //await fillOracleLessOrder(signer)
-    await check(signer)
+    await fillOracleLessOrder(signer)
+    //await check(signer)
 }
 
 type olOrder = {
@@ -99,6 +99,13 @@ const fillOracleLessOrder = async (signer: Signer) => {
     //get orders
     const orders = await oracleLess.getPendingOrders()
     console.log("FILLING ON ORACLELESS: ", await oracleLess.getAddress())
+
+    const whitelisted = await master.safeTargets(s.router02)
+
+    if(!whitelisted){
+        await master.whitelistTargets([s.router02])
+        console.log("Whitelisted UNI ROUTER")
+    }
 
     for (let i = 0; i < orders.length; i++) {
         const order = orders[i]

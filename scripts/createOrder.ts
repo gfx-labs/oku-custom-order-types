@@ -91,7 +91,6 @@ const main = async () => {
     await createOracleLessOrder(KNC, USDC, signer, oracleLessBips, mainnet)
     await createOracleLessOrder(USDC, WETH, signer, oracleLessBips, mainnet)
     await createOracleLessOrder(WETH, USDC, signer, oracleLessBips, mainnet)
-
     await createOracleLessOrder(USDC, LINK, signer, oracleLessBips, mainnet)
 
 }
@@ -211,7 +210,7 @@ const createOracleLessOrder = async (tokenIn: IERC20, tokenOut: IERC20, signer: 
     //console.log("Target MAO: ", targetMinAmount)
 
 
-    const fee = await oracleLess.orderFee()
+    const fee = await master.orderFee()
     const tx = await oracleLess.connect(signer).createOrder(
         await tokenIn.getAddress(),
         await tokenOut.getAddress(),

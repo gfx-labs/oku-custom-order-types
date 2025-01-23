@@ -27,6 +27,7 @@ const maxPendingOrders = 50
 const minOrderDollars = ethers.parseUnits("1", 8)
 
 
+
 let config: ChainConfig
 
 async function main() {
@@ -160,6 +161,10 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
         console.log(`Master deployed to ${config.name} @ ${await master.getAddress()}`)
         newMaster = true
         coreDeployments.master = await master.getAddress()
+        verifications.push({
+            address: await master.getAddress(),
+            constructorArguments: [protocolOwner]
+        })
 
         //register oracles
         //split oracle pairs
@@ -218,10 +223,7 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
         console.log(`OracleLess deployed to ${config.name} @ ${await oracleLess.getAddress()}`)
         coreDeployments.oracleLess = await oracleLess.getAddress()
 
-        //set fee
-        let tx = await oracleLess.setOrderFee(getFeeByChainId(config.chainId))
-        await tx.wait()
-        console.log("Set fee on Oracleless")
+        await whitelistTokens(oracleLess, addresses)
 
         verifications.push({
             address: await oracleLess.getAddress(),
@@ -238,12 +240,31 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
         )
         await tx.wait()
         console.log("Sub Keepers Registered to Master on ", config.name)
+
+        //set fee
+        tx = await master.setOrderFee(getFeeByChainId(config.chainId))
+        await tx.wait()
+        console.log("Set fee on Master")
+
         const result = await master.checkUpkeep("0x")
         console.log("Upkeep Needed: ", result.upkeepNeeded)
     }
 
     console.log("Core deployments complete for ", config.name)
     return coreDeployments
+
+}
+
+async function whitelistTokens(oracleLess: OracleLess, addresses: ChainAddresses) {
+
+    //all tokens, regardless if we have a relay or not
+    const tokens: tokenInfo[] = addresses.allTokens
+    const tokenAddresses = tokens.map(tokenInfo => tokenInfo.token);
+    const trueArray = Array(tokens.length).fill(true);
+
+    const tx = await oracleLess.whitelistTokens(tokenAddresses, trueArray)
+    await tx.wait()
+    console.log(`Whitelisted ${tokenAddresses.length} tokens on OracleLess`)
 
 }
 
