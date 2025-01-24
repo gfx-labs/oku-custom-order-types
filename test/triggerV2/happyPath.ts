@@ -31,13 +31,11 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         s.Oscar = s.signers[5]
         s.Gary = s.signers[6]
 
-
         s.UniPool = UniswapV3Pool__factory.connect(s.pool, s.Frank)
         s.WETH = IERC20__factory.connect(await s.UniPool.token0(), s.Frank)
         s.USDC = IERC20__factory.connect(await s.UniPool.token1(), s.Frank)
         s.ARB = IERC20__factory.connect("0x912CE59144191C1204E64559FE8253a0e49E6548", s.Frank)
         s.UNI = IERC20__factory.connect("0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0", s.Frank)
-
 
     })
 
@@ -283,7 +281,7 @@ describe("Execute Stop-Limit with swap on fill", () => {
     let charlesOrder: BigInt
     //setup
     before(async () => {
-        //steal money for s.Bob
+        //steal money 
         await stealMoney(s.usdcWhale, await s.Charles.getAddress(), await s.USDC.getAddress(), s.usdcAmount)
         //reset test oracle price
         await s.wethOracle.setPrice(s.initialEthPrice)
@@ -388,7 +386,7 @@ describe("Execute Stop-Limit with swap on fill", () => {
         //stop limit pending order removed
         expect((await s.StopLimit.getPendingOrders()).length).to.eq(0, "no pending orders left")
 
-        //stop loss limit order created
+        //bracket order created
         expect((await s.Bracket.getPendingOrders()).length).to.eq(1, "new pending order")
         const pendingOrders = await s.Bracket.getPendingOrders()
         expect(pendingOrders[0].orderId).to.eq(charlesOrder, "Charles's order is pending")
@@ -440,14 +438,10 @@ describe("Execute Stop-Limit with swap on fill", () => {
     it("Verify", async () => {
 
         expect((await s.Bracket.getPendingOrders()).length).to.eq(0, "no pending orders")
-
         //USDC received is not perfect as we do not attempt to manipulate the true uni pool price
         let balance = await s.USDC.balanceOf(await s.Charles.getAddress())
-        //expect(Number(ethers.formatUnits(balance, 6))).to.be.closeTo(Number(ethers.formatUnits(s.usdcAmount)), 10, "USDC received")
-        //console.log("todo")
-
-
-
+        expect(balance).to.be.closeTo(s.usdcAmount, 10000000, "USDC Received")
+        expect((await s.Bracket.getPendingOrders()).length).to.eq(0, "no pending orders left on Bracket")
     })
 })
 
@@ -474,6 +468,7 @@ describe("Execute Bracket Upkeep", () => {
     before(async () => {
         //steal money for s.Bob
         await stealMoney(s.usdcWhale, await s.Bob.getAddress(), await s.USDC.getAddress(), s.usdcAmount)
+        
         //reset test oracle price
         await s.wethOracle.setPrice(s.initialEthPrice)
         await s.usdcOracle.setPrice(s.initialUsdcPrice)
@@ -518,10 +513,9 @@ describe("Execute Bracket Upkeep", () => {
             ["tuple(address,uint256,address,uint32,bytes)"], // Struct as a tuple
             [swapParamsTuple]                                // Data as a single tuple
         );
-
         //check for minOrderSize
         expect(s.Bracket.connect(s.Bob).createOrder(
-            swapPayload,
+            "0x",
             currentPrice + strikeDelta,
             currentPrice - stopDelta,
             1n,//tiny input amount
@@ -551,7 +545,6 @@ describe("Execute Bracket Upkeep", () => {
             "0x",
             { value: s.fee }
         )
-
 
         const filter = s.Bracket.filters.OrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
@@ -664,6 +657,7 @@ describe("Execute Bracket Upkeep", () => {
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
     })
 })
+
 
 describe("Bracket order with order modification", () => {
 
@@ -885,8 +879,6 @@ describe("Bracket order with order modification", () => {
         //upkeep not needed
         check = await s.Master.checkUpkeep("0x")
         expect(check.upkeepNeeded).to.eq(false)
-        const newOrder = await s.Bracket.orders(orderId.toString())
-        expect(newOrder.direction).to.eq(!ogOrder.direction, "New order has inverted direction")
 
         //reset back to original for future tests
         await s.Bracket.connect(s.Bob).modifyOrder(
@@ -1160,5 +1152,6 @@ describe("Verify Fee Collection", () => {
 
     })
 })
+
 
 

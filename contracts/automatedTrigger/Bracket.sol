@@ -156,9 +156,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         require(inRange, "order ! in range");
 
         //deduce bips
-        uint16 bips;
-        takeProfit ? bips = order.takeProfitSlippage : bips = order
-            .stopSlippage;
+        uint16 bips = takeProfit
+            ? order.takeProfitSlippage
+            : order.stopSlippage;
 
         uint256[] memory initBalances = verifyTokenBalances(
             new uint256[](0),
@@ -213,10 +213,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         address recipient,
         uint16 existingFeeBips,
         uint16 takeProfitSlippage,
-        uint16 stopSlippage,
-        bool bracketDirection,
-        bool permit,
-        bytes calldata permitPayload
+        uint16 stopSlippage
     ) external override nonReentrant whenNotPaused {
         require(
             msg.sender == address(MASTER.STOP_LIMIT_CONTRACT()),
@@ -234,11 +231,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             existingFeeBips,
             takeProfitSlippage,
             stopSlippage,
-            bracketDirection
-                ? InitializeOrderDirection.TRUE
-                : InitializeOrderDirection.FALSE,
-            permit,
-            permitPayload
+            true, //flag for stop limit order
+            false,
+            new bytes(0)
         );
     }
 
@@ -269,7 +264,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             feeBips,
             takeProfitSlippage,
             stopSlippage,
-            InitializeOrderDirection.NEWORDER,
+            false,
             permit,
             permitPayload
         );
@@ -344,9 +339,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             feeBips: order.feeBips,
             takeProfitSlippage: _takeProfitSlippage,
             stopSlippage: _stopSlippage,
-            recipient: _recipient,
-            direction: MASTER.getExchangeRate(order.tokenIn, _tokenOut) >
-                _takeProfit
+            recipient: _recipient
         });
 
         //store new order
@@ -379,7 +372,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         uint256 amount,
         address tokenOwner,
         bool permit,
-        bytes calldata permitPayload
+        bytes memory permitPayload
     ) internal {
         if (permit) {
             require(amount < type(uint160).max, "uint160 overflow");
@@ -412,15 +405,10 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
-        InitializeOrderDirection direction,
+        bool stopLimit,
         bool permit,
-        bytes calldata permitPayload
+        bytes memory permitPayload
     ) internal {
-        //don't check minOrderSize when filling bracket order
-        if (direction == InitializeOrderDirection.NEWORDER) {
-            MASTER.checkMinOrderSize(tokenIn, amountIn);
-        }
-
         //determine if we are doing a swap first
         if (swapPayload.length != 0) {
             SwapParams memory swapParams = abi.decode(
@@ -447,7 +435,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
                 feeBips,
                 takeProfitSlippage,
                 stopSlippage,
-                direction
+                stopLimit
             );
         } else {
             //no swap
@@ -464,7 +452,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
                 feeBips,
                 takeProfitSlippage,
                 stopSlippage,
-                direction
+                stopLimit
             );
         }
     }
@@ -480,7 +468,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
-        InitializeOrderDirection direction
+        bool stopLimit
     ) internal {
         require(swapParams.swapSlippage <= 10000, "BIPS > 10k");
 
@@ -511,7 +499,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             feeBips,
             takeProfitSlippage,
             stopSlippage,
-            direction
+            stopLimit
         );
         //refund any unspent tokenIn
         //this should generally be 0 when using exact input for swaps, which is recommended
@@ -531,7 +519,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
-        InitializeOrderDirection direction
+        bool stopLimit
     ) internal {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
@@ -553,20 +541,14 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         require(tokenIn != tokenOut, "tokenIn == tokenOut");
         require(amountIn != 0, "amountIn == 0");
 
+        //don't check minOrderSize when filling stop limit order
+        if (!stopLimit) {
+            MASTER.checkMinOrderSize(tokenIn, amountIn);
+        }
+
         //generate random but unique order id if there is not an existing orderId from a stop limit order
         if (existingOrderId == 0) {
             existingOrderId = MASTER.generateOrderId(msg.sender);
-        }
-
-        //deduce direction if not pre-determined
-        bool finalDirection = false;
-        if (direction == InitializeOrderDirection.TRUE) {
-            finalDirection = true;
-        }
-        if (direction == InitializeOrderDirection.NEWORDER) {
-            //exchangeRate in/out > takeProfit
-            finalDirection =
-                MASTER.getExchangeRate(tokenIn, tokenOut) > takeProfit;
         }
 
         //construct order
@@ -580,8 +562,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             recipient: recipient,
             takeProfitSlippage: takeProfitSlippage,
             feeBips: feeBips,
-            stopSlippage: stopSlippage,
-            direction: finalDirection
+            stopSlippage: stopSlippage
         });
 
         //store pending order
@@ -680,8 +661,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         permit2.permit(owner, payload.permitSingle, payload.signature);
         permit2.transferFrom(owner, address(this), amount, token);
     }
+
     ///@notice determine @param order order is fillable
-    ///
     function checkInRange(
         Order memory order
     )
@@ -690,28 +671,23 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         returns (bool inRange, bool takeProfit, uint256 exchangeRate)
     {
         exchangeRate = MASTER.getExchangeRate(order.tokenIn, order.tokenOut);
-        if (order.direction) {
+
+        if (order.stopPrice > order.takeProfit) {
             //check for take profit price
             if (exchangeRate <= order.takeProfit) {
                 return (true, true, exchangeRate);
             }
             //check for stop price
-            if (exchangeRate >= order.stopPrice) {
-                if (exchangeRate >= order.takeProfit) {
-                    return (true, true, exchangeRate);
-                }
+            if (order.stopPrice <= exchangeRate) {
                 return (true, false, exchangeRate);
             }
         } else {
             //check for take profit price
-            if (exchangeRate >= order.takeProfit) {
+            if (order.takeProfit <= exchangeRate) {
                 return (true, true, exchangeRate);
             }
             //check for stop price
             if (exchangeRate <= order.stopPrice) {
-                if (exchangeRate <= order.takeProfit) {
-                    return (true, true, exchangeRate);
-                }
                 return (true, false, exchangeRate);
             }
         }

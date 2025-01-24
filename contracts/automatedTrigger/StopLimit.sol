@@ -168,7 +168,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
             //for swap on fill, we expect to be paid out in the same asset we provided
             //so the resulting order tokenIn and tokenOut are inverted relative to our original swap limit order
             SwapParams memory params = SwapParams({
-                swapTokenIn: order.tokenIn, //asset provided
+                swapTokenIn: order.tokenIn, 
                 swapAmountIn: order.amountIn,
                 swapTarget: data.target,
                 swapSlippage: order.swapSlippage,
@@ -192,10 +192,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
             order.recipient,
             order.feeBips,
             order.takeProfitSlippage,
-            order.stopSlippage,
-            order.bracketDirection,
-            false, //permit
-            "0x" //permitPayload
+            order.stopSlippage
         );
 
         //approve 0
@@ -353,8 +350,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
             recipient: _recipient,
             direction: MASTER.getExchangeRate(order.tokenIn, _tokenOut) >
                 _stopLimitPrice,
-            bracketDirection: MASTER.getExchangeRate(order.tokenIn, _tokenOut) >
-                _takeProfit,
             swapOnFill: _swapOnFill
         });
 
@@ -435,8 +430,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
             recipient: recipient,
             direction: MASTER.getExchangeRate(tokenIn, tokenOut) >
                 stopLimitPrice, //compare to stop price for this order's direction
-            bracketDirection: MASTER.getExchangeRate(tokenIn, tokenOut) >
-                takeProfit,
             swapOnFill: swapOnFill
         });
 
