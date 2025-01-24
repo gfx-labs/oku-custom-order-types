@@ -129,7 +129,6 @@ interface IStopLimit is IAutomation {
         uint16 stopSlippage;
         uint16 swapSlippage;
         bool direction;
-        bool bracketDirection;
         bool swapOnFill;
     }
     function pause(bool) external;
@@ -214,7 +213,6 @@ interface IBracket is IAutomation {
     ///@param feeBips optional fee, raw basis points, taken in @param tokenOut
     ///@param takeProfitSlippage raw bips used to determine slippage for resulting Bracket order once @param takeProfit is reached
     ///@param stopSlippage raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
-    ///@param direction determines the expected direction of price movement
     struct Order {
         uint256 takeProfit; //defined by exchange rate of tokenIn / tokenOut
         uint256 stopPrice;
@@ -226,7 +224,6 @@ interface IBracket is IAutomation {
         uint16 feeBips;
         uint16 takeProfitSlippage; //slippage if order is filled
         uint16 stopSlippage; //slippage of stop price is reached
-        bool direction; //true if initial exchange rate > takeProfit price
     }
 
     function pause(bool) external;
@@ -273,10 +270,7 @@ interface IBracket is IAutomation {
         address recipient,
         uint16 existingFeeBips,
         uint16 takeProfitSlippage,
-        uint16 stopSlippage,
-        bool bracketDirection,
-        bool permit,
-        bytes calldata permitPayload
+        uint16 stopSlippage
     ) external;
 
     ///@param orderId unique id to reference the order being modified
