@@ -201,7 +201,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
             (order.tokenIn.allowance(address(this), address(BRACKET_CONTRACT)))
         );
 
-        emit OrderProcessed(order.orderId);
+        emit StopLimitOrderProcessed(order.orderId);
     }
 
     ///@notice see @IStopLimit
@@ -355,6 +355,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
 
         //store new order
         orders[orderId] = newOrder;
+
+        emit StopLimitOrderModified(orderId);
     }
 
     ///@notice allow administrator to cancel any order
@@ -437,7 +439,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         dataSet.add(orderId);
 
         //emit
-        emit OrderCreated(orderId);
+        emit StopLimitOrderCreated(orderId);
     }
 
     function _cancelOrder(Order memory order, bool refund) internal {
@@ -449,7 +451,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
             order.tokenIn.safeTransfer(order.recipient, order.amountIn);
         }
         //emit event
-        emit OrderCancelled(order.orderId);
+        emit StopLimitOrderCancelled(order.orderId);
     }
 
     ///@notice handle signature and acquisition of asset with permit2

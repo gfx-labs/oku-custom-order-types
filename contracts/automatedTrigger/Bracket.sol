@@ -199,7 +199,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         }
 
         //emit
-        emit OrderProcessed(order.orderId, adjustedAmount, tokenInRefund);
+        emit BracketOrderProcessed(order.orderId, adjustedAmount, tokenInRefund);
     }
 
     function fillStopLimitOrder(
@@ -344,6 +344,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
 
         //store new order
         orders[orderId] = newOrder;
+
+        emit BracketOrderModified(orderId);
     }
 
     ///@notice allow administrator to cancel any order
@@ -568,7 +570,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         //store pending order
         dataSet.add(existingOrderId);
 
-        emit OrderCreated(existingOrderId);
+        emit BracketOrderCreated(existingOrderId);
     }
 
     function _cancelOrder(Order memory order, bool refund) internal {
@@ -580,7 +582,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             order.tokenIn.safeTransfer(order.recipient, order.amountIn);
         }
         //emit event
-        emit OrderCancelled(order.orderId);
+        emit BracketOrderCancelled(order.orderId);
     }
 
     ///@notice execute swap transaction

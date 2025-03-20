@@ -763,16 +763,21 @@ export class OptimisimAddresses extends ChainAddresses {
         bracket: '0xB1C1E10b2525Aa3f6E1298538F2B53AAfBD6E378',
         stopLimit: '0xC727477b2Ff7C92abFC75b74531a6C3d36b1D467',
         oracleLess: '0x48eA18dba592550aBDf53De4D98A97C3A09d1923'
+
+        master: '0x6A8A7b6d85064744A02d41d6D7F5ecD7b77fe6C2',
+        bracket: '0xC403Bd2e26c81049d73600Df1424ce53a945f124',
+        stopLimit: '0xb6D84CF63D503CE9068F91775b5F3e32D89F21D5',
+        oracleLess: '0xbBC8A0c5358eEb3A11bc4aF4d03231F95913ee8e'
     };
      */
 
 
     //testing deploys
     readonly coreDeployments = {
-        master: '0x6A8A7b6d85064744A02d41d6D7F5ecD7b77fe6C2',
-        bracket: '0xC403Bd2e26c81049d73600Df1424ce53a945f124',
-        stopLimit: '0xb6D84CF63D503CE9068F91775b5F3e32D89F21D5',
-        oracleLess: '0xbBC8A0c5358eEb3A11bc4aF4d03231F95913ee8e'
+        master: '',
+        bracket: '',
+        stopLimit: '',
+        oracleLess: ''
     };
 }
 export class ZkSyncAddresses extends ChainAddresses {

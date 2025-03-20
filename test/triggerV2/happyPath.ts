@@ -1,14 +1,13 @@
-import { AutomationMaster__factory, Bracket__factory, IERC20__factory, IPermit2__factory, OracleLess, OracleLess__factory, PlaceholderOracle__factory, StopLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
-import { currentBlock, hardhat_mine, hardhat_mine_timed, resetCurrentArbBlock } from "../../util/block"
+import { AutomationMaster__factory, Bracket__factory, IERC20__factory, OracleLess__factory, PlaceholderOracle__factory, StopLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
+import { currentBlock, hardhat_mine_timed, resetCurrentArbBlock } from "../../util/block"
 import { expect } from "chai"
 import { stealMoney } from "../../util/money"
-import { decodeUpkeepData, generateUniTx, generateUniTxData, getGas, MasterUpkeepData, permitSingle } from "../../util/msc"
+import { decodeUpkeepData, generateUniTx, generateUniTxData, getGas, MasterUpkeepData } from "../../util/msc"
 import { s, SwapParams } from "./scope"
 import { DeployContract } from "../../util/deploy"
 import { ethers } from "hardhat"
 import { a } from "../../util/addresser"
-import { AllowanceTransfer } from "@uniswap/permit2-sdk"
-import { AbiCoder, TypedDataDomain } from "ethers"
+import { AbiCoder } from "ethers"
 
 const abiCoder = new ethers.AbiCoder();
 
@@ -152,7 +151,7 @@ describe("Execute Stop-Limit Upkeep", () => {
             { value: s.fee }
         )
 
-        const filter = s.StopLimit.filters.OrderCreated
+        const filter = s.StopLimit.filters.StopLimitOrderCreated
         const events = await s.StopLimit.queryFilter(filter, -1)
         const event = events[0].args
         orderId = (event[0])
@@ -228,7 +227,7 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect((await s.StopLimit.getPendingOrders()).length).to.eq(0, "no pending orders left")
 
         //stop-limit order filled event
-        const Filter = s.StopLimit.filters.OrderProcessed
+        const Filter = s.StopLimit.filters.StopLimitOrderProcessed
         const Events = await s.StopLimit.queryFilter(Filter, -1)
         const Event = Events[0].args
         expect(Event.orderId).to.eq(orderId, "Order Id correct")
@@ -242,7 +241,7 @@ describe("Execute Stop-Limit Upkeep", () => {
         expect(check.upkeepNeeded).to.eq(false, "no upkeep is needed anymore")
 
 
-        const filter = s.Bracket.filters.OrderCreated
+        const filter = s.Bracket.filters.BracketOrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         expect(event[0]).to.eq(orderId, "First order Id")
@@ -310,7 +309,7 @@ describe("Execute Stop-Limit with swap on fill", () => {
             { value: s.fee }
         )
 
-        const filter = s.StopLimit.filters.OrderCreated
+        const filter = s.StopLimit.filters.StopLimitOrderCreated
         const events = await s.StopLimit.queryFilter(filter, -1)
         const event = events[0].args
         charlesOrder = event[0]
@@ -374,7 +373,7 @@ describe("Execute Stop-Limit with swap on fill", () => {
 
         console.log("Gas to performUpkeep: ", await getGas(await s.Master.performUpkeep(encodedTxData)))
 
-        const filter = s.Bracket.filters.OrderCreated
+        const filter = s.Bracket.filters.BracketOrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         expect(event[0]).to.eq(charlesOrder, "Charles order")
@@ -546,7 +545,7 @@ describe("Execute Bracket Upkeep", () => {
             { value: s.fee }
         )
 
-        const filter = s.Bracket.filters.OrderCreated
+        const filter = s.Bracket.filters.BracketOrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         orderId = event[0]
@@ -643,7 +642,7 @@ describe("Execute Bracket Upkeep", () => {
         expect((await s.Bracket.getPendingOrders()).length).to.eq(0, "no pending orders left")
 
         //event
-        const filter = s.Bracket.filters.OrderProcessed
+        const filter = s.Bracket.filters.BracketOrderProcessed
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         expect(event.orderId).to.eq(orderId, "Order Id correct")
@@ -740,7 +739,7 @@ describe("Bracket order with order modification", () => {
             { value: s.fee }
         )
 
-        const filter = s.Bracket.filters.OrderCreated
+        const filter = s.Bracket.filters.BracketOrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         expect(Number(event[0])).to.not.eq(0, "Fourth order")
@@ -967,7 +966,7 @@ describe("Bracket order with order modification", () => {
         expect((await s.Bracket.getPendingOrders()).length).to.eq(0, "no pending orders left")
 
         //event
-        const filter = s.Bracket.filters.OrderProcessed
+        const filter = s.Bracket.filters.BracketOrderProcessed
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         expect(event.orderId).to.eq(orderId, "Order Id correct")

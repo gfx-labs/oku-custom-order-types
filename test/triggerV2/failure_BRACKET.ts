@@ -58,7 +58,7 @@ describe("Test for failure - BRACKET", () => {
         )
 
 
-        const filter = s.Bracket.filters.OrderCreated
+        const filter = s.Bracket.filters.BracketOrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         steveOrder = event[0]
@@ -172,7 +172,7 @@ describe("Test for failure - BRACKET", () => {
 
         //confirm pending order to be executed is steve's order
 
-        const filter = s.Bracket.filters.OrderCreated
+        const filter = s.Bracket.filters.BracketOrderCreated
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         steveOrder = event[0]

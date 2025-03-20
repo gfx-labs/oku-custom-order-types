@@ -64,11 +64,6 @@ interface IAutomation is AutomationCompatibleInterface {
         uint256 exchangeRate;
         bytes txData;
     }
-
-    event OrderProcessed(uint96 orderId);
-    event OrderCreated(uint96 orderId);
-    event OrderModified(uint96 orderId);
-    event OrderCancelled(uint96 orderId);
 }
 
 interface IAutomationMaster is IAutomation {
@@ -100,6 +95,11 @@ interface IAutomationMaster is IAutomation {
 ///@notice Stop Limit orders create a new bracket order once filled
 /// the resulting bracket order will have the same unique order ID but will exist on the Bracket contract
 interface IStopLimit is IAutomation {
+    event StopLimitOrderCreated(uint96 orderId);
+    event StopLimitOrderModified(uint96 orderId);
+    event StopLimitOrderCancelled(uint96 orderId);
+    event StopLimitOrderProcessed(uint96 orderId);
+
     ///@notice StopLimit orders create a new bracket order once @param stopLimitPrice is reached
     ///@param stopLimitPrice execution price to fill the Stop Limit order
     ///@param takeProfit execution price for resulting Bracket order
@@ -201,8 +201,14 @@ interface IStopLimit is IAutomation {
 }
 
 interface IBracket is IAutomation {
-
-    event OrderProcessed(uint96 orderId, uint256 amountOut, uint256 tokenInRefund);
+    event BracketOrderCreated(uint96 orderid);
+    event BracketOrderProcessed(
+        uint96 orderId,
+        uint256 amountOut,
+        uint256 tokenInRefund
+    );
+    event BracketOrderCancelled(uint96 orderId);
+    event BracketOrderModified(uint96 orderId);
 
     ///@notice Bracket orders are filled when either @param takeProfit or @param stopPrice are reached,
     /// at which time @param tokenIn is swapped for @param tokenOut

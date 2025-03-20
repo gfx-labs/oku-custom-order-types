@@ -6,8 +6,9 @@ import { resetGeneric } from "../util/block";
 import { setBalance } from "@nomicfoundation/hardhat-network-helpers";
 import { impersonateAccount } from "../util/impersonator";
 import { ChainAddresses, getAddressesByChainId, getFeeByChainId, tokenInfo } from "../util/deploymentAddresses";
-import { AutomationMaster, AutomationMaster__factory, Bracket, Bracket__factory, IAutomationMaster__factory, OracleLess, OracleLess__factory, OracleRelay__factory, StopLimit, StopLimit__factory } from "../typechain-types";
+import { AutomationMaster, AutomationMaster__factory, Bracket, Bracket__factory, IAutomationMaster__factory, oracle, OracleLess, OracleLess__factory, OracleRelay__factory, StopLimit, StopLimit__factory } from "../typechain-types";
 import { network } from "hardhat"
+import { expect } from "chai";
 
 const { ethers } = require("hardhat");
 let mainnet = true
@@ -25,6 +26,28 @@ const userAddr = "0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89"
 const protocolOwner = "0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89"//"0x00a0bB9dfD2db3a6E447147426aB2D1B5Ac356d5"
 const maxPendingOrders = 150
 const minOrderDollars = ethers.parseUnits("1", 8)
+
+//whitelisters
+const whitelisters: string[] = [
+    "0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89",
+    "0xec89a5dd6c179c345EA7996AA879E59cB18c8484",
+    "0x00a0bB9dfD2db3a6E447147426aB2D1B5Ac356d5",
+    "0x9B68c14e936104e9a7a24c712BEecdc220002984",
+    "0x5227a7404631Eb7De411232535E36dE8dad318f0"
+]
+
+//white listed targets
+const whiteListedTargets: string[] = [
+    "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5",
+    "0xf332761c673b59B21fF6dfa8adA44d78c12dEF09",
+    "0x111111125421cA6dc452d289314280a0f8842A65",
+    "0xCa423977156BB05b13A2BA3b76Bc5419E2fE9680",
+    "0x6352a56caadC4F1E25CD6c75970Fa768A3304e64",
+    "0xCb1355ff08Ab38bBCE60111F1bb2B784bE25D7e8",
+    "0x70cA548cF343B63E5B0542F0F3EC84c61Ca1086f",
+    "0x80EbA3855878739F4710233A8a19d89Bdd2ffB8E"
+]
+
 
 
 
@@ -226,6 +249,11 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
 
         await whitelistTokens(oracleLess, addresses)
 
+        //pause
+        let result = await oracleLess.pause(true)
+        await result.wait()
+        console.log("ORACLELESS PAUSED")
+
         verifications.push({
             address: await oracleLess.getAddress(),
             constructorArguments: [coreDeployments.master, addresses.permit2, protocolOwner]
@@ -247,8 +275,21 @@ const deployContracts = async (signer: Signer, config: ChainConfig, addresses: C
         await tx.wait()
         console.log("Set fee on Master")
 
+        //whitelist target setters
+        for (let i = 0; i < whitelisters.length; i++) {
+            let tx = await master.whitelistTargetSetter(whitelisters[i], true)
+            await tx.wait()
+        }
+        console.log("Whitelisted Target Setters: ", whitelisters)
+
+        //whitelist targets
+        tx = await master.whitelistTargets(whiteListedTargets)
+        await tx.wait()
+        console.log("Whitelisted targets: ", whiteListedTargets)
+
+        //check upkeep
         const result = await master.checkUpkeep("0x")
-        console.log("Upkeep Needed: ", result.upkeepNeeded)
+        expect(result.upkeepNeeded).to.equal(false, "Upkeep Needed")
     }
 
     console.log("Core deployments complete for ", config.name)
