@@ -22,8 +22,8 @@ let verifications: verification[] = []
 //set these
 const testingNetworkChainId = 10
 const userAddr = "0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89"
-const protocolOwner = "0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89"
-const maxPendingOrders = 50
+const protocolOwner = "0x085909388fc0cE9E5761ac8608aF8f2F52cb8B89"//"0x00a0bB9dfD2db3a6E447147426aB2D1B5Ac356d5"
+const maxPendingOrders = 150
 const minOrderDollars = ethers.parseUnits("1", 8)
 
 
@@ -40,9 +40,10 @@ async function main() {
         mainnet = false
         chainId = testingNetworkChainId
     } else {
-        console.log("DEPLOYING TO LIVE NETWORK: ", networkName)
+        console.log("DEPLOYING TO LIVE NETWORK: ", networkName,)
         const network = await ethers.provider.getNetwork()
         chainId = Number(network.chainId)
+        console.log("Chain: ", chainId)
     }
 
     //get config
@@ -52,10 +53,10 @@ async function main() {
     if (!mainnet) {
         //reset generic
         try {
-            console.log(`Resetting network to ${config.name}`)
+            console.log(`Resetting network to ${config.name} ${config.rpcUrl}`)
             await resetGeneric(config.rpcUrl)
         } catch (e) {
-            console.log("Resseting RPC failed for ", config.name)
+            console.log("Resseting RPC failed for ", config.name, e)
             process.exit(1)
         }
         signer = await ethers.getSigner(userAddr)

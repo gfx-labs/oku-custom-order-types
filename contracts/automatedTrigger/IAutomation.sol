@@ -201,6 +201,9 @@ interface IStopLimit is IAutomation {
 }
 
 interface IBracket is IAutomation {
+
+    event OrderProcessed(uint96 orderId, uint256 amountOut, uint256 tokenInRefund);
+
     ///@notice Bracket orders are filled when either @param takeProfit or @param stopPrice are reached,
     /// at which time @param tokenIn is swapped for @param tokenOut
     ///@param takeProfit execution price for resulting Bracket order

@@ -199,7 +199,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         }
 
         //emit
-        emit OrderProcessed(order.orderId);
+        emit OrderProcessed(order.orderId, adjustedAmount, tokenInRefund);
     }
 
     function fillStopLimitOrder(

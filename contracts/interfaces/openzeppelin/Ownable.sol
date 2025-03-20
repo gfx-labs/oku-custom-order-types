@@ -20,7 +20,12 @@ import "./Context.sol";
 abstract contract Ownable is Context {
     address private _owner;
 
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    bool private transferred;
+
+    event OwnershipTransferred(
+        address indexed previousOwner,
+        address indexed newOwner
+    );
 
     /**
      * @dev Initializes the contract setting the deployer as the initial owner.
@@ -65,14 +70,16 @@ abstract contract Ownable is Context {
     /**
      * @dev Transfers ownership of the contract to a new account (`newOwner`).
      * Can only be called by the current owner.
-     * REMOVED: This function is removed to prevent ownership transfer after deployment
-     *
-     * function transferOwnership(address newOwner) public virtual onlyOwner {
-     *  require(newOwner != address(0), "Ownable: new owner is the zero address");
-     *  _transferOwnership(newOwner);
-     * }
      */
-    
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(
+            newOwner != address(0),
+            "Ownable: new owner is the zero address"
+        );
+        require(!transferred, "Already Transferred");
+        transferred = true;
+        _transferOwnership(newOwner);
+    }
 
     /**
      * @dev Transfers ownership of the contract to a new account (`newOwner`).
