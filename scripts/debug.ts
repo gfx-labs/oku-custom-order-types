@@ -36,6 +36,7 @@ let factory: IUniswapV3Factory
 let WETH: IERC20
 let USDC: IERC20
 
+///discrepency block: 135046696
 const main = async () => {
     console.log("STARTING")
     let networkName = hre.network.name
@@ -44,7 +45,6 @@ const main = async () => {
     chainId = Number(network.chainId)
 
     let [signer] = await ethers.getSigners()
-
 
     if (networkName == "hardhat" || networkName == "localhost") {
         networkName = testingNetwork

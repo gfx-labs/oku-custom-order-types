@@ -147,7 +147,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         require(inRange, "order ! in range");
 
         //remove from pending dataSet
-        dataSet.remove(order.orderId);
+        require(dataSet.remove(order.orderId), "order not active");
 
         //approve 0
         order.tokenIn.safeDecreaseAllowance(
@@ -444,7 +444,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
 
     function _cancelOrder(Order memory order, bool refund) internal {
         //remove from pending set
-        dataSet.remove(order.orderId);
+        require(dataSet.remove(order.orderId), "order not active");
 
         //refund tokenIn amountIn to recipient
         if (refund) {

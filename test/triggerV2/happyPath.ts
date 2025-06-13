@@ -1008,7 +1008,7 @@ describe("Oracle Less", () => {
             "0x",
             { value: s.fee }
         )
-        const filter = s.OracleLess.filters.OrderCreated
+        const filter = s.OracleLess.filters.OracleLessOrderCreated
         const events = await s.OracleLess.queryFilter(filter, -1)
         const event = events[0].args
         expect(Number(event[0])).to.not.eq(0, "New order")

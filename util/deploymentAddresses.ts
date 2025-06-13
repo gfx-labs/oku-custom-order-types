@@ -14,10 +14,10 @@ export abstract class ChainAddresses {
     ]
 
     readonly coreDeployments = {
-        master: "",
-        bracket: "",
-        stopLimit: "",
-        oracleLess: "",
+        master: '0x02b4dB6FE23386BCaC71D15aDA3814A45210Dd00',
+        bracket: '0x1D718B430aCF5E385024162Da9Cd27bed7c02EC1',
+        stopLimit: '0x03d58de2EE76515340F8Ac0dFCccf9BaEd4d39d5',
+        oracleLess: '0x40c81Dc7B6374E97C697Acc64F2495054de47300'
     };
 }
 export class MainnetAddresses extends ChainAddresses {

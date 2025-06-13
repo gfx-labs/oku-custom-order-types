@@ -149,7 +149,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
 
         orderCount++;
 
-        emit OrderCreated(orderId, orderCount);
+        emit OracleLessOrderCreated(orderId, orderCount);
     }
 
     ///@notice allow administrator to cancel any order
@@ -196,7 +196,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
             permit,
             permitPayload
         );
-        emit OrderModified(orderId);
+        emit OracleLessOrderModified(orderId);
     }
 
     function fillOrder(
@@ -225,7 +225,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
 
         //handle accounting
         //remove from pending dataSet
-        dataSet.remove(order.orderId);
+        require(dataSet.remove(order.orderId), "order not active");
 
         //handle fee
         (uint256 feeAmount, uint256 adjustedAmount) = applyFee(
@@ -244,18 +244,24 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         if (tokenInRefund != 0) {
             order.tokenIn.safeTransfer(order.recipient, tokenInRefund);
         }
+
+        emit OracleLessOrderProcessed(
+            order.orderId,
+            adjustedAmount,
+            tokenInRefund
+        );
     }
 
     function _cancelOrder(Order memory order, bool refund) internal {
         //remove from pending set
-        dataSet.remove(order.orderId);
+        require(dataSet.remove(order.orderId), "order not active");
 
         //refund tokenIn amountIn to recipient
         if (refund) {
             order.tokenIn.safeTransfer(order.recipient, order.amountIn);
         }
         //emit event
-        emit OrderCancelled(order.orderId);
+        emit OracleLessOrderCancelled(order.orderId);
     }
 
     function _modifyOrder(
@@ -427,9 +433,13 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         }
     }
 
-    function getWhitelistedTokens() internal view returns (IERC20[] memory tokens) {
+    function getWhitelistedTokens()
+        internal
+        view
+        returns (IERC20[] memory tokens)
+    {
         uint256 length = uniqueTokens.length();
-       tokens = new IERC20[](length);
+        tokens = new IERC20[](length);
 
         for (uint256 i = 0; i < length; i++) {
             tokens[i] = IERC20(uniqueTokens.at(i));

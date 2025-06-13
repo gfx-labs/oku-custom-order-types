@@ -311,10 +311,14 @@ interface IBracket is IAutomation {
 }
 
 interface IOracleLess {
-    event OrderCreated(uint96 orderId, uint96 index);
-    event OrderCancelled(uint96 orderId);
-    event OrderModified(uint96 orderId);
-    event OrderProcessed(uint96 orderId);
+    event OracleLessOrderCreated(uint96 orderId, uint96 index);
+    event OracleLessOrderCancelled(uint96 orderId);
+    event OracleLessOrderModified(uint96 orderId);
+    event OracleLessOrderProcessed(
+        uint96 orderId,
+        uint256 amountOut,
+        uint256 tokenInRefund
+    );
 
     ///@notice force a revert if the external call fails
     error TransactionFailed(bytes reason);

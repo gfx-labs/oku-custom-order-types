@@ -177,7 +177,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
 
         //handle accounting
         //remove from pending dataSet
-        dataSet.remove(order.orderId);
+        require(dataSet.remove(order.orderId), "order not active");
 
         //handle fee
         (uint256 feeAmount, uint256 adjustedAmount) = applyFee(
@@ -199,7 +199,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         }
 
         //emit
-        emit BracketOrderProcessed(order.orderId, adjustedAmount, tokenInRefund);
+        emit BracketOrderProcessed(
+            order.orderId,
+            adjustedAmount,
+            tokenInRefund
+        );
     }
 
     function fillStopLimitOrder(
@@ -575,7 +579,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
 
     function _cancelOrder(Order memory order, bool refund) internal {
         //remove from pending set
-        dataSet.remove(order.orderId);
+        require(dataSet.remove(order.orderId), "order not active");
 
         //refund tokenIn amountIn to recipient
         if (refund) {

@@ -38,15 +38,15 @@ const whitelisters: string[] = [
 
 //white listed targets
 const whiteListedTargets: string[] = [
-    "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5",
-    "0xf332761c673b59B21fF6dfa8adA44d78c12dEF09",
-    "0x111111125421cA6dc452d289314280a0f8842A65",
-    "0xCa423977156BB05b13A2BA3b76Bc5419E2fE9680",
-    "0x6352a56caadC4F1E25CD6c75970Fa768A3304e64",
-    "0xCb1355ff08Ab38bBCE60111F1bb2B784bE25D7e8",
-    "0x70cA548cF343B63E5B0542F0F3EC84c61Ca1086f",
-    "0x80EbA3855878739F4710233A8a19d89Bdd2ffB8E"
-]
+    "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5", // KyberSwap: Aggregator Router
+    "0xf332761c673b59B21fF6dfa8adA44d78c12dEF09", // OpenOcean: Router V2
+    "0x111111125421cA6dc452d289314280a0f8842A65", // 1inch: Aggregation Router V5
+    "0xCa423977156BB05b13A2BA3b76Bc5419E2fE9680", // ParaSwap: Augustus Swapper v6
+    "0x6352a56caadC4F1E25CD6c75970Fa768A3304e64", // SushiSwap: Router
+    "0xCb1355ff08Ab38bBCE60111F1bb2B784bE25D7e8", // Curve.fi: Swap Router / Registry (often interacts with pools)
+    "0x70cA548cF343B63E5B0542F0F3EC84c61Ca1086f", // WOOFi Swap Router
+    "0x80EbA3855878739F4710233A8a19d89Bdd2ffB8E"  // Hashflow: Router
+];
 
 
 
