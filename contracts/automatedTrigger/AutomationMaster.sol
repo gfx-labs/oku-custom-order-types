@@ -3,7 +3,6 @@ pragma solidity ^0.8.19;
 
 import "./IAutomation.sol";
 import "../oracle/IPythRelay.sol";
-import "../libraries/ArrayMutation.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/ERC20.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
@@ -17,10 +16,10 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    ///@notice maximum pending orders that may exist at a time, limiting the compute requriement for checkUpkeep
+    ///@notice maximum pending orders that may exist at a time, limiting the compute requirement for checkUpkeep
     uint16 public maxPendingOrders;
 
-    ///@notice minumum USD value required to create a new order, in 1e8 terms
+    ///@notice minimum USD value required to create a new order, in 1e8 terms
     uint256 public minOrderSize;
 
     ///@notice fee to create an order, in order to deter spam
@@ -38,7 +37,6 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
 
     ///each token must have a registered oracle in order to be tradable
     mapping(IERC20 => IPythRelay) public oracles;
-    mapping(IERC20 => bytes32) public pythIds;
     mapping(address => uint96) private nonces;
 
     EnumerableSet.AddressSet private uniqueTokens;
@@ -99,7 +97,7 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     }
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
-    ///@notice to delist a token, the oracle address in the array should be set to address(0x0)
+    ///@notice to delist a token, the oracle address in the array should be set to address(0)
     function registerOracle(
         IERC20[] calldata _tokens,
         IPythRelay[] calldata _oracles
@@ -112,8 +110,8 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
 
             oracles[token] = oracle;
 
-            if (address(oracle) == address(0x0)) {
-                // Remove the token from the unique set if oracle is address(0x0)
+            if (address(oracle) == address(0)) {
+                // Remove the token from the unique set if oracle is address(0)
                 uniqueTokens.remove(address(token));
             } else {
                 // Add the token to the unique set otherwise
@@ -221,7 +219,7 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
         // Calculate the fair amount out without slippage
         uint256 fairAmountOut = (adjustedAmountIn * exchangeRate) / 1e8;
 
-        // Apply slippage - 10000 bips is equivilant to 100% slippage
+        // Apply slippage - 10000 bips is equivalent to 100% slippage
         return (fairAmountOut * (10000 - slippageBips)) / 10000;
     }
 
@@ -246,7 +244,7 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     }
 
     ///@notice determine if a new order meets the minimum order size requirement
-    ///Value of @param amountIn of @param tokenIn must meed the minimum USD value
+    ///Value of @param amountIn of @param tokenIn must meet the minimum USD value
     function checkMinOrderSize(
         IERC20 tokenIn,
         uint256 amountIn
@@ -292,13 +290,10 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
             (MasterUpkeepData)
         );
 
-        //if stop order, we directly pass the upkeep data to the stop order contract
+        //call appropriate contract
         if (data.orderType == OrderType.STOP_LIMIT) {
             STOP_LIMIT_CONTRACT.performUpkeep(performData);
-        }
-
-        //if bracket, we directly pass the upkeep data to the bracket order contract
-        if (data.orderType == OrderType.BRACKET) {
+        } else if (data.orderType == OrderType.BRACKET) {
             BRACKET_CONTRACT.performUpkeep(performData);
         }
     }

@@ -2,9 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "./IAutomation.sol";
-import "../interfaces/uniswapV3/UniswapV3Pool.sol";
 import "../interfaces/uniswapV3/IPermit2.sol";
-import "../interfaces/uniswapV3/ISwapRouter02.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/SafeERC20.sol";
@@ -13,9 +11,9 @@ import "../interfaces/openzeppelin/Pausable.sol";
 import "../interfaces/openzeppelin/EnumerableSet.sol";
 
 ///@notice This contract owns and handles all logic associated with the following order types:
-/// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independant slippapge for each option
+/// BRACKET_ORDER - automated fill at a fixed takeProfit price OR stop price, with independent slippage for each option
 /// LIMIT_ORDER - BRACKET_ORDER at specified take profit price, with STOP set to 0
-/// STOP_ORDER - BRACKET_ORDER at specified stop price, with take profit set to 2 ** 256 - 1
+/// STOP_ORDER - BRACKET_ORDER at specified stop price, with take profit set to type(uint256).max
 /// In order to configure a LIMIT_ORDER or STOP_ORDER, simply set the take profit or stop price to either 0 for the lower bound or 2^256 - 1 for the upper bound
 contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
@@ -99,7 +97,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
                 length = uint96(dataSet.length());
             }
         }
-        for (i; i < dataSet.length(); i++) {
+        for (i; i < length; i++) {
             Order memory order = orders[uint96(dataSet.at(i))];
             (
                 bool inRange,
@@ -133,10 +131,10 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     ///@notice recipient of swap should be this contract,
     ///as we need to account for tokens received.
     ///This contract will then forward the tokens to the user
-    /// target refers to some contract where when we send @param performData,
+    ///target refers to some contract where when we send @param performData,
     ///that contract will exchange our tokenIn for tokenOut with at least minAmountReceived
-    /// pendingOrderIdx is the index of the pending order we are executing,
-    ///this pending order is removed from the array via array mutation
+    ///pendingOrderIdx is the index of the pending order we are executing,
+    ///pending order is removed from the active set.
     function performUpkeep(
         bytes calldata performData
     ) external override nonReentrant whenNotPaused {
@@ -144,12 +142,9 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             performData,
             (MasterUpkeepData)
         );
-        Order memory order = orders[uint96(dataSet.at(data.pendingOrderIdx))];
-
-        require(
-            order.orderId == uint96(dataSet.at(data.pendingOrderIdx)),
-            "Order Fill Mismatch"
-        );
+        uint96 orderIdFromSet = uint96(dataSet.at(data.pendingOrderIdx));
+        require(orderIdFromSet == data.orderId, "Order Fill Mismatch");
+        Order memory order = orders[data.orderId];
 
         //deduce if we are filling stop or take profit
         (bool inRange, bool takeProfit, ) = checkInRange(order);
@@ -294,7 +289,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
 
         //only order owner
         require(msg.sender == order.recipient, "only order owner");
-        require(_recipient != address(0x0), "recipient == zero address");
+        require(_recipient != address(0), "recipient == zero address");
 
         //deduce any amountIn changes
         uint256 newAmountIn = order.amountIn;
@@ -310,7 +305,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
                 );
             } else {
                 //ensure delta is valid
-                require(amountInDelta < order.amountIn, "invalid delta");
+                require(amountInDelta <= order.amountIn, "invalid delta");
 
                 //set new amountIn for accounting
                 newAmountIn -= amountInDelta;
@@ -323,10 +318,15 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             }
         }
 
+        require(
+            _takeProfitSlippage <= 10000 && _stopSlippage <= 10000,
+            "BIPS > 10k"
+        );
+
         //check for oracles
         if (_tokenOut != order.tokenOut) {
             require(
-                address(MASTER.oracles(_tokenOut)) != address(0x0),
+                address(MASTER.oracles(_tokenOut)) != address(0),
                 "Oracle !exist"
             );
         }
@@ -529,8 +529,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     ) internal {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
-            address(MASTER.oracles(tokenIn)) != address(0x0) &&
-                address(MASTER.oracles(tokenOut)) != address(0x0),
+            address(MASTER.oracles(tokenIn)) != address(0) &&
+                address(MASTER.oracles(tokenOut)) != address(0),
             "Oracle !exist"
         );
         require(
@@ -543,7 +543,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
                 feeBips <= 10000,
             "BIPS > 10k"
         );
-        require(recipient != address(0x0), "recipient == zero address");
+        require(recipient != address(0), "recipient == zero address");
         require(tokenIn != tokenOut, "tokenIn == tokenOut");
         require(amountIn != 0, "amountIn == 0");
 
@@ -628,7 +628,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             //if success, we expect tokenIn balance to decrease by amountIn
             //and tokenOut balance to increase by at least minAmountReceived
             require(
-                finalTokenOut - initialTokenOut >
+                finalTokenOut - initialTokenOut >=
                     MASTER.getMinAmountReceived(
                         (initialTokenIn - finalTokenIn),
                         tokenIn,

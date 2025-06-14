@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
-import "./AutomationMaster.sol";
+import "./IAutomation.sol";
 import "../interfaces/openzeppelin/Ownable.sol";
 import "../interfaces/openzeppelin/IERC20.sol";
 import "../interfaces/openzeppelin/ERC20.sol";
@@ -14,19 +14,17 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    AutomationMaster public immutable MASTER;
+    IAutomationMaster public immutable MASTER;
     IPermit2 public immutable permit2;
 
     uint96 public orderCount;
-
-    uint96[] public pendingOrderIds;
 
     mapping(uint96 => Order) public orders;
     mapping(IERC20 => bool) public whitelistedTokens;
     EnumerableSet.AddressSet private uniqueTokens;
     EnumerableSet.UintSet private dataSet;
 
-    constructor(AutomationMaster _master, IPermit2 _permit2, address owner) {
+    constructor(IAutomationMaster _master, IPermit2 _permit2, address owner) {
         MASTER = _master;
         permit2 = _permit2;
         _transferOwnership(owner);
@@ -123,7 +121,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         require(amountIn != 0, "amountIn == 0");
         require(tokenIn != tokenOut, "tokenIn == tokenOut");
         require(feeBips <= 10000, "BIPS > 10k");
-        require(recipient != address(0x0), "recipient == zero address");
+        require(recipient != address(0), "recipient == zero address");
         require(
             whitelistedTokens[tokenIn] && whitelistedTokens[tokenOut],
             "tokens not whitelisted"
@@ -153,7 +151,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     }
 
     ///@notice allow administrator to cancel any order
-    ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
+    ///@notice once cancelled, any funds associated with the order are returned to the order recipient
     ///@notice only pending orders can be cancelled
     ///NOTE if @param refund is false, then the order's tokens will not be refunded and will be stuck on this contract possibly forever
     ///@notice ONLY SET @param refund TO FALSE IN THE CASE OF A BROKEN ORDER CAUSING cancelOrder() TO REVERT
@@ -184,7 +182,10 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         bytes calldata permitPayload
     ) external payable override nonReentrant paysFee whenNotPaused {
         require(dataSet.contains(orderId), "order not active");
-        require(_recipient != address(0x0), "recipient == zero address");
+        require(_recipient != address(0), "recipient == zero address");
+
+        Order memory order = orders[orderId];
+        require(msg.sender == order.recipient, "only order owner");
 
         _modifyOrder(
             orderId,
@@ -208,13 +209,13 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         //validate target
         MASTER.validateTarget(target);
 
-        //fetch order
-        Order memory order = orders[orderId];
-
         require(
-            order.orderId == uint96(dataSet.at(pendingOrderIdx)),
+            orderId == uint96(dataSet.at(pendingOrderIdx)),
             "Order Fill Mismatch"
         );
+
+        //fetch order
+        Order memory order = orders[orderId];
 
         //perform swap
         (uint256 amountOut, uint256 tokenInRefund) = execute(
@@ -277,7 +278,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         //fetch order
         Order memory order = orders[orderId];
         require(dataSet.contains(orderId), "order not active");
-        require(msg.sender == order.recipient, "only order owner");
         require(order.tokenIn != _tokenOut, "tokenIn == tokenOut");
         require(whitelistedTokens[_tokenOut], "token not whitelisted");
 
@@ -364,7 +364,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         uint256 finalTokenOut = order.tokenOut.balanceOf(address(this));
 
         require(
-            finalTokenOut - initialTokenOut > order.minAmountOut,
+            finalTokenOut - initialTokenOut >= order.minAmountOut,
             "Too Little Received"
         );
 

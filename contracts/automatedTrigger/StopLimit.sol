@@ -135,12 +135,9 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
             performData,
             (MasterUpkeepData)
         );
+        uint96 orderIdFromSet = uint96(dataSet.at(data.pendingOrderIdx));
+        require(orderIdFromSet == data.orderId, "Order Fill Mismatch");
         Order memory order = orders[uint96(dataSet.at(data.pendingOrderIdx))];
-
-        require(
-            order.orderId == uint96(dataSet.at(data.pendingOrderIdx)),
-            "Order Fill Mismatch"
-        );
 
         //confirm order is in range to prevent improper fill
         (bool inRange, ) = checkInRange(order);
@@ -168,7 +165,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
             //for swap on fill, we expect to be paid out in the same asset we provided
             //so the resulting order tokenIn and tokenOut are inverted relative to our original swap limit order
             SwapParams memory params = SwapParams({
-                swapTokenIn: order.tokenIn, 
+                swapTokenIn: order.tokenIn,
                 swapAmountIn: order.amountIn,
                 swapTarget: data.target,
                 swapSlippage: order.swapSlippage,
@@ -220,7 +217,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         bool swapOnFill,
         bool permit,
         bytes calldata permitPayload
-    ) external payable override nonReentrant whenNotPaused paysFee{
+    ) external payable override nonReentrant whenNotPaused paysFee {
         if (permit) {
             require(amountIn < type(uint160).max, "uint160 overflow");
             handlePermit(
@@ -274,7 +271,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         require(dataSet.contains(order.orderId), "order not active");
         //only order owner
         require(msg.sender == order.recipient, "only order owner");
-        require(_recipient != address(0x0), "recipient == zero address");
+        require(_recipient != address(0), "recipient == zero address");
 
         //deduce any amountIn changes
         uint256 newAmountIn = order.amountIn;
@@ -303,7 +300,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
                 }
             } else {
                 //ensure delta is valid
-                require(_amountInDelta < order.amountIn, "invalid delta");
+                require(_amountInDelta <= order.amountIn, "invalid delta");
 
                 //set new amountIn for accounting
                 newAmountIn -= _amountInDelta;
@@ -313,23 +310,23 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
 
                 //refund position partially
                 order.tokenIn.safeTransfer(order.recipient, _amountInDelta);
-
-                //check slippage
-                require(
-                    _takeProfitSlippage <= 10000 &&
-                        _stopSlippage <= 10000 &&
-                        _swapSlippage <= 10000,
-                    "BIPS > 10k"
-                );
             }
         }
+
+        //check slippage
+        require(
+            _takeProfitSlippage <= 10000 &&
+                _stopSlippage <= 10000 &&
+                _swapSlippage <= 10000,
+            "BIPS > 10k"
+        );
 
         require(order.tokenIn != _tokenOut, "tokenIn == tokenOut");
 
         //check for oracles
         if (_tokenOut != order.tokenOut) {
             require(
-                address(MASTER.oracles(_tokenOut)) != address(0x0),
+                address(MASTER.oracles(_tokenOut)) != address(0),
                 "Oracle !exist"
             );
         }
@@ -360,7 +357,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
     }
 
     ///@notice allow administrator to cancel any order
-    ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
+    ///@notice once cancelled, any funds associated with the order are returned to the order recipient
     ///@notice only pending orders can be cancelled
     ///NOTE if @param refund is false, then the order's tokens will not be refunded and will be stuck on this contract possibly forever
     ///@notice ONLY SET @param refund TO FALSE IN THE CASE OF A BROKEN ORDER CAUSING cancelOrder() TO REVERT
@@ -396,8 +393,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
     ) internal {
         //verify both oracles exist, as we need both to calc the exchange rate
         require(
-            address(MASTER.oracles(tokenIn)) != address(0x0) &&
-                address(MASTER.oracles(tokenOut)) != address(0x0),
+            address(MASTER.oracles(tokenIn)) != address(0) &&
+                address(MASTER.oracles(tokenOut)) != address(0),
             "Oracle !exist"
         );
         require(
@@ -413,7 +410,7 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         );
         require(tokenIn != tokenOut, "tokenIn == tokenOut");
         require(amountIn != 0, "amountIn == 0");
-        require(recipient != address(0x0), "recipient == zero address");
+        require(recipient != address(0), "recipient == zero address");
 
         uint96 orderId = MASTER.generateOrderId(msg.sender);
 

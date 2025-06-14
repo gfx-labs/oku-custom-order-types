@@ -62,7 +62,7 @@ describe("Test for failure - BRACKET", () => {
         const events = await s.Bracket.queryFilter(filter, -1)
         const event = events[0].args
         steveOrder = event[0]
-        expect(Number(event.orderid)).to.not.eq(0, "First order")
+        expect(Number(event.orderId)).to.not.eq(0, "First order")
 
         const order = await s.Bracket.orders(steveOrder)
         expect(order.recipient).to.eq(await s.Steve.getAddress(), "steve's order")
