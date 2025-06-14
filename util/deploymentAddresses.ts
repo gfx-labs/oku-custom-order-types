@@ -721,7 +721,9 @@ export class OptimisimAddresses extends ChainAddresses {
         { symbol: "CRV", token: "0x0994206dfE8De6Ec6920FF4D779B0d950605Fb53", feed: "0xbD92C6c284271c227a1e0bF1786F468b539f51D9", relay: "0x40680A87E630d7d1E05cA1413448e0Dee1C3702c" },
         { symbol: "STG", token: "0x296F55F8Fb28E498B858d0BcDA06D955B2Cb3f97", feed: "", relay: "" },
         { symbol: "CBETH", token: "0xadDb6A0412DE1BA0F936DCaeb8Aaa24578dcF3B2", feed: "", relay: "" },
-        { symbol: "PEPE", token: "0x12ff4a259e14D4DCd239C447D23C9b00F7781d8F", feed: "0x64Ecf089a6594Be781908D5a26FC8fA6CB08A2C7", relay: "0xfdf6D84f6dfFE2D439c43EDAC0d617eD91756db0" }
+        { symbol: "PEPE", token: "0x12ff4a259e14D4DCd239C447D23C9b00F7781d8F", feed: "0x64Ecf089a6594Be781908D5a26FC8fA6CB08A2C7", relay: "0xfdf6D84f6dfFE2D439c43EDAC0d617eD91756db0" },
+        { symbol: "USDT", token: "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58", feed: "0xECef79E109e997bCA29c1c0897ec9d7b03647F5E", relay: "0xA97A40bBb5E6C17eae6EdA9F999F9b19A9dEF3b8" }
+
     ]
 
     /**
@@ -772,12 +774,12 @@ export class OptimisimAddresses extends ChainAddresses {
      */
 
 
-    //testing deploys
+    //final deploys
     readonly coreDeployments = {
-        master: '',
-        bracket: '',
-        stopLimit: '',
-        oracleLess: ''
+        master: '0xCaE450Ba6e9d6e9A5A719C1B4b3d2033C3047B3e',
+        bracket: '0x8e9a03e2533f8B4641a271429496F582B89c8fD7',
+        stopLimit: '0xfdcFdd8267F7054facF9eA2aAD538d74da4B65c8',
+        oracleLess: '0x5ce1E92eBB96deee97F4a225DF97EDadF5fb76e9'
     };
 }
 export class ZkSyncAddresses extends ChainAddresses {
