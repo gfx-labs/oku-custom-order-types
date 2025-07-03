@@ -54,6 +54,8 @@ describe("Automated Trigger Testing on Arbitrum", () => {
             await s.Frank.getAddress()
         )
 
+        s.OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2, await s.Frank.getAddress())
+
 
         //deploy test oracles
         s.wethOracle = await new PlaceholderOracle__factory(s.Frank).deploy(await s.WETH.getAddress())
@@ -78,10 +80,8 @@ describe("Automated Trigger Testing on Arbitrum", () => {
 
 
         //register sup keepers
-        await s.Master.connect(s.Frank).registerSubKeepers(
-            await s.StopLimit.getAddress(),
-            await s.Bracket.getAddress()
-        )
+        await s.Master.connect(s.Frank).registerSubKeepers(await s.StopLimit.getAddress(), await s.Bracket.getAddress(), await s.OracleLess.getAddress())
+
 
         //register oracles
         const tokens = [await s.WETH.getAddress(), await s.USDC.getAddress(), await s.UNI.getAddress(), await s.ARB.getAddress()]
@@ -467,7 +467,7 @@ describe("Execute Bracket Upkeep", () => {
     before(async () => {
         //steal money for s.Bob
         await stealMoney(s.usdcWhale, await s.Bob.getAddress(), await s.USDC.getAddress(), s.usdcAmount)
-        
+
         //reset test oracle price
         await s.wethOracle.setPrice(s.initialEthPrice)
         await s.usdcOracle.setPrice(s.initialUsdcPrice)
@@ -990,7 +990,6 @@ describe("Oracle Less", () => {
 
 
     before(async () => {
-        s.OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2, await s.Frank.getAddress())
         await s.OracleLess.whitelistTokens([await s.WETH.getAddress(), await s.USDC.getAddress()], [true, true])
         await stealMoney(s.wethWhale, await s.Oscar.getAddress(), await s.WETH.getAddress(), s.wethAmount)
     })

@@ -35,7 +35,8 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         require(msg.value >= orderFee, "Insufficient funds for order fee");
         _;
         // Transfer the fee to the contract owner
-        payable(address(MASTER)).transfer(orderFee);
+        (bool success, ) = payable(address(MASTER)).call{value: orderFee}("");
+        require(success, "Failed to forward fee to master");
     }
 
     function pause(bool __pause) external override {

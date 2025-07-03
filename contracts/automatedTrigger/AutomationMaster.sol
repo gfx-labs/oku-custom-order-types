@@ -10,6 +10,9 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/Pausable.sol";
 import "../interfaces/openzeppelin/EnumerableSet.sol";
 
+//testing
+import "hardhat/console.sol";
+
 ///@notice This contract owns and handles all of the settings and accounting logic for automated swaps
 ///@notice This contract should not hold any user funds, only collected fees
 contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
@@ -28,6 +31,7 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     ///sub keeper contracts
     IStopLimit public STOP_LIMIT_CONTRACT;
     IBracket public BRACKET_CONTRACT;
+    IOracleLess public ORACLELESS_CONTRACT;
 
     //whitelist of possible target contracts to execute swaps
     mapping(address => bool) public safeTargets;
@@ -45,7 +49,19 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
         _transferOwnership(owner);
     }
 
-    receive() external payable {}
+    receive() external payable {
+        // Also check that the child contracts are actually set
+        address stopLimit = address(STOP_LIMIT_CONTRACT);
+        address bracket = address(BRACKET_CONTRACT);
+        address oracleLess = address(ORACLELESS_CONTRACT);
+
+        require(
+            (msg.sender == stopLimit && stopLimit != address(0)) ||
+                (msg.sender == bracket && bracket != address(0)) ||
+                (msg.sender == oracleLess && oracleLess != address(0)),
+            "Invalid recipient or uninitialized children"
+        );
+    }
 
     function pauseAll(
         bool pause,
@@ -90,10 +106,12 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     ///@notice register Stop Limit and Bracket order contracts
     function registerSubKeepers(
         IStopLimit stopLimitContract,
-        IBracket bracketContract
+        IBracket bracketContract,
+        IOracleLess oraclelessContract
     ) external onlyOwner {
         STOP_LIMIT_CONTRACT = stopLimitContract;
         BRACKET_CONTRACT = bracketContract;
+        ORACLELESS_CONTRACT = oraclelessContract;
     }
 
     ///@notice Registered Oracles are expected to return the USD price in 1e8 terms
@@ -134,16 +152,17 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     ///@notice this contract should not hold funds other than collected fees,
     ///which are forwarded here after each transaction
     function sweep(IERC20 token, address recipient) external onlyOwner {
+        require(recipient != address(0), "Recipient cannot be the zero address");
         token.safeTransfer(recipient, token.balanceOf(address(this)));
     }
 
     function sweepEther(address payable recipient) external onlyOwner {
         uint256 balance = address(this).balance;
-        require(balance > 0, "No Ether to withdraw");
         require(
             recipient != address(0),
             "Recipient cannot be the zero address"
         );
+        require(balance > 0, "No Ether to withdraw");
 
         (bool success, ) = recipient.call{value: balance}("");
 
@@ -289,6 +308,8 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
             performData,
             (MasterUpkeepData)
         );
+
+        console.log("decoded");
 
         //call appropriate contract
         if (data.orderType == OrderType.STOP_LIMIT) {

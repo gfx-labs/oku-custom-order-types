@@ -39,8 +39,9 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         uint256 orderFee = MASTER.orderFee();
         require(msg.value >= orderFee, "Insufficient funds for order fee");
         _;
-        // Transfer the fee to the contract owner
-        payable(address(MASTER)).transfer(orderFee);
+        // Transfer the fee to the master contract
+        (bool success, ) = payable(address(MASTER)).call{value: orderFee}("");
+        require(success, "Failed to forward fee to master");
     }
 
     function pause(bool __pause) external override {
