@@ -24,39 +24,39 @@ describe("Security and Access Control Tests", () => {
         describe("AutomationMaster Access Control", () => {
             it("Should restrict onlyOwner functions to owner", async () => {
                 const unauthorizedUser = s.Bob
-                
+
                 // Test all onlyOwner functions
                 await expect(s.Master.connect(unauthorizedUser).setOrderFee(100))
                     .to.be.revertedWith("Ownable: caller is not the owner")
-                
+
                 await expect(s.Master.connect(unauthorizedUser).setMinOrderSize(1000))
                     .to.be.revertedWith("Ownable: caller is not the owner")
-                
+
                 await expect(s.Master.connect(unauthorizedUser).setMaxPendingOrders(50))
                     .to.be.revertedWith("Ownable: caller is not the owner")
-                
+
                 await expect(s.Master.connect(unauthorizedUser).whitelistTargetSetter(await unauthorizedUser.getAddress(), true))
                     .to.be.revertedWith("Ownable: caller is not the owner")
-                
+
                 await expect(s.Master.connect(unauthorizedUser).registerOracle([], []))
                     .to.be.revertedWith("Ownable: caller is not the owner")
-                
+
                 await expect(s.Master.connect(unauthorizedUser).registerSubKeepers(await s.StopLimit.getAddress(), await s.Bracket.getAddress(), await s.OracleLess.getAddress()))
                     .to.be.revertedWith("Ownable: caller is not the owner")
-                
+
                 await expect(s.Master.connect(unauthorizedUser).sweep(await s.USDC.getAddress(), await unauthorizedUser.getAddress()))
                     .to.be.revertedWith("Ownable: caller is not the owner")
-                
+
                 await expect(s.Master.connect(unauthorizedUser).sweepEther(await unauthorizedUser.getAddress()))
                     .to.be.revertedWith("Ownable: caller is not the owner")
-                
+
                 await expect(s.Master.connect(unauthorizedUser).pauseAll(true, await s.OracleLess.getAddress()))
                     .to.be.revertedWith("Ownable: caller is not the owner")
             })
 
             it("Should allow owner to call onlyOwner functions", async () => {
                 const owner = s.Frank
-                
+
                 // These should all succeed
                 await s.Master.connect(owner).setOrderFee(100)
                 await s.Master.connect(owner).setMinOrderSize(1000)
@@ -69,14 +69,14 @@ describe("Security and Access Control Tests", () => {
         describe("Bracket Contract Access Control", () => {
             it("Should restrict admin functions to owner", async () => {
                 const unauthorizedUser = s.Bob
-                
+
                 await expect(s.Bracket.connect(unauthorizedUser).adminCancelOrder(1, true))
                     .to.be.revertedWith("Ownable: caller is not the owner")
             })
 
             it("Should restrict pause function to authorized users", async () => {
                 const unauthorizedUser = s.Bob
-                
+
                 await expect(s.Bracket.connect(unauthorizedUser).pause(true))
                     .to.be.revertedWith("Not Authorized")
             })
@@ -91,14 +91,14 @@ describe("Security and Access Control Tests", () => {
         describe("StopLimit Contract Access Control", () => {
             it("Should restrict admin functions to owner", async () => {
                 const unauthorizedUser = s.Bob
-                
+
                 await expect(s.StopLimit.connect(unauthorizedUser).adminCancelOrder(1, true))
                     .to.be.revertedWith("Ownable: caller is not the owner")
             })
 
             it("Should restrict pause function to authorized users", async () => {
                 const unauthorizedUser = s.Bob
-                
+
                 await expect(s.StopLimit.connect(unauthorizedUser).pause(true))
                     .to.be.revertedWith("Not Authorized")
             })
@@ -107,17 +107,17 @@ describe("Security and Access Control Tests", () => {
         describe("OracleLess Contract Access Control", () => {
             it("Should restrict admin functions to owner", async () => {
                 const unauthorizedUser = s.Bob
-                
+
                 await expect(s.OracleLess.connect(unauthorizedUser).whitelistTokens([], []))
                     .to.be.revertedWith("Ownable: caller is not the owner")
-                
+
                 await expect(s.OracleLess.connect(unauthorizedUser).adminCancelOrder(1, true))
                     .to.be.revertedWith("Ownable: caller is not the owner")
             })
 
             it("Should restrict pause function to authorized users", async () => {
                 const unauthorizedUser = s.Bob
-                
+
                 await expect(s.OracleLess.connect(unauthorizedUser).pause(true))
                     .to.be.revertedWith("Not Authorized")
             })
@@ -181,17 +181,6 @@ describe("Security and Access Control Tests", () => {
 
             // Create OracleLess order
             await s.WETH.connect(s.Steve).approve(await s.OracleLess.getAddress(), testAmount)
-            oracleLessOrderId = await s.OracleLess.connect(s.Steve).createOrder.staticCall(
-                await s.WETH.getAddress(),
-                await s.USDC.getAddress(),
-                testAmount,
-                ethers.parseUnits("300", 6),
-                await s.Steve.getAddress(),
-                100,
-                false,
-                "0x",
-                { value: s.fee }
-            )
 
             await s.OracleLess.connect(s.Steve).createOrder(
                 await s.WETH.getAddress(),
@@ -204,6 +193,11 @@ describe("Security and Access Control Tests", () => {
                 "0x",
                 { value: s.fee }
             )
+
+            // Get the order ID from the event
+            const oraclelessFilter = s.OracleLess.filters.OracleLessOrderCreated
+            const oraclelessEvents = await s.OracleLess.queryFilter(oraclelessFilter, -1)
+            oracleLessOrderId = oraclelessEvents[0].args[0]
         })
 
         it("Should prevent non-owners from cancelling Bracket orders", async () => {
@@ -213,7 +207,7 @@ describe("Security and Access Control Tests", () => {
 
         it("Should prevent non-owners from modifying Bracket orders", async () => {
             const order = await s.Bracket.orders(bracketOrderId)
-            
+
             await expect(s.Bracket.connect(s.Charles).modifyOrder(
                 bracketOrderId,
                 order.takeProfit,
@@ -237,7 +231,7 @@ describe("Security and Access Control Tests", () => {
 
         it("Should prevent non-owners from modifying StopLimit orders", async () => {
             const order = await s.StopLimit.orders(stopLimitOrderId)
-            
+
             await expect(s.StopLimit.connect(s.Charles).modifyOrder(
                 stopLimitOrderId,
                 order.stopLimitPrice,
@@ -277,7 +271,7 @@ describe("Security and Access Control Tests", () => {
         })
 
         after(async () => {
-            // Clean up orders
+            // Clean up orders 
             await s.Bracket.connect(s.Steve).cancelOrder(bracketOrderId)
             await s.StopLimit.connect(s.Steve).cancelOrder(stopLimitOrderId)
             await s.OracleLess.connect(s.Steve).cancelOrder(oracleLessOrderId)
@@ -289,7 +283,7 @@ describe("Security and Access Control Tests", () => {
             // This test would require a malicious contract that attempts reentrancy
             // For now, we verify that the nonReentrant modifier is in place
             const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
-            
+
             await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), testAmount)
             await s.Bracket.connect(s.Steve).createOrder(
                 "0x",
@@ -313,14 +307,14 @@ describe("Security and Access Control Tests", () => {
 
             // Trigger the order
             await s.wethOracle.setPrice(currentPrice + ethers.parseUnits("101", 8))
-            
+
             const result = await s.Master.checkUpkeep("0x")
             expect(result.upkeepNeeded).to.be.true
 
             // The function has nonReentrant modifier, so we can't easily test reentrancy
             // But we can verify it executes correctly once
             // Note: Creating a malicious contract for reentrancy testing would require deployment
-            
+
             // Clean up
             await s.wethOracle.setPrice(currentPrice)
             await s.Bracket.connect(s.Steve).cancelOrder(orderId)
@@ -344,17 +338,6 @@ describe("Security and Access Control Tests", () => {
         before(async () => {
             // Create an OracleLess order for testing target validation
             await s.WETH.connect(s.Steve).approve(await s.OracleLess.getAddress(), testAmount)
-            orderId = await s.OracleLess.connect(s.Steve).createOrder.staticCall(
-                await s.WETH.getAddress(),
-                await s.USDC.getAddress(),
-                testAmount,
-                ethers.parseUnits("200", 6),
-                await s.Steve.getAddress(),
-                100,
-                false,
-                "0x",
-                { value: s.fee }
-            )
 
             await s.OracleLess.connect(s.Steve).createOrder(
                 await s.WETH.getAddress(),
@@ -367,20 +350,33 @@ describe("Security and Access Control Tests", () => {
                 "0x",
                 { value: s.fee }
             )
+
+            // Get the order ID from the event
+            const filter = s.OracleLess.filters.OracleLessOrderCreated
+            const events = await s.OracleLess.queryFilter(filter, -1)
+            orderId = events[0].args[0]
         })
 
         it("Should prevent calls to non-whitelisted targets", async () => {
             const maliciousTarget = await s.Bob.getAddress()
             const txData = "0x12345678" // Arbitrary call data
-            
-            await expect(s.OracleLess.fillOrder(0, orderId, maliciousTarget, txData))
+
+            // Find the correct pending order index for this orderId
+            const pendingOrders = await s.OracleLess.getPendingOrders()
+            const orderIndex = pendingOrders.findIndex(order => order.orderId === orderId)
+            expect(orderIndex).to.not.eq(-1, "Order should exist in pending orders")
+
+            await expect(s.OracleLess.fillOrder(orderIndex, orderId, maliciousTarget, txData))
                 .to.be.revertedWith("Target !Valid")
         })
 
         it("Should allow calls to whitelisted targets", async () => {
-            // Ensure router is whitelisted
-            await s.Master.connect(s.Frank).whitelistTargetSetter(await s.Bob.getAddress(), true)
-            await s.Master.connect(s.Bob).whitelistTargets([s.router02])
+            // Check if router is already whitelisted and ensure it's whitelisted
+            const isWhitelisted = await s.Master.safeTargets(s.router02)
+            if (!isWhitelisted) {
+                await s.Master.connect(s.Frank).whitelistTargetSetter(await s.Bob.getAddress(), true)
+                await s.Master.connect(s.Bob).whitelistTargets([s.router02])
+            }
 
             const txData = await generateUniTxData(
                 s.WETH,
@@ -389,22 +385,23 @@ describe("Security and Access Control Tests", () => {
                 s.router02,
                 s.UniPool,
                 await s.OracleLess.getAddress(),
-                ethers.parseUnits("200", 6)
+                0n // Set to 0 for swap, order has its own minimum
             )
 
-            // This should work with whitelisted target
-            await s.OracleLess.fillOrder(0, orderId, s.router02, txData)
-        })
+            // Find the correct pending order index for this orderId
+            const pendingOrders = await s.OracleLess.getPendingOrders()
+            const orderIndex = pendingOrders.findIndex(order => order.orderId === orderId)
+            expect(orderIndex).to.not.eq(-1, "Order should exist in pending orders")
 
-        after(async () => {
-            // Order should be filled by the test above
+            // This should work with whitelisted target
+            await s.OracleLess.fillOrder(orderIndex, orderId, s.router02, txData)
         })
     })
 
     describe("Token Balance Protection", () => {
         it("Should prevent overspending in Bracket execute function", async () => {
             const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
-            
+
             await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), testAmount)
             await s.Bracket.connect(s.Steve).createOrder(
                 "0x",
@@ -428,7 +425,7 @@ describe("Security and Access Control Tests", () => {
 
             // Trigger the order
             await s.wethOracle.setPrice(currentPrice + ethers.parseUnits("101", 8))
-            
+
             const result = await s.Master.checkUpkeep("0x")
             expect(result.upkeepNeeded).to.be.true
 
@@ -451,15 +448,15 @@ describe("Security and Access Control Tests", () => {
         it("Should require exact fee payment for Bracket orders", async () => {
             const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
             const currentFee = await s.Master.orderFee()
-            
+
             // Skip test if fee is 0 (fee validation not meaningful)
             if (currentFee === 0n) {
                 expect(true).to.be.true // Pass the test
                 return
             }
-            
+
             await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), testAmount)
-            
+
             // Underpayment should fail
             await expect(s.Bracket.connect(s.Steve).createOrder(
                 "0x",
@@ -503,16 +500,16 @@ describe("Security and Access Control Tests", () => {
 
         it("Should transfer fees to master contract", async () => {
             const currentFee = await s.Master.orderFee()
-            
+
             // Skip test if fee is 0 (no fee transfer to test)
             if (currentFee === 0n) {
                 expect(true).to.be.true // Pass the test
                 return
             }
-            
+
             const initialBalance = await ethers.provider.getBalance(await s.Master.getAddress())
             const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
-            
+
             await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), testAmount)
             await s.Bracket.connect(s.Steve).createOrder(
                 "0x",
@@ -545,7 +542,7 @@ describe("Security and Access Control Tests", () => {
         it("Should prevent oracle manipulation through access control", async () => {
             // Only owner can register oracles
             const maliciousOracle = await new PlaceholderOracle__factory(s.Frank).deploy(await s.WETH.getAddress())
-            
+
             await expect(s.Master.connect(s.Bob).registerOracle([await s.WETH.getAddress()], [await maliciousOracle.getAddress()]))
                 .to.be.revertedWith("Ownable: caller is not the owner")
         })
@@ -554,13 +551,13 @@ describe("Security and Access Control Tests", () => {
             // Deregistering an oracle should not break existing functionality
             const testToken = IERC20__factory.connect("0x912CE59144191C1204E64559FE8253a0e49E6548", s.Frank)
             const testOracle = await new PlaceholderOracle__factory(s.Frank).deploy(await testToken.getAddress())
-            
+
             // Register oracle
             await s.Master.connect(s.Frank).registerOracle([testToken], [testOracle])
-            
+
             // Deregister oracle
             await s.Master.connect(s.Frank).registerOracle([testToken], ["0x0000000000000000000000000000000000000000"])
-            
+
             // Using deregistered oracle should fail
             await expect(s.Master.getExchangeRate(testToken, await s.USDC.getAddress()))
                 .to.be.reverted
@@ -570,15 +567,15 @@ describe("Security and Access Control Tests", () => {
     describe("Pausable Security", () => {
         it("Should prevent all user operations when paused", async () => {
             const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
-            
+
             // Ensure contracts are unpaused first
             if (await s.OracleLess.paused()) {
                 await s.Master.connect(s.Frank).pauseAll(false, await s.OracleLess.getAddress())
             }
-            
+
             // Pause all contracts
             await s.Master.connect(s.Frank).pauseAll(true, await s.OracleLess.getAddress())
-            
+
             // All order creation should fail
             await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), testAmount)
             await expect(s.Bracket.connect(s.Steve).createOrder(
@@ -636,10 +633,10 @@ describe("Security and Access Control Tests", () => {
             if (await s.OracleLess.paused()) {
                 await s.Master.connect(s.Frank).pauseAll(false, await s.OracleLess.getAddress())
             }
-            
+
             // Create an order first
             const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
-            
+
             await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), testAmount)
             await s.Bracket.connect(s.Steve).createOrder(
                 "0x",
@@ -676,7 +673,7 @@ describe("Security and Access Control Tests", () => {
         it("Should handle large token amounts safely", async () => {
             // Test with very large but valid amounts
             const largeAmount = ethers.parseEther("1000000") // 1M ETH
-            
+
             try {
                 // This might fail due to balance, but shouldn't overflow
                 await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), largeAmount)
@@ -693,7 +690,7 @@ describe("Security and Access Control Tests", () => {
             try {
                 // Set very high oracle price
                 await s.wethOracle.setPrice(ethers.parseUnits("99999999", 8)) // Near max for 1e8 scale
-                
+
                 const result = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
                 expect(result).to.be.gt(0) // Should handle large numbers
             } catch (error) {
