@@ -16,7 +16,7 @@ describe("StopLimit Contract Edge Cases", () => {
     before(async () => {
         await s.wethOracle.setPrice(s.initialEthPrice)
         currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
-        
+
         // Fund test accounts
         await stealMoney(s.wethWhale, await s.Oscar.getAddress(), await s.WETH.getAddress(), ethers.parseEther("10"))
         await stealMoney(s.usdcWhale, await s.Oscar.getAddress(), await s.USDC.getAddress(), ethers.parseUnits("50000", 6))
@@ -25,7 +25,7 @@ describe("StopLimit Contract Edge Cases", () => {
     describe("Input Validation", () => {
         it("Should revert with zero recipient address", async () => {
             await s.WETH.connect(s.Oscar).approve(await s.StopLimit.getAddress(), testAmount)
-            
+
             await expect(s.StopLimit.connect(s.Oscar).createOrder(
                 currentPrice - ethers.parseUnits("100", 8),
                 currentPrice + ethers.parseUnits("200", 8),
@@ -33,7 +33,7 @@ describe("StopLimit Contract Edge Cases", () => {
                 testAmount,
                 await s.WETH.getAddress(),
                 await s.USDC.getAddress(),
-                "0x0000000000000000000000000000000000000000", // Zero address
+                "0x0000000000000000000000000000000000000000",
                 100,
                 500,
                 500,
@@ -47,7 +47,7 @@ describe("StopLimit Contract Edge Cases", () => {
 
         it("Should revert with same tokenIn and tokenOut", async () => {
             await s.WETH.connect(s.Oscar).approve(await s.StopLimit.getAddress(), testAmount)
-            
+
             await expect(s.StopLimit.connect(s.Oscar).createOrder(
                 currentPrice - ethers.parseUnits("100", 8),
                 currentPrice + ethers.parseUnits("200", 8),
@@ -84,12 +84,12 @@ describe("StopLimit Contract Edge Cases", () => {
                 false,
                 "0x",
                 { value: s.fee }
-            )).to.be.revertedWith("amountIn == 0")
+            )).to.be.revertedWith("order too small")//enforced by minOrderSize on master
         })
 
         it("Should revert with slippage > 10000 bips", async () => {
             await s.WETH.connect(s.Oscar).approve(await s.StopLimit.getAddress(), testAmount)
-            
+
             await expect(s.StopLimit.connect(s.Oscar).createOrder(
                 currentPrice - ethers.parseUnits("100", 8),
                 currentPrice + ethers.parseUnits("200", 8),
@@ -111,7 +111,7 @@ describe("StopLimit Contract Edge Cases", () => {
 
         it("Should revert with insufficient fee", async () => {
             await s.WETH.connect(s.Oscar).approve(await s.StopLimit.getAddress(), testAmount)
-            
+
             await expect(s.StopLimit.connect(s.Oscar).createOrder(
                 currentPrice - ethers.parseUnits("100", 8),
                 currentPrice + ethers.parseUnits("200", 8),
@@ -134,7 +134,7 @@ describe("StopLimit Contract Edge Cases", () => {
         it("Should revert when oracle doesn't exist", async () => {
             const fakeToken = await new PlaceholderOracle__factory(s.Frank).deploy(await s.WETH.getAddress())
             await s.WETH.connect(s.Oscar).approve(await s.StopLimit.getAddress(), testAmount)
-            
+
             await expect(s.StopLimit.connect(s.Oscar).createOrder(
                 currentPrice - ethers.parseUnits("100", 8),
                 currentPrice + ethers.parseUnits("200", 8),
@@ -159,9 +159,9 @@ describe("StopLimit Contract Edge Cases", () => {
         it("Should revert when max pending orders reached", async () => {
             const originalMax = await s.Master.maxPendingOrders()
             await s.Master.connect(s.Frank).setMaxPendingOrders(0) // Set to 0 to test limit
-            
+
             await s.WETH.connect(s.Oscar).approve(await s.StopLimit.getAddress(), testAmount)
-            
+
             await expect(s.StopLimit.connect(s.Oscar).createOrder(
                 currentPrice - ethers.parseUnits("100", 8),
                 currentPrice + ethers.parseUnits("200", 8),
@@ -179,7 +179,7 @@ describe("StopLimit Contract Edge Cases", () => {
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("Max Order Count Reached")
-            
+
             // Restore original max
             await s.Master.connect(s.Frank).setMaxPendingOrders(originalMax)
         })
@@ -251,13 +251,13 @@ describe("StopLimit Contract Edge Cases", () => {
 
         it("Should trigger bullish order when price falls below stop limit", async () => {
             const order = await s.StopLimit.orders(bullishOrderId)
-            
+
             // Set price below stop limit
             await s.wethOracle.setPrice(order.stopLimitPrice - ethers.parseUnits("1", 8))
-            
+
             const result = await s.StopLimit.checkUpkeep("0x")
             expect(result.upkeepNeeded).to.be.true
-            
+
             // Check that it's the bullish order
             const data: MasterUpkeepData = await decodeUpkeepData(result.performData, s.Frank)
             expect(data.orderId).to.eq(bullishOrderId)
@@ -266,15 +266,15 @@ describe("StopLimit Contract Edge Cases", () => {
         it("Should trigger bearish order when price rises above stop limit", async () => {
             // Reset price first
             await s.wethOracle.setPrice(s.initialEthPrice)
-            
+
             const order = await s.StopLimit.orders(bearishOrderId)
-            
+
             // Set price above stop limit
             await s.wethOracle.setPrice(order.stopLimitPrice + ethers.parseUnits("1", 8))
-            
+
             const result = await s.StopLimit.checkUpkeep("0x")
             expect(result.upkeepNeeded).to.be.true
-            
+
             // Check that it's the bearish order (should be second in the list)
             const data: MasterUpkeepData = await decodeUpkeepData(result.performData, s.Frank)
             expect(data.orderId).to.eq(bearishOrderId)
@@ -328,15 +328,15 @@ describe("StopLimit Contract Edge Cases", () => {
 
         it("Should get specific pending orders with bounds checking", async () => {
             const totalOrders = (await s.StopLimit.getPendingOrders()).length
-            
+
             // Test normal range
             const orders1 = await s.StopLimit.getSpecificPendingOrders(0, 1)
             expect(orders1.length).to.eq(1)
-            
+
             // Test end beyond bounds
             const orders2 = await s.StopLimit.getSpecificPendingOrders(0, totalOrders + 10)
             expect(orders2.length).to.eq(totalOrders)
-            
+
             // Test start beyond bounds
             const orders3 = await s.StopLimit.getSpecificPendingOrders(totalOrders + 1, 1)
             expect(orders3.length).to.eq(0)
@@ -387,7 +387,7 @@ describe("StopLimit Contract Edge Cases", () => {
 
         it("Should revert when non-owner tries to modify", async () => {
             const order = await s.StopLimit.orders(orderId)
-            
+
             await expect(s.StopLimit.connect(s.Bob).modifyOrder(
                 orderId,
                 order.stopLimitPrice,
@@ -409,7 +409,7 @@ describe("StopLimit Contract Edge Cases", () => {
 
         it("Should revert when modifying inactive order", async () => {
             await s.StopLimit.connect(s.Oscar).cancelOrder(orderId)
-            
+
             await expect(s.StopLimit.connect(s.Oscar).modifyOrder(
                 orderId,
                 currentPrice - ethers.parseUnits("50", 8),
@@ -431,7 +431,7 @@ describe("StopLimit Contract Edge Cases", () => {
 
         it("Should revert when modifying with zero recipient", async () => {
             const order = await s.StopLimit.orders(orderId)
-            
+
             await expect(s.StopLimit.connect(s.Oscar).modifyOrder(
                 orderId,
                 order.stopLimitPrice,
@@ -453,7 +453,7 @@ describe("StopLimit Contract Edge Cases", () => {
 
         it("Should revert when decreasing position by invalid delta", async () => {
             const order = await s.StopLimit.orders(orderId)
-            
+
             await expect(s.StopLimit.connect(s.Oscar).modifyOrder(
                 orderId,
                 order.stopLimitPrice,
@@ -477,7 +477,7 @@ describe("StopLimit Contract Edge Cases", () => {
             const order = await s.StopLimit.orders(orderId)
             const delta = ethers.parseEther("0.01")
             const initialBalance = await s.WETH.balanceOf(await s.Oscar.getAddress())
-            
+
             await s.WETH.connect(s.Oscar).approve(await s.StopLimit.getAddress(), delta)
             await s.StopLimit.connect(s.Oscar).modifyOrder(
                 orderId,
@@ -496,10 +496,10 @@ describe("StopLimit Contract Edge Cases", () => {
                 "0x",
                 { value: s.fee }
             )
-            
+
             const finalBalance = await s.WETH.balanceOf(await s.Oscar.getAddress())
             expect(finalBalance).to.eq(initialBalance - delta)
-            
+
             const modifiedOrder = await s.StopLimit.orders(orderId)
             expect(modifiedOrder.amountIn).to.eq(order.amountIn + delta)
         })
@@ -508,7 +508,7 @@ describe("StopLimit Contract Edge Cases", () => {
             const order = await s.StopLimit.orders(orderId)
             const delta = ethers.parseEther("0.01")
             const initialBalance = await s.WETH.balanceOf(await s.Oscar.getAddress())
-            
+
             await s.StopLimit.connect(s.Oscar).modifyOrder(
                 orderId,
                 order.stopLimitPrice,
@@ -526,17 +526,17 @@ describe("StopLimit Contract Edge Cases", () => {
                 "0x",
                 { value: s.fee }
             )
-            
+
             const finalBalance = await s.WETH.balanceOf(await s.Oscar.getAddress())
             expect(finalBalance).to.eq(initialBalance + delta)
-            
+
             const modifiedOrder = await s.StopLimit.orders(orderId)
             expect(modifiedOrder.amountIn).to.eq(order.amountIn - delta)
         })
 
         it("Should update direction when stop limit price changes", async () => {
             const order = await s.StopLimit.orders(orderId)
-            
+
             // Change stop limit price to above current price (should make direction false)
             await s.StopLimit.connect(s.Oscar).modifyOrder(
                 orderId,
@@ -555,7 +555,7 @@ describe("StopLimit Contract Edge Cases", () => {
                 "0x",
                 { value: s.fee }
             )
-            
+
             const modifiedOrder = await s.StopLimit.orders(orderId)
             expect(modifiedOrder.direction).to.be.false // Current price < new stop limit price
         })
@@ -597,17 +597,16 @@ describe("StopLimit Contract Edge Cases", () => {
         })
 
         it("Should include swap flag in checkUpkeep data when swap on fill", async () => {
-            const order = await s.StopLimit.orders(swapOrderId)
-            
+
             // Set price to trigger
             await s.wethOracle.setPrice(ethers.parseUnits("3000", 8))
-            
+
             const result = await s.StopLimit.checkUpkeep("0x")
             expect(result.upkeepNeeded).to.be.true
-            
+
             const data: MasterUpkeepData = await decodeUpkeepData(result.performData, s.Frank)
             expect(data.orderId).to.eq(swapOrderId)
-            
+
             // Decode txData to check swap flag
             const swapFlag = ethers.AbiCoder.defaultAbiCoder().decode(["bool"], data.txData)[0]
             expect(swapFlag).to.be.true
@@ -654,7 +653,7 @@ describe("StopLimit Contract Edge Cases", () => {
         it("Should handle checkData with custom range", async () => {
             const totalOrders = (await s.StopLimit.getPendingOrders()).length
             const abi = ethers.AbiCoder.defaultAbiCoder()
-            
+
             // Check range that exceeds bounds
             const encodedData = abi.encode(["uint96", "uint96"], [0, totalOrders + 100])
             const result = await s.StopLimit.checkUpkeep(encodedData)
@@ -701,46 +700,88 @@ describe("StopLimit Contract Edge Cases", () => {
 
         it("Should revert when order ID mismatch", async () => {
             // Set price to trigger
-            await s.wethOracle.setPrice(currentPrice - ethers.parseUnits("101", 8))
-            
+            await s.wethOracle.setPrice(currentPrice - ethers.parseUnits("99", 8))
+
             const result = await s.StopLimit.checkUpkeep("0x")
             expect(result.upkeepNeeded).to.be.true
             
             // Decode and modify the data to create mismatch
             const data: MasterUpkeepData = await decodeUpkeepData(result.performData, s.Frank)
             data.orderId = 999999n // Wrong order ID
-            
+
             const badData = ethers.AbiCoder.defaultAbiCoder().encode(
-                ["tuple(uint8,address,bytes,uint96,uint96,address,address,uint16,uint256,uint256)"],
-                [[data.orderType, data.target, data.txData, data.pendingOrderIdx, data.orderId, data.tokenIn, data.tokenOut, data.slippage, data.amountIn, data.exchangeRate]]
+                ["tuple(uint8,address,address,address,uint96,uint16,uint88,uint256,uint256,bytes)"],
+                [[
+                    data.orderType, 
+                    data.target, 
+                    await data.tokenIn.getAddress(), 
+                    await data.tokenOut.getAddress(), 
+                    data.orderId, 
+                    data.pendingOrderIdx, 
+                    data.bips, 
+                    data.amountIn, 
+                    data.exchangeRate, 
+                    data.txData
+                ]]
             )
-            
+
             await expect(s.StopLimit.performUpkeep(badData)).to.be.revertedWith("Order Fill Mismatch")
         })
 
         it("Should revert when order not in range", async () => {
-            // Reset price so order is not in range
-            await s.wethOracle.setPrice(s.initialEthPrice)
+            // Get the order details to understand its stop limit price and direction
+            const order = await s.StopLimit.orders(orderId)
+            console.log("Order direction:", order.direction, "Stop limit price:", order.stopLimitPrice.toString())
             
-            // Try to perform upkeep with stale data
+            // Set price based on direction to make order not in range
+            if (order.direction) {
+                // For bullish order (direction = true), it triggers when price <= stopLimitPrice
+                // So setting price above stopLimitPrice will make it not in range
+                await s.wethOracle.setPrice(order.stopLimitPrice + ethers.parseUnits("500", 8))
+            } else {
+                // For bearish order (direction = false), it triggers when price >= stopLimitPrice  
+                // So setting price below stopLimitPrice will make it not in range
+                await s.wethOracle.setPrice(order.stopLimitPrice - ethers.parseUnits("500", 8))
+            }
+
+            // Verify the order is actually not in range now
+            const checkResult = await s.StopLimit.checkUpkeep("0x")
+            expect(checkResult.upkeepNeeded).to.be.false
+
+            // Get the current order to get the correct pending order index
+            const pendingOrders = await s.StopLimit.getPendingOrders()
+            const orderIndex = pendingOrders.findIndex(order => order.orderId === orderId)
+            
+            // Try to perform upkeep with stale data from when order was in range
             const data: MasterUpkeepData = {
                 orderType: 0,
                 target: await s.StopLimit.getAddress(),
                 txData: ethers.AbiCoder.defaultAbiCoder().encode(["bool"], [false]),
-                pendingOrderIdx: 0,
+                pendingOrderIdx: BigInt(orderIndex),
                 orderId: orderId,
-                tokenIn: await s.WETH.getAddress(),
-                tokenOut: await s.USDC.getAddress(),
-                slippage: 500,
+                tokenIn: s.WETH,
+                tokenOut: s.USDC,
                 amountIn: testAmount,
-                exchangeRate: currentPrice
+                exchangeRate: currentPrice,
+                bips: 400n
             }
-            
+
             const encodedData = ethers.AbiCoder.defaultAbiCoder().encode(
-                ["tuple(uint8,address,bytes,uint96,uint96,address,address,uint16,uint256,uint256)"],
-                [[data.orderType, data.target, data.txData, data.pendingOrderIdx, data.orderId, data.tokenIn, data.tokenOut, data.slippage, data.amountIn, data.exchangeRate]]
+                ["tuple(uint8,address,address,address,uint96,uint16,uint88,uint256,uint256,bytes)"],
+                [[
+                    data.orderType,
+                    data.target,
+                    await data.tokenIn.getAddress(),  
+                    await data.tokenOut.getAddress(),  
+                    data.orderId,
+                    data.pendingOrderIdx,
+                    data.bips, 
+                    data.amountIn,
+                    data.exchangeRate,
+                    data.txData
+                ]]
             )
-            
+
             await expect(s.StopLimit.performUpkeep(encodedData)).to.be.revertedWith("order ! in range")
         })
 
@@ -784,12 +825,12 @@ describe("StopLimit Contract Edge Cases", () => {
 
         it("Should allow admin to cancel order with refund", async () => {
             const initialBalance = await s.WETH.balanceOf(await s.Oscar.getAddress())
-            
+
             await s.StopLimit.connect(s.Frank).adminCancelOrder(orderId, true)
-            
+
             const finalBalance = await s.WETH.balanceOf(await s.Oscar.getAddress())
             expect(finalBalance).to.eq(initialBalance + testAmount)
-            
+
             const pendingOrders = await s.StopLimit.getPendingOrders()
             expect(pendingOrders.find(order => order.orderId === orderId)).to.be.undefined
         })
@@ -818,25 +859,25 @@ describe("StopLimit Contract Edge Cases", () => {
             const filter = s.StopLimit.filters.StopLimitOrderCreated
             const events = await s.StopLimit.queryFilter(filter, -1)
             const newOrderId = events[0].args[0]
-            
+
             const initialBalance = await s.WETH.balanceOf(await s.Oscar.getAddress())
-            
+
             await s.StopLimit.connect(s.Frank).adminCancelOrder(newOrderId, false) // No refund
-            
+
             const finalBalance = await s.WETH.balanceOf(await s.Oscar.getAddress())
             expect(finalBalance).to.eq(initialBalance) // No change in balance
         })
 
         it("Should revert when non-admin tries to admin cancel", async () => {
             await expect(s.StopLimit.connect(s.Bob).adminCancelOrder(1, true))
-                .to.be.revertedWith("OwnableUnauthorizedAccount")
+                .to.be.revertedWith("Ownable: caller is not the owner")
         })
     })
 
     describe("Pausable Edge Cases", () => {
         it("Should revert createOrder when paused", async () => {
             await s.StopLimit.connect(s.Frank).pause(true)
-            
+
             await s.WETH.connect(s.Oscar).approve(await s.StopLimit.getAddress(), testAmount)
             await expect(s.StopLimit.connect(s.Oscar).createOrder(
                 currentPrice - ethers.parseUnits("100", 8),
@@ -854,17 +895,22 @@ describe("StopLimit Contract Edge Cases", () => {
                 false,
                 "0x",
                 { value: s.fee }
-            )).to.be.revertedWith("EnforcedPause")
-            
+            )).to.be.revertedWithCustomError(s.StopLimit, "EnforcedPause")
+
             await s.StopLimit.connect(s.Frank).pause(false)
         })
 
         it("Should allow master and owner to pause", async () => {
+            // Ensure contract is not paused first
+            if (await s.StopLimit.paused()) {
+                await s.StopLimit.connect(s.Frank).pause(false)
+            }
+
             // Test owner pause
             await s.StopLimit.connect(s.Frank).pause(true)
             expect(await s.StopLimit.paused()).to.be.true
             await s.StopLimit.connect(s.Frank).pause(false)
-            
+
             // Test master pause (through pauseAll)
             await s.Master.connect(s.Frank).pauseAll(true, await s.OracleLess.getAddress())
             expect(await s.StopLimit.paused()).to.be.true

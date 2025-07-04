@@ -10,9 +10,6 @@ import "../interfaces/openzeppelin/SafeERC20.sol";
 import "../interfaces/openzeppelin/Pausable.sol";
 import "../interfaces/openzeppelin/EnumerableSet.sol";
 
-//testing
-import "hardhat/console.sol";
-
 ///@notice This contract owns and handles all of the settings and accounting logic for automated swaps
 ///@notice This contract should not hold any user funds, only collected fees
 contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
@@ -308,8 +305,6 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
             performData,
             (MasterUpkeepData)
         );
-
-        console.log("decoded");
 
         //call appropriate contract
         if (data.orderType == OrderType.STOP_LIMIT) {

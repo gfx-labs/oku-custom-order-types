@@ -19,7 +19,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
 
     uint96 public orderCount;
 
-    mapping(uint96 => Order) public orders;
+    mapping(uint256 => Order) public orders;
     mapping(IERC20 => bool) public whitelistedTokens;
     EnumerableSet.AddressSet private uniqueTokens;
     EnumerableSet.UintSet private dataSet;
@@ -88,10 +88,14 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         uint256 start,
         uint256 count
     ) external view returns (Order[] memory) {
-        // Validate start and count
+        uint256 len = dataSet.length();
+        if (start >= len) {
+            return new Order[](0);
+        }
+
         uint256 end = start + count;
-        if (end > dataSet.length()) {
-            end = dataSet.length();
+        if (end > len) {
+            end = len;
         }
 
         Order[] memory ordersSubset = new Order[](end - start);

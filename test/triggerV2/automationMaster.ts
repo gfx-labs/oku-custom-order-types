@@ -25,6 +25,7 @@ describe("AutomationMaster Comprehensive Tests", () => {
             await s.Frank.getAddress()
         )
 
+
         // Deploy OracleLess for pausable tests
         s.OracleLess = await DeployContract(new OracleLess__factory(s.Frank), s.Frank, await s.Master.getAddress(), a.permit2, await s.Frank.getAddress())
 
@@ -324,7 +325,7 @@ describe("AutomationMaster Comprehensive Tests", () => {
             )
 
             // This will generic revert as it fails to decode the data
-            expect(s.Master.performUpkeep(invalidData)).to.be.reverted 
+            expect(s.Master.performUpkeep(invalidData)).to.be.reverted
         })
     })
 })
