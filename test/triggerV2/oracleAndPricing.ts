@@ -307,10 +307,14 @@ describe("Oracle and Pricing Edge Cases", () => {
             await testOracle1.setPrice(ethers.parseUnits("100000", 8)) // $1M per token
             await s.Master.connect(s.Frank).registerOracle([testToken1], [testOracle1])
             
-            // Even tiny amounts should pass minimum with high price
-            const tinyAmount = 1000 // Very small amount
-            await s.Master.checkMinOrderSize(testToken1, tinyAmount)
-            // Should not revert because even tiny amount * high price > minimum
+            // Small amount that will result in > $10 USD value with high price
+            // Price is $100,000 = 10^13 in 1e8 format
+            // MOS is $10 = 10^9 in 1e8 format  
+            // Need: amount * 10^13 / 10^18 >= 10^9
+            // Therefore: amount >= 10^14
+            const smallAmount = ethers.parseUnits("1", 14) // 10^14 wei
+            await s.Master.checkMinOrderSize(testToken1, smallAmount)
+            // Should not revert because small amount * high price > minimum
         })
 
         it("Should handle tokens with very low prices", async () => {
@@ -451,12 +455,13 @@ describe("Oracle and Pricing Edge Cases", () => {
 
     describe("Price Precision Edge Cases", () => {
         it("Should handle minimum non-zero prices", async () => {
-            await testOracle1.setPrice(1) // Minimum price: 1 wei in 1e8 terms
+            await testOracle1.setPrice(1) // Minimum price: 1 wei in 1e8 terms = $0.00000001
             await testOracle2.setPrice(ethers.parseUnits("1", 8)) // $1
             await s.Master.connect(s.Frank).registerOracle([testToken1, testToken2], [testOracle1, testOracle2])
             
             const rate = await s.Master.getExchangeRate(testToken1, testToken2)
-            expect(rate).to.eq(0) // Should round down to 0 due to precision loss
+            // 1 / 100000000 = 0.00000001, but in 1e8 format: 1 / 1e8 * 1e8 = 1
+            expect(rate).to.eq(1) // Actual calculation: 1 * 1e8 / 1e8 = 1
         })
 
         it("Should maintain precision with similar prices", async () => {

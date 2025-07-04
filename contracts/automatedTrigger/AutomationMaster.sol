@@ -268,8 +268,7 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
         uint256 currentPrice = oracles[tokenIn].currentValue();
         uint256 usdValue = (currentPrice * amountIn) /
             (10 ** ERC20(address(tokenIn)).decimals());
-
-        require(usdValue > minOrderSize, "order too small");
+        require(usdValue >= minOrderSize, "order too small");
     }
 
     ///@notice check upkeep on all order types
