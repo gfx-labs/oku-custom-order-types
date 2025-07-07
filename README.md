@@ -2,6 +2,9 @@
 
 This repository contains the smart contracts for an automated trading system, designed to execute orders as they come within range. There are two primary types of orders supported by the system: **Bracket Orders** and **Stop Limit Orders**.
 
+See the [full docs](https://docs.oku.trade/home/advanced-orders) for more information.
+
+
 ## Automation
 
 The Automation Master contract is designed to be monitored by Chainlink Automation-type systems. Anyone can fill any of the orders as long as the order is eligible and they provide the necessary assets to satisfy the slippage requirements. The token-out assets are sent to the user as part of the upkeep function.
@@ -107,3 +110,27 @@ MAINNET_URL="https://rpc.ankr.com/eth"
 ARB_URL="https://rpc.ankr.com/arbitrum"
 ```
 Then the tests can then be run by ```npm run test```
+
+## Audit Scope
+
+### Primary Concerns
+1. The intent is to place zero trust in the data returned by off chain automation, such that the contracts control all aspects of security. This is the primary concern, is there any ability for mailicious `target` or `txData` to be used to compromise user funds? This would be a critical vulnerability. 
+2. Issues related to `maxPendingOrders` with regard to denial of service attacks. There are mechanisms to mitigate these risks, it is unclear if they are sufficient (order creation fee, checkUpkeep optionally being able to skip stale orders, etc)
+
+
+### General Notes
+1. The mechanism to determine `direction`, as well as the terms `takeProfitPrice` and `stopPrice` are intentionally arbitrary, the contract intentionally has no concept of what a "good" trade vs a "bad" one, and these can be used interchangibly. 
+2. The owner of these contracts will be an Oku company multisig wallet. 
+3. There will necessarily be an element of trust associated with using this contract as `adminCancelOrder` could be used by the contract owners to steal pending user funds. This ability is needed in order to give the admins the capability to clear stale or broken orders, should such issues arise. 
+4. There exists a separate permission to whitelist targets, this is to allow rapid whitelist capability without the need to go through a multisig each time. This permission will be retained by internal personnel to Oku.  If this risk is deemed too high, this ability can be restricted to the owning multisig wallet only. 
+5. Contracts are not intended to be upgradeable. 
+6. Automation is handeled via a custom automation system, which performs its own logic off chain. Dispite following a ChainLink automation compatible interface, these contracts are not expected to work with this type of automation system. 
+
+### Scope
+1. Gas related issues related to iterating are generally not in scope, as this will only be deployed to high performance L2 networks. 
+2. All ERC20 tokens (and USDT) are considered in scope, with the exception of any fee-on-transfer tokens and rebasing tokens. 
+3. Dispite performing off chain computation (route finding, etc), off chain automation is not expected to be trusted. The contract should handle all aspects of accounting and verification before and after the swap to ensure the route provided by the caller of `performUpkeep()` is effective at satisfying the fill conditions of the order. 
+4. MEV / Frontrunning issues are generally out of scope so long as their risks can be adequately mitigated with the current levers available. To completely deter front running attacks, a slippage of 0 can potentially be used, which will ensure that there is no room to front run, with the consequence of needing a slightly 'better' effective price on the router in order for the order to fill. 
+5. Tokens and Routers are whitelisted for security, specifically in order to avoid malicious external calls by manipulating the `target` and/or `txData`. 
+6. Only orders that can be filled per their user specified parameters (prices, slippage, etc) should be fillable, if any such orders are fillable outside these parameters, then this would be a vulnerability. 
+7. Oracle Providers are assumed to serve high quality data, currently only ChainLink on chain oracles are used. Oracles are assumed to return a USD price in 1e8 terms. Issues related to stale or otherwise incorrect responses from external oracles are considered to be out of scope
