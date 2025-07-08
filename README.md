@@ -114,17 +114,16 @@ Then the tests can then be run by ```npm run test```
 ## Audit Scope
 
 ### Primary Concerns
-1. The intent is to place zero trust in the data returned by off chain automation, such that the contracts control all aspects of security. This is the primary concern, is there any ability for mailicious `target` or `txData` to be used to compromise user funds? This would be a critical vulnerability. 
+1. The intent is to place zero trust in the data returned by off chain automation, such that the contracts control all aspects of security. This is the primary concern: Is there any ability for mailicious `target` or `txData` to be used to compromise user funds? This would be a critical vulnerability. 
 2. Issues related to `maxPendingOrders` with regard to denial of service attacks. There are mechanisms to mitigate these risks, it is unclear if they are sufficient (order creation fee, checkUpkeep optionally being able to skip stale orders, etc)
 
 
 ### General Notes
 1. The mechanism to determine `direction`, as well as the terms `takeProfitPrice` and `stopPrice` are intentionally arbitrary, the contract intentionally has no concept of what a "good" trade vs a "bad" one, and these can be used interchangibly. 
 2. The owner of these contracts will be an Oku company multisig wallet. 
-3. There will necessarily be an element of trust associated with using this contract as `adminCancelOrder` could be used by the contract owners to steal pending user funds. This ability is needed in order to give the admins the capability to clear stale or broken orders, should such issues arise. 
-4. There exists a separate permission to whitelist targets, this is to allow rapid whitelist capability without the need to go through a multisig each time. This permission will be retained by internal personnel to Oku.  If this risk is deemed too high, this ability can be restricted to the owning multisig wallet only. 
-5. Contracts are not intended to be upgradeable. 
-6. Automation is handeled via a custom automation system, which performs its own logic off chain. Dispite following a ChainLink automation compatible interface, these contracts are not expected to work with this type of automation system. 
+3. There exists a separate permission to whitelist targets, this is to allow more flexible whitelist capability without the need to go through a multisig each time. This permission will be retained by internal personnel to Oku.  If this risk is deemed too high, this ability can be restricted to the owning multisig wallet only. 
+4. Contracts are not intended to be upgradeable. This adds confidence to users as the contracts will not change while their funds are in them. 
+5. Orders placed on these contracts are publicly fillable. Any trader, MEV actor, or other automation system may participate in filling orders. Initially, [Adrastia](https://adrastia.io/) is monitoring the contracts for orders with their robust system. Dispite following a ChainLink automation compatible interface, these contracts are not expected to work with off-the-shelf ChainLink keepers. 
 
 ### Scope
 1. Gas related issues related to iterating are generally not in scope, as this will only be deployed to high performance L2 networks. 
@@ -134,3 +133,4 @@ Then the tests can then be run by ```npm run test```
 5. Tokens and Routers are whitelisted for security, specifically in order to avoid malicious external calls by manipulating the `target` and/or `txData`. 
 6. Only orders that can be filled per their user specified parameters (prices, slippage, etc) should be fillable, if any such orders are fillable outside these parameters, then this would be a vulnerability. 
 7. Oracle Providers are assumed to serve high quality data, currently only ChainLink on chain oracles are used. Oracles are assumed to return a USD price in 1e8 terms. Issues related to stale or otherwise incorrect responses from external oracles are considered to be out of scope
+8. Contract owners should not be able to steal user funds. User funds should only exist on `Bracket`, `StopLimit`, or `OracleLess`. Collected fees should only exist on `AutomationMaster`. There is the option for admins to cancel user orders and waive the refund, this is to remove broken or stale orders, should such issues arise. The funds from orders cancelled in this way will be locked on the contract and are not available to be stolen by anyone. 
