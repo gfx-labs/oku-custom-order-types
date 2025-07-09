@@ -12,9 +12,9 @@ describe("Oracle and Pricing Edge Cases", () => {
 
     before(async () => {
         // Create test tokens and oracles for comprehensive testing
-        testToken1 = IERC20__factory.connect("0x912CE59144191C1204E64559FE8253a0e49E6548", s.Frank) // ARB
-        testToken2 = IERC20__factory.connect("0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0", s.Frank) // UNI
-        testToken3 = IERC20__factory.connect("0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f", s.Frank) // BTC
+        testToken1 = IERC20__factory.connect("0x4200000000000000000000000000000000000042", s.Frank) // OP
+        testToken2 = IERC20__factory.connect("0x6fd9d7AD17242c41f7131d257212c54A0e816691", s.Frank) // UNI
+        testToken3 = IERC20__factory.connect("0x68f180fcCe6836688e9084f035309E29Bf0A2095", s.Frank) // WBTC
         
         testOracle1 = await new PlaceholderOracle__factory(s.Frank).deploy(await testToken1.getAddress())
         testOracle2 = await new PlaceholderOracle__factory(s.Frank).deploy(await testToken2.getAddress())

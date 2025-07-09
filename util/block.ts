@@ -214,3 +214,7 @@ export const reset = async (block: number) => {
 export const OneYear = 60 * 60 * 24 * 365.25
 export const OneWeek = 60 * 60 * 24 * 7;
 export const OneDay = 60 * 60 * 24;
+
+// Aliases for easier switching between networks
+// Using OP block reset function when ARB block reset is called
+export { resetCurrentOPblock as resetCurrentArbBlock };

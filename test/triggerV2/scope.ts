@@ -37,16 +37,16 @@ export class TestScope {
 
     abi = new AbiCoder()
 
-    LimitOrderRegistry = "0x54df9e11c7933a9ca3bd1e540b63da15edae40bf"//arbiscan
-    pool = "0xc31e54c7a869b9fcbecc14363cf510d1c41fa443"//WETH/USDC.e pool @ 500
+    LimitOrderRegistry = "0x54df9e11c7933a9ca3bd1e540b63da15edae40bf"//optimism
+    pool = "0x1fb3cf6e48F1E7B10213E7b6d87D4c073C7Fdb7b"//WETH/USDC pool @ 500
     router02 = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"
 
-    wethWhale = "0xE4f718a0b06D91cF6ff436d4445315ABDF99247b"
-    usdcWhale = "0x25681Ab599B4E2CEea31F8B498052c53FC2D74db"
+    wethWhale = "0x86Bb63148d17d445Ed5398ef26Aa05Bf76dD5b59"
+    usdcWhale = "0xf89d7b9c864f589bbF53a82105107622B35EaA40"
     wethAmount = ethers.parseEther("1.65")
     usdcAmount = ethers.parseUnits("5000", 6)
     uniAmount = ethers.parseEther("665")
-    arbAmount = ethers.parseEther("6580")
+    opAmount = ethers.parseEther("6580")
 
     andyWeth = this.wethAmount * 20n
     steveWeth = this.andyWeth
@@ -55,7 +55,7 @@ export class TestScope {
     initialEthPrice = ethers.parseUnits("3391.95", 8)
     initialUsdcPrice = ethers.parseUnits("0.9998", 8)
     initialUniPrice = ethers.parseUnits("7.53", 8)
-    initialArbPrice = ethers.parseUnits("0.7581", 8)
+    initialOpPrice = ethers.parseUnits("2.15", 8)
 
 
     Master!: AutomationMaster
@@ -72,13 +72,13 @@ export class TestScope {
     wethOracle!: PlaceholderOracle
     usdcOracle!: PlaceholderOracle
     uniOracle!: PlaceholderOracle
-    arbOracle!: PlaceholderOracle
+    opOracle!: PlaceholderOracle
 
     UniPool!: UniswapV3Pool
-    WETH!: IERC20 //weth token0 0x82af49447d8a07e3bd95bd0d56f35241523fbab1
-    USDC!: IERC20 //USDC.e token1 0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8
-    ARB!: IERC20 //0x912CE59144191C1204E64559FE8253a0e49E6548
-    UNI!: IERC20 //0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0
+    WETH!: IERC20 //weth token0 0x4200000000000000000000000000000000000006
+    USDC!: IERC20 //USDC token1 0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85
+    OP!: IERC20 //0x4200000000000000000000000000000000000042
+    UNI!: IERC20 //0x6fd9d7AD17242c41f7131d257212c54A0e816691
 
 }
 

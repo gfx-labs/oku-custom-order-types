@@ -367,7 +367,7 @@ export class OptimisimAddresses {
 }
 
 
-export const a = new ArbAddresses()
+export const a = new OptimisimAddresses()
 
 export const av = new AvaxAddresses()
 

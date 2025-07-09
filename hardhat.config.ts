@@ -14,8 +14,8 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       forking: {
-        url: process.env.MAINNET_URL ? process.env.MAINNET_URL : zaddr,
-        blockNumber: 14546835,
+        url: process.env.OP_URL ? process.env.OP_URL : zaddr,
+        blockNumber: 118000000,
       },
       mining: {
         auto: true,

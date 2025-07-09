@@ -1,5 +1,5 @@
 import { AutomationMaster__factory, Bracket__factory, IERC20__factory, OracleLess__factory, PlaceholderOracle__factory, StopLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
-import { currentBlock, hardhat_mine_timed, resetCurrentArbBlock } from "../../util/block"
+import { currentBlock, hardhat_mine_timed, resetCurrentOPblock } from "../../util/block"
 import { expect } from "chai"
 import { stealMoney } from "../../util/money"
 import { decodeUpkeepData, generateUniTx, generateUniTxData, getGas, MasterUpkeepData } from "../../util/msc"
@@ -11,14 +11,14 @@ import { AbiCoder } from "ethers"
 
 const abiCoder = new ethers.AbiCoder();
 
-///All tests are performed as if on Arbitrum
-///Testing is on the Arb WETH/USDC.e pool @ 500
-describe("Automated Trigger Testing on Arbitrum", () => {
+///All tests are performed as if on Optimism
+///Testing is on the OP WETH/USDC pool @ 500
+describe("Automated Trigger Testing on Optimism", () => {
 
     before(async () => {
         console.log("STARTING")
-        await resetCurrentArbBlock(235660173)
-        console.log("Testing on ARB @", (await currentBlock())?.number)
+        await resetCurrentOPblock(123125629)
+        console.log("Testing on OP @", (await currentBlock())?.number)
 
         //connect to signers
         s.signers = await ethers.getSigners()
@@ -31,10 +31,10 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         s.Gary = s.signers[6]
 
         s.UniPool = UniswapV3Pool__factory.connect(s.pool, s.Frank)
-        s.WETH = IERC20__factory.connect(await s.UniPool.token0(), s.Frank)
-        s.USDC = IERC20__factory.connect(await s.UniPool.token1(), s.Frank)
-        s.ARB = IERC20__factory.connect("0x912CE59144191C1204E64559FE8253a0e49E6548", s.Frank)
-        s.UNI = IERC20__factory.connect("0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0", s.Frank)
+        s.WETH = IERC20__factory.connect(await s.UniPool.token1(), s.Frank)
+        s.USDC = IERC20__factory.connect(await s.UniPool.token0(), s.Frank)
+        s.OP = IERC20__factory.connect("0x4200000000000000000000000000000000000042", s.Frank)
+        s.UNI = IERC20__factory.connect("0x6fd9d7AD17242c41f7131d257212c54A0e816691", s.Frank)
 
     })
 
@@ -61,7 +61,7 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         s.wethOracle = await new PlaceholderOracle__factory(s.Frank).deploy(await s.WETH.getAddress())
         s.usdcOracle = await new PlaceholderOracle__factory(s.Frank).deploy(await s.USDC.getAddress())
         s.uniOracle = await new PlaceholderOracle__factory(s.Frank).deploy(await s.UNI.getAddress())
-        s.arbOracle = await new PlaceholderOracle__factory(s.Frank).deploy(await s.ARB.getAddress())
+        s.opOracle = await new PlaceholderOracle__factory(s.Frank).deploy(await s.OP.getAddress())
 
 
 
@@ -78,14 +78,12 @@ describe("Automated Trigger Testing on Arbitrum", () => {
         expect(s.Master.connect(s.Frank).whitelistTargets([s.router02])).to.be.revertedWith("!Allowed to set targets")
         await s.Master.connect(s.Bob).whitelistTargets([s.router02])
 
-
         //register sup keepers
         await s.Master.connect(s.Frank).registerSubKeepers(await s.StopLimit.getAddress(), await s.Bracket.getAddress(), await s.OracleLess.getAddress())
 
-
         //register oracles
-        const tokens = [await s.WETH.getAddress(), await s.USDC.getAddress(), await s.UNI.getAddress(), await s.ARB.getAddress()]
-        const oracles = [await s.wethOracle.getAddress(), await s.usdcOracle.getAddress(), await s.uniOracle.getAddress(), await s.arbOracle.getAddress()]
+        const tokens = [await s.WETH.getAddress(), await s.USDC.getAddress(), await s.UNI.getAddress(), await s.OP.getAddress()]
+        const oracles = [await s.wethOracle.getAddress(), await s.usdcOracle.getAddress(), await s.uniOracle.getAddress(), await s.opOracle.getAddress()]
         await s.Master.connect(s.Frank).registerOracle(tokens, oracles)
 
         //set max pending orders
@@ -126,7 +124,7 @@ describe("Execute Stop-Limit Upkeep", () => {
         await s.wethOracle.setPrice(s.initialEthPrice)
         await s.usdcOracle.setPrice(s.initialUsdcPrice)
         await s.uniOracle.setPrice(s.initialUniPrice)
-        await s.arbOracle.setPrice(s.initialArbPrice)
+        await s.opOracle.setPrice(s.initialOpPrice)
 
     })
 
@@ -286,7 +284,7 @@ describe("Execute Stop-Limit with swap on fill", () => {
         await s.wethOracle.setPrice(s.initialEthPrice)
         await s.usdcOracle.setPrice(s.initialUsdcPrice)
         await s.uniOracle.setPrice(s.initialUniPrice)
-        await s.arbOracle.setPrice(s.initialArbPrice)
+        await s.opOracle.setPrice(s.initialOpPrice)
     })
 
     it("Create stop-limit order WETH => USDC with swap on fill", async () => {
@@ -472,7 +470,7 @@ describe("Execute Bracket Upkeep", () => {
         await s.wethOracle.setPrice(s.initialEthPrice)
         await s.usdcOracle.setPrice(s.initialUsdcPrice)
         await s.uniOracle.setPrice(s.initialUniPrice)
-        await s.arbOracle.setPrice(s.initialArbPrice)
+        await s.opOracle.setPrice(s.initialOpPrice)
 
         let initial = await s.Master.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
@@ -677,7 +675,7 @@ describe("Bracket order with order modification", () => {
         await s.wethOracle.setPrice(s.initialEthPrice)
         await s.usdcOracle.setPrice(s.initialUsdcPrice)
         await s.uniOracle.setPrice(s.initialUniPrice)
-        await s.arbOracle.setPrice(s.initialArbPrice)
+        await s.opOracle.setPrice(s.initialOpPrice)
 
         let initial = await s.Master.checkUpkeep("0x")
         expect(initial.upkeepNeeded).to.eq(false)
@@ -984,7 +982,7 @@ describe("Bracket order with order modification", () => {
 })
 
 describe("Oracle Less", () => {
-    const expectedAmountOut = 5600885752n
+    const expectedAmountOut = 5599771561n
     const minAmountOut = expectedAmountOut - 50n
     let orderId: bigint
 
@@ -1116,7 +1114,7 @@ describe("Oracle Less", () => {
             s.router02,
             s.UniPool,
             await s.OracleLess.getAddress(),
-            pendingOrders[0].minAmountOut//5600885752
+            pendingOrders[0].minAmountOut
         )
 
         await s.OracleLess.fillOrder(0n, orderId, s.router02, txData)

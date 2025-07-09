@@ -52,7 +52,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
         let testToken: any
 
         before(async () => {
-            testToken = IERC20__factory.connect("0x912CE59144191C1204E64559FE8253a0e49E6548", s.Frank) // ARB
+            testToken = IERC20__factory.connect("0x4200000000000000000000000000000000000042", s.Frank) // OP
         })
 
         it("Should revert when arrays have mismatched lengths", async () => {

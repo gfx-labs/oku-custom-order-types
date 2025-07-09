@@ -1,5 +1,5 @@
 import { AutomationMaster__factory, IERC20__factory, PlaceholderOracle__factory, StopLimit__factory, UniswapV3Pool__factory } from "../../typechain-types"
-import { currentBlock, resetCurrentArbBlock } from "../../util/block"
+import { currentBlock, resetCurrentOPblock } from "../../util/block"
 import { expect } from "chai"
 import { stealMoney } from "../../util/money"
 import { decodeUpkeepData, generateUniTx, generateUniTxData, getGas, MasterUpkeepData } from "../../util/msc"
@@ -8,8 +8,8 @@ import { DeployContract } from "../../util/deploy"
 import { ethers } from "hardhat"
 
 
-///All tests are performed as if on Arbitrum
-///Testing is on the Arb WETH/USDC.e pool @ 500
+///All tests are performed as if on Optimism
+///Testing is on the OP WETH/USDC.e pool @ 500
 describe("Test for failure - STOP LIMIT", () => {
 
 

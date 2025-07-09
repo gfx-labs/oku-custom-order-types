@@ -117,7 +117,7 @@ describe("AutomationMaster Comprehensive Tests", () => {
         let testOracle1: any, testOracle2: any
 
         before(async () => {
-            testToken1 = IERC20__factory.connect("0x912CE59144191C1204E64559FE8253a0e49E6548", s.Frank) // ARB
+            testToken1 = IERC20__factory.connect("0x4200000000000000000000000000000000000042", s.Frank) // OP
             testToken2 = IERC20__factory.connect("0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0", s.Frank) // UNI
             testOracle1 = await new PlaceholderOracle__factory(s.Frank).deploy(await testToken1.getAddress())
             testOracle2 = await new PlaceholderOracle__factory(s.Frank).deploy(await testToken2.getAddress())
