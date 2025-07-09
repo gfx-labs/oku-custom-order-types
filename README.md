@@ -103,11 +103,13 @@ Oracles are expected to return a USD price in 1e8 terms, so the price of USDC sh
 
 ## Testing
 
-In order to run the tests, create a .env file and add a MAINNET_URL and ARB_URL and assign these to the appropriate RPC addresses. Here is an example .env file: 
+Tests are performed as if on Optimism.
+
+In order to run the tests, create a .env file and add a MAINNET_URL and OP_URL and assign these to the appropriate RPC addresses. Here is an example .env file: 
 
 ```
 MAINNET_URL="https://rpc.ankr.com/eth"
-ARB_URL="https://rpc.ankr.com/arbitrum"
+OP_URL="https://rpc.ankr.com/optimismi"
 ```
 Then the tests can then be run by ```npm run test```
 
@@ -121,14 +123,19 @@ Then the tests can then be run by ```npm run test```
 ### General Notes
 1. The mechanism to determine `direction`, as well as the terms `takeProfitPrice` and `stopPrice` are intentionally arbitrary, the contract intentionally has no concept of what a "good" trade vs a "bad" one, and these can be used interchangibly. 
 2. The owner of these contracts will be an Oku company multisig wallet. 
-3. There exists a separate permission to whitelist targets, this is to allow more flexible whitelist capability without the need to go through a multisig each time. This permission will be retained by internal personnel to Oku.  If this risk is deemed too high, this ability can be restricted to the owning multisig wallet only. 
+3. There exists a separate permission to whitelist targets, this is to allow more flexible whitelist capability without the need to go through a multisig each time. This permission will be retained by internal personnel to Oku.  
 4. Contracts are not intended to be upgradeable. This adds confidence to users as the contracts will not change while their funds are in them. 
 5. Orders placed on these contracts are publicly fillable. Any trader, MEV actor, or other automation system may participate in filling orders. Initially, [Adrastia](https://adrastia.io/) is monitoring the contracts for orders with their robust system. Dispite following a ChainLink automation compatible interface, these contracts are not expected to work with off-the-shelf ChainLink keepers. 
 
+### Parameters
+1. `maxPendingOrders` is set to 150
+2. `orderFee` is generally expected to target around $0.25 in the native gas token, 0.0001 ETH. 
+3. `minOrderSize` is defined in USD 1e8 terms (like oracle prices) and is set to $25 
+
 ### Scope
 1. Gas related issues related to iterating are generally not in scope, as this will only be deployed to high performance L2 networks. 
-2. All ERC20 tokens (and USDT) are considered in scope, with the exception of any fee-on-transfer tokens and rebasing tokens. 
-3. Dispite performing off chain computation (route finding, etc), off chain automation is not expected to be trusted. The contract should handle all aspects of accounting and verification before and after the swap to ensure the route provided by the caller of `performUpkeep()` is effective at satisfying the fill conditions of the order. 
+2. All ERC20 tokens (and USDT) are considered in scope, with the exception of any fee-on-transfer tokens, tax tokens, and rebasing tokens. 
+3. The contract is expected to handle all aspects of accounting and verification before and after the swap to ensure the route provided by the caller of `performUpkeep()` is effective at satisfying the fill conditions of the order. 
 4. MEV / Frontrunning issues are generally out of scope so long as their risks can be adequately mitigated with the current levers available. To completely deter front running attacks, a slippage of 0 can potentially be used, which will ensure that there is no room to front run, with the consequence of needing a slightly 'better' effective price on the router in order for the order to fill. 
 5. Tokens and Routers are whitelisted for security, specifically in order to avoid malicious external calls by manipulating the `target` and/or `txData`. 
 6. Only orders that can be filled per their user specified parameters (prices, slippage, etc) should be fillable, if any such orders are fillable outside these parameters, then this would be a vulnerability. 
