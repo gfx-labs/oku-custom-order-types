@@ -635,7 +635,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             require(
                 finalTokenOut - initialTokenOut >=
                     MASTER.getMinAmountReceived(
-                        (initialTokenIn - finalTokenIn),
+                        amountIn,
                         tokenIn,
                         tokenOut,
                         bips
