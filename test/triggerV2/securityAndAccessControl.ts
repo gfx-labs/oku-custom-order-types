@@ -1,16 +1,13 @@
-import { AutomationMaster__factory, Bracket__factory, StopLimit__factory, OracleLess__factory, IERC20__factory, PlaceholderOracle__factory } from "../../typechain-types"
+import { IERC20__factory, PlaceholderOracle__factory } from "../../typechain-types"
 import { expect } from "chai"
 import { stealMoney } from "../../util/money"
-import { generateUniTxData, MasterUpkeepData } from "../../util/msc"
+import { generateUniTxData } from "../../util/msc"
 import { s } from "./scope"
-import { DeployContract } from "../../util/deploy"
 import { ethers } from "hardhat"
-import { a } from "../../util/addresser"
 
 describe("Security and Access Control Tests", () => {
 
     const testAmount = ethers.parseEther("0.1")
-    const testUsdcAmount = ethers.parseUnits("300", 6)
 
     before(async () => {
         // Fund test accounts for security testing
@@ -146,7 +143,7 @@ describe("Security and Access Control Tests", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -170,7 +167,6 @@ describe("Security and Access Control Tests", () => {
                 500,
                 500,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -189,7 +185,7 @@ describe("Security and Access Control Tests", () => {
                 ethers.parseUnits("300", 6),
                 await s.Steve.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -218,7 +214,6 @@ describe("Security and Access Control Tests", () => {
                 order.takeProfitSlippage,
                 order.stopSlippage,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("only order owner")
@@ -244,8 +239,7 @@ describe("Security and Access Control Tests", () => {
                 order.stopSlippage,
                 order.swapSlippage,
                 order.swapOnFill,
-                false,
-                false,
+                false,                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("only order owner")
@@ -263,7 +257,6 @@ describe("Security and Access Control Tests", () => {
                 0,
                 ethers.parseUnits("300", 6),
                 await s.Steve.getAddress(),
-                false,
                 false,
                 "0x",
                 { value: s.fee }
@@ -296,7 +289,7 @@ describe("Security and Access Control Tests", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -346,7 +339,7 @@ describe("Security and Access Control Tests", () => {
                 ethers.parseUnits("200", 6),
                 await s.Steve.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -414,7 +407,7 @@ describe("Security and Access Control Tests", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -463,7 +456,7 @@ describe("Security and Access Control Tests", () => {
                 100, // feeBips
                 500, // takeProfitSlippage
                 500, // stopSlippage
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -523,7 +516,7 @@ describe("Security and Access Control Tests", () => {
                     console.log("Unexpected state after performUpkeep")
                     expect(false).to.be.true // Fail the test
                 }
-            } catch (error) {
+            } catch (error: any) {
                 // The call should fail - this means the zero-amount attack was prevented
                 // This could fail for various reasons:
                 // 1. "Too Little Received" due to our fix
@@ -594,7 +587,7 @@ describe("Security and Access Control Tests", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: currentFee - 1n } // Underpayment
             )).to.be.revertedWith("Insufficient funds for order fee")
@@ -611,7 +604,7 @@ describe("Security and Access Control Tests", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee + ethers.parseEther("0.01") } // Overpayment
             )
@@ -647,7 +640,7 @@ describe("Security and Access Control Tests", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: currentFee }
             )
@@ -714,7 +707,7 @@ describe("Security and Access Control Tests", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWithCustomError(s.Bracket, "EnforcedPause")
@@ -731,8 +724,7 @@ describe("Security and Access Control Tests", () => {
                 500,
                 500,
                 500,
-                false,
-                false,
+                false,                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWithCustomError(s.StopLimit, "EnforcedPause")
@@ -744,7 +736,7 @@ describe("Security and Access Control Tests", () => {
                 ethers.parseUnits("300", 6),
                 await s.Steve.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWithCustomError(s.OracleLess, "EnforcedPause")
@@ -774,7 +766,7 @@ describe("Security and Access Control Tests", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -804,7 +796,7 @@ describe("Security and Access Control Tests", () => {
                 await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), largeAmount)
                 // The transaction will likely fail due to insufficient balance, not overflow
                 expect(true).to.be.true
-            } catch (error) {
+            } catch (error: any) {
                 // Should fail gracefully, not due to overflow
                 expect(error.message).to.not.include("overflow")
             }
@@ -818,7 +810,7 @@ describe("Security and Access Control Tests", () => {
 
                 const result = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
                 expect(result).to.be.gt(0) // Should handle large numbers
-            } catch (error) {
+            } catch (error: any) {
                 // Overflow protection is acceptable
                 expect(error.message).to.include("overflow")
             }

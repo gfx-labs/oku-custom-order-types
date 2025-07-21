@@ -39,7 +39,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("recipient == zero address")
@@ -61,7 +60,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("tokenIn == tokenOut")
@@ -80,7 +78,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 500,
-                false,
                 false,
                 "0x",
                 { value: s.fee }
@@ -103,7 +100,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("BIPS > 10k")
@@ -124,7 +120,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 500,
-                false,
                 false,
                 "0x",
                 { value: s.fee - 1n } // Insufficient fee
@@ -147,7 +142,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 500,
-                false,
                 false,
                 "0x",
                 { value: s.fee }
@@ -174,7 +168,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 500,
-                false,
                 false,
                 "0x",
                 { value: s.fee }
@@ -205,7 +198,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -228,7 +220,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 500,
-                false,
                 false,
                 "0x",
                 { value: s.fee }
@@ -310,7 +301,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -366,7 +356,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -401,7 +390,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 order.swapSlippage,
                 order.swapOnFill,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("only order owner")
@@ -412,19 +400,18 @@ describe("StopLimit Contract Edge Cases", () => {
 
             await expect(s.StopLimit.connect(s.Oscar).modifyOrder(
                 orderId,
-                currentPrice - ethers.parseUnits("50", 8),
-                currentPrice + ethers.parseUnits("150", 8),
-                currentPrice - ethers.parseUnits("150", 8),
-                0,
-                await s.USDC.getAddress(),
-                await s.Oscar.getAddress(),
-                500,
-                500,
-                500,
-                false,
-                false,
-                false,
-                "0x",
+                currentPrice - ethers.parseUnits("50", 8),//stopLimitPrice
+                currentPrice + ethers.parseUnits("150", 8),//takeProfit
+                currentPrice - ethers.parseUnits("150", 8),//stopPrice
+                0,//amountInDelta
+                await s.USDC.getAddress(),//tokenOut
+                await s.Oscar.getAddress(),//recipient
+                500,//takeProfitBips
+                500,//stopBips
+                500,//swapBips (not used)
+                false,//swapOnFill
+                false,//increase position
+                "0x",//permit payload
                 { value: s.fee }
             )).to.be.revertedWith("order not active")
         })
@@ -444,7 +431,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 order.stopSlippage,
                 order.swapSlippage,
                 order.swapOnFill,
-                false,
                 false,
                 "0x",
                 { value: s.fee }
@@ -467,7 +453,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 order.swapSlippage,
                 order.swapOnFill,
                 false, // Decrease position
-                false,
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("invalid delta")
@@ -492,7 +477,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 order.swapSlippage,
                 order.swapOnFill,
                 true, // Increase position
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -522,7 +506,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 order.swapSlippage,
                 order.swapOnFill,
                 false, // Decrease position
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -551,7 +534,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 order.swapSlippage,
                 order.swapOnFill,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -579,7 +561,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 5000, // High slippage for swap
                 true, // Swap on fill
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -640,7 +621,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -687,7 +667,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 500,
-                false,
                 false,
                 "0x",
                 { value: s.fee }
@@ -813,7 +792,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -850,7 +828,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 500,
-                false,
                 false,
                 "0x",
                 { value: s.fee }
@@ -891,7 +868,6 @@ describe("StopLimit Contract Edge Cases", () => {
                 500,
                 500,
                 500,
-                false,
                 false,
                 "0x",
                 { value: s.fee }

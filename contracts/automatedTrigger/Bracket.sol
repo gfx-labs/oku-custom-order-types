@@ -236,7 +236,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             takeProfitSlippage,
             stopSlippage,
             true, //flag for stop limit order
-            false,
             new bytes(0)
         );
     }
@@ -253,7 +252,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
-        bool permit,
         bytes calldata permitPayload
     ) external payable override nonReentrant whenNotPaused paysFee {
         _initializeOrder(
@@ -269,7 +267,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             takeProfitSlippage,
             stopSlippage,
             false,
-            permit,
             permitPayload
         );
     }
@@ -285,7 +282,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         uint16 _takeProfitSlippage,
         uint16 _stopSlippage,
         bool increasePosition,
-        bool permit,
         bytes calldata permitPayload
     ) external payable override nonReentrant whenNotPaused paysFee {
         //get order
@@ -305,7 +301,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
                     order.tokenIn,
                     amountInDelta,
                     msg.sender,
-                    permit,
                     permitPayload
                 );
             } else {
@@ -382,22 +377,25 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         IERC20 token,
         uint256 amount,
         address tokenOwner,
-        bool permit,
         bytes memory permitPayload
     ) internal {
-        if (permit) {
+        if (permitPayload.length > 0) {
             require(amount < type(uint160).max, "uint160 overflow");
             IAutomation.Permit2Payload memory payload = abi.decode(
                 permitPayload,
                 (IAutomation.Permit2Payload)
             );
 
-            permit2.permit(tokenOwner, payload.permitSingle, payload.signature);
-            permit2.transferFrom(
+            IPermit2.SignatureTransferDetails memory transferDetails = IPermit2.SignatureTransferDetails({
+                to: address(this),
+                requestedAmount: amount
+            });
+
+            permit2.permitTransferFrom(
+                payload.permitTransferFrom,
+                transferDetails,
                 tokenOwner,
-                address(this),
-                uint160(amount),
-                address(token)
+                payload.signature
             );
         } else {
             token.safeTransferFrom(tokenOwner, address(this), amount);
@@ -417,7 +415,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         bool stopLimit,
-        bool permit,
         bytes memory permitPayload
     ) internal {
         //determine if we are doing a swap first
@@ -431,7 +428,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
                 swapParams.swapTokenIn,
                 swapParams.swapAmountIn,
                 msg.sender,
-                permit,
                 permitPayload
             );
 
@@ -450,7 +446,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             );
         } else {
             //no swap
-            procureTokens(tokenIn, amountIn, msg.sender, permit, permitPayload);
+            procureTokens(tokenIn, amountIn, msg.sender, permitPayload);
 
             _createOrder(
                 takeProfit,
@@ -657,21 +653,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         );
     }
 
-    ///@notice handle signature and acquisition of asset with permit2
-    function handlePermit(
-        address owner,
-        bytes calldata permitPayload,
-        uint160 amount,
-        address token
-    ) internal {
-        Permit2Payload memory payload = abi.decode(
-            permitPayload,
-            (Permit2Payload)
-        );
-
-        permit2.permit(owner, payload.permitSingle, payload.signature);
-        permit2.transferFrom(owner, address(this), amount, token);
-    }
 
     ///@notice determine @param order order is fillable
     function checkInRange(

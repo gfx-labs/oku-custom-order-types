@@ -113,7 +113,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         uint256 minAmountOut,
         address recipient,
         uint16 feeBips,
-        bool permit,
         bytes calldata permitPayload
     )
         external
@@ -134,7 +133,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         );
 
         //procure tokens
-        procureTokens(tokenIn, amountIn, msg.sender, permit, permitPayload);
+        procureTokens(tokenIn, amountIn, msg.sender, permitPayload);
 
         //construct and store order
         orderId = MASTER.generateOrderId(msg.sender);
@@ -184,7 +183,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         uint256 _minAmountOut,
         address _recipient,
         bool increasePosition,
-        bool permit,
         bytes calldata permitPayload
     ) external payable override nonReentrant paysFee whenNotPaused {
         require(dataSet.contains(orderId), "order not active");
@@ -200,7 +198,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
             _minAmountOut,
             _recipient,
             increasePosition,
-            permit,
             permitPayload
         );
         emit OracleLessOrderModified(orderId);
@@ -278,7 +275,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         uint256 _minAmountOut,
         address _recipient,
         bool increasePosition,
-        bool permit,
         bytes calldata permitPayload
     ) internal {
         //fetch order
@@ -297,7 +293,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
                     order.tokenIn,
                     amountInDelta,
                     order.recipient,
-                    permit,
                     permitPayload
                 );
             } else {
@@ -383,10 +378,9 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         IERC20 token,
         uint256 amount,
         address owner,
-        bool permit,
         bytes calldata permitPayload
     ) internal {
-        if (permit) {
+        if (permitPayload.length > 0) {
             require(amount < type(uint160).max, "uint160 overflow");
 
             IAutomation.Permit2Payload memory payload = abi.decode(
@@ -394,12 +388,16 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
                 (IAutomation.Permit2Payload)
             );
 
-            permit2.permit(owner, payload.permitSingle, payload.signature);
-            permit2.transferFrom(
+            IPermit2.SignatureTransferDetails memory transferDetails = IPermit2.SignatureTransferDetails({
+                to: address(this),
+                requestedAmount: amount
+            });
+
+            permit2.permitTransferFrom(
+                payload.permitTransferFrom,
+                transferDetails,
                 owner,
-                address(this),
-                uint160(amount),
-                address(token)
+                payload.signature
             );
         } else {
             token.safeTransferFrom(owner, address(this), amount);

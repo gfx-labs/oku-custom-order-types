@@ -139,12 +139,11 @@ describe("Execute Stop-Limit Upkeep", () => {
             await s.WETH.getAddress(),
             await s.USDC.getAddress(),
             await s.Bob.getAddress(),
-            strikeBips,
             5,//5 bips fee
+            strikeBips,
+            strikeBips,
             0,//no stop loss bips
-            0,//no swap on fill bips
             false,//no swap on fill
-            false,//no permit
             "0x",
             { value: s.fee }
         )
@@ -302,7 +301,6 @@ describe("Execute Stop-Limit with swap on fill", () => {
             stopBips,//no stop loss bips
             swapBips,//no swap on fill bips
             true,//swap on fill
-            false,//no permit
             "0x",
             { value: s.fee }
         )
@@ -522,7 +520,6 @@ describe("Execute Bracket Upkeep", () => {
             5,//5 bips fee
             strikeBips,
             stopBips,
-            false,//no permit
             "0x",
             { value: s.fee }
         )).to.be.revertedWith("order too small")
@@ -538,7 +535,6 @@ describe("Execute Bracket Upkeep", () => {
             5,//5 bips fee
             strikeBips,
             stopBips,
-            false,//no permit
             "0x",
             { value: s.fee }
         )
@@ -732,7 +728,6 @@ describe("Bracket order with order modification", () => {
             5,//5 bips fee
             strikeBips,
             stopBips,
-            false,
             "0x",
             { value: s.fee }
         )
@@ -773,7 +768,6 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             true,
-            false,
             "0x",
             { value: s.fee }
         );
@@ -800,7 +794,6 @@ describe("Bracket order with order modification", () => {
             ogOrder.recipient,
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
-            false,
             false,
             "0x",
             { value: s.fee }
@@ -833,7 +826,6 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
-            false,
             "0x",
             { value: s.fee }
         );
@@ -850,7 +842,6 @@ describe("Bracket order with order modification", () => {
             ogOrder.recipient,
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
-            false,
             false,
             "0x",
             { value: s.fee }
@@ -869,7 +860,6 @@ describe("Bracket order with order modification", () => {
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
             false,
-            false,
             "0x",
             { value: s.fee }
         )
@@ -887,7 +877,6 @@ describe("Bracket order with order modification", () => {
             ogOrder.recipient,
             ogOrder.takeProfitSlippage,
             ogOrder.stopSlippage,
-            false,
             false,
             "0x",
             { value: s.fee }
@@ -1001,7 +990,6 @@ describe("Oracle Less", () => {
             minAmountOut,
             await s.Oscar.getAddress(),
             25,
-            false,
             "0x",
             { value: s.fee }
         )
@@ -1024,7 +1012,6 @@ describe("Oracle Less", () => {
             order.minAmountOut,
             order.recipient,
             false,
-            false,
             "0x",
             { value: s.fee }
         )).to.be.revertedWith("only order owner")
@@ -1036,7 +1023,6 @@ describe("Oracle Less", () => {
             delta,
             order.minAmountOut,
             order.recipient,
-            false,
             false,
             "0x",
             { value: s.fee }
@@ -1053,7 +1039,6 @@ describe("Oracle Less", () => {
             order.minAmountOut,
             order.recipient,
             true,
-            false,
             "0x",
             { value: s.fee }
         )
@@ -1071,7 +1056,6 @@ describe("Oracle Less", () => {
             0n,
             expectedAmountOut + 50n,
             order.recipient,
-            false,
             false,
             "0x",
             { value: s.fee }
@@ -1096,7 +1080,6 @@ describe("Oracle Less", () => {
             0n,
             minAmountOut,
             order.recipient,
-            false,
             false,
             "0x",
             { value: s.fee }

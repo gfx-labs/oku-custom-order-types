@@ -218,16 +218,25 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         uint16 stopSlippage,
         uint16 swapSlippage,
         bool swapOnFill,
-        bool permit,
         bytes calldata permitPayload
     ) external payable override nonReentrant whenNotPaused paysFee {
-        if (permit) {
+        if (permitPayload.length > 0) {
             require(amountIn < type(uint160).max, "uint160 overflow");
-            handlePermit(
-                msg.sender,
+            IAutomation.Permit2Payload memory payload = abi.decode(
                 permitPayload,
-                uint160(amountIn),
-                address(tokenIn)
+                (IAutomation.Permit2Payload)
+            );
+
+            IPermit2.SignatureTransferDetails memory transferDetails = IPermit2.SignatureTransferDetails({
+                to: address(this),
+                requestedAmount: amountIn
+            });
+
+            permit2.permitTransferFrom(
+                payload.permitTransferFrom,
+                transferDetails,
+                msg.sender,
+                payload.signature
             );
         } else {
             //take asset, assume prior approval
@@ -266,7 +275,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         uint16 _swapSlippage,
         bool _swapOnFill,
         bool increasePosition,
-        bool permit,
         bytes calldata permitPayload
     ) external payable override nonReentrant whenNotPaused paysFee {
         //get existing order
@@ -281,17 +289,27 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         if (_amountInDelta != 0) {
             if (increasePosition) {
                 newAmountIn += _amountInDelta;
-                //take funds via permit2
-                if (permit) {
+                //take funds via permit2 or legacy transfer
+                if (permitPayload.length > 0) {
                     require(
                         _amountInDelta < type(uint160).max,
                         "uint160 overflow"
                     );
-                    handlePermit(
-                        order.recipient,
+                    IAutomation.Permit2Payload memory payload = abi.decode(
                         permitPayload,
-                        uint160(_amountInDelta),
-                        address(order.tokenIn)
+                        (IAutomation.Permit2Payload)
+                    );
+
+                    IPermit2.SignatureTransferDetails memory transferDetails = IPermit2.SignatureTransferDetails({
+                        to: address(this),
+                        requestedAmount: _amountInDelta
+                    });
+
+                    permit2.permitTransferFrom(
+                        payload.permitTransferFrom,
+                        transferDetails,
+                        order.recipient,
+                        payload.signature
                     );
                 } else {
                     //legacy transfer, assume prior approval
@@ -452,22 +470,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         }
         //emit event
         emit StopLimitOrderCancelled(order.orderId);
-    }
-
-    ///@notice handle signature and acquisition of asset with permit2
-    function handlePermit(
-        address tokenOwner,
-        bytes calldata permitPayload,
-        uint160 amount,
-        address token
-    ) internal {
-        Permit2Payload memory payload = abi.decode(
-            permitPayload,
-            (Permit2Payload)
-        );
-
-        permit2.permit(tokenOwner, payload.permitSingle, payload.signature);
-        permit2.transferFrom(tokenOwner, address(this), amount, token);
     }
 
     ///@notice check if the order is fillable

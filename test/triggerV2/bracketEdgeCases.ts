@@ -38,7 +38,7 @@ describe("Bracket Contract Edge Cases", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("recipient == zero address")
@@ -58,7 +58,7 @@ describe("Bracket Contract Edge Cases", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("tokenIn == tokenOut")
@@ -76,7 +76,7 @@ describe("Bracket Contract Edge Cases", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("amountIn == 0")
@@ -96,7 +96,7 @@ describe("Bracket Contract Edge Cases", () => {
                 100,
                 15000, // > 10000 bips
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("BIPS > 10k")
@@ -115,7 +115,7 @@ describe("Bracket Contract Edge Cases", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee - 1n } // Insufficient fee
             )).to.be.revertedWith("Insufficient funds for order fee")
@@ -136,7 +136,7 @@ describe("Bracket Contract Edge Cases", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("Oracle !exist")
@@ -161,7 +161,7 @@ describe("Bracket Contract Edge Cases", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("Max Order Count Reached")
@@ -187,7 +187,7 @@ describe("Bracket Contract Edge Cases", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -241,7 +241,7 @@ describe("Bracket Contract Edge Cases", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -273,7 +273,6 @@ describe("Bracket Contract Edge Cases", () => {
                 order.takeProfitSlippage,
                 order.stopSlippage,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("only order owner")
@@ -291,7 +290,6 @@ describe("Bracket Contract Edge Cases", () => {
                 await s.Gary.getAddress(),
                 500,
                 500,
-                false,
                 false,
                 "0x",
                 { value: s.fee }
@@ -311,7 +309,6 @@ describe("Bracket Contract Edge Cases", () => {
                 order.takeProfitSlippage,
                 order.stopSlippage,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("recipient == zero address")
@@ -330,7 +327,6 @@ describe("Bracket Contract Edge Cases", () => {
                 order.takeProfitSlippage,
                 order.stopSlippage,
                 false, // Decrease position
-                false,
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("invalid delta")
@@ -352,7 +348,6 @@ describe("Bracket Contract Edge Cases", () => {
                 order.takeProfitSlippage,
                 order.stopSlippage,
                 true, // Increase position
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -379,7 +374,6 @@ describe("Bracket Contract Edge Cases", () => {
                 order.takeProfitSlippage,
                 order.stopSlippage,
                 false, // Decrease position
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -408,7 +402,7 @@ describe("Bracket Contract Edge Cases", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -442,7 +436,6 @@ describe("Bracket Contract Edge Cases", () => {
                 order.takeProfitSlippage,
                 order.stopSlippage,
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -475,7 +468,7 @@ describe("Bracket Contract Edge Cases", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -511,7 +504,7 @@ describe("Bracket Contract Edge Cases", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -550,7 +543,7 @@ describe("Bracket Contract Edge Cases", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWithCustomError(s.Master, "EnforcedPause")
@@ -572,7 +565,7 @@ describe("Bracket Contract Edge Cases", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )

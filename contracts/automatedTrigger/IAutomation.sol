@@ -18,7 +18,7 @@ interface IAutomation is AutomationCompatibleInterface {
 
     ///@notice encode permit2 data into a single struct
     struct Permit2Payload {
-        IPermit2.PermitSingle permitSingle;
+        IPermit2.PermitTransferFrom permitTransferFrom;
         bytes signature;
     }
 
@@ -140,9 +140,8 @@ interface IStopLimit is IAutomation {
     ///@param stopSlippage raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
     ///@param swapSlippage raw bips used to determine slippage for resulting swap if @param swapOnFill is true
     ///@param swapOnFill determines if @param tokenIn is swapped for @param tokenOut once the Stop Limit order is filled
-    ///@param permit is true if using permit2, false if using legacy ERC20 approve
     ///@param permitPayload encoded permit data matching the Permit2Payload struct
-    ///@notice @param permitPayload may be empty or set to "0x" if @param permit is false
+    ///@notice @param permitPayload may be empty or set to "0x" to use legacy ERC20 approve instead
     function createOrder(
         uint256 stopLimitPrice,
         uint256 takeProfit,
@@ -156,7 +155,6 @@ interface IStopLimit is IAutomation {
         uint16 stopSlippage,
         uint16 swapSlippage,
         bool swapOnFill,
-        bool permit,
         bytes calldata permitPayload
     ) external payable;
 
@@ -171,11 +169,10 @@ interface IStopLimit is IAutomation {
     ///@param stopSlippage new raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
     ///@param swapSlippage new raw bips used to determine slippage for resulting swap if @param swapOnFill is true
     ///@param swapOnFill determines if @param tokenIn is swapped for @param tokenOut once the Stop Limit order is filled
-    ///@param permit is true if using permit2, false if using legacy ERC20 approve
     ///@param increasePosition true if adding to the position, false if reducing the position
-    ///@notice @param permit & @param permitPayload are not referenced if @param increasePosition is false
     ///@param permitPayload encoded permit data matching the Permit2Payload struct
-    ///@notice @param permitPayload may be empty or set to "0x" if @param permit is false
+    ///@notice @param permitPayload may be empty or set to "0x" to use legacy ERC20 approve instead
+    ///@notice @param permitPayload is not referenced if @param increasePosition is false
     function modifyOrder(
         uint96 orderId,
         uint256 stopLimitPrice,
@@ -189,7 +186,6 @@ interface IStopLimit is IAutomation {
         uint16 swapSlippage,
         bool swapOnFill,
         bool increasePosition,
-        bool permit,
         bytes calldata permitPayload
     ) external payable;
 }
@@ -242,9 +238,8 @@ interface IBracket is IAutomation {
     ///@param recipient owner of the order and receiver of the funds once the order is closed
     ///@param takeProfitSlippage raw bips used to determine slippage for resulting Bracket order once @param takeProfit is reached
     ///@param stopSlippage raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
-    ///@param permit is true if using permit2, false if using legacy ERC20 approve
     ///@param permitPayload encoded permit data matching the Permit2Payload struct
-    ///@notice @param permitPayload may be empty or set to "0x" if @param permit is false
+    ///@notice @param permitPayload may be empty or set to "0x" to use legacy ERC20 approve instead
     function createOrder(
         bytes calldata swapPayload,
         uint256 takeProfit,
@@ -256,7 +251,6 @@ interface IBracket is IAutomation {
         uint16 feeBips,
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
-        bool permit,
         bytes calldata permitPayload
     ) external payable;
 
@@ -284,11 +278,10 @@ interface IBracket is IAutomation {
     ///@param recipient new owner of the order and receiver of the funds once the order is closed
     ///@param takeProfitSlippage new raw bips used to determine slippage for resulting Bracket order once @param takeProfit is reached
     ///@param stopSlippage new raw bips used to determine slippage for resulting Bracket order once @param stopPrice is reached
-    ///@param permit is true if using permit2, false if using legacy ERC20 approve
     ///@param increasePosition true if adding to the position, false if reducing the position
-    ///@notice @param permit & @param permitPayload are not referenced if @param increasePosition is false
     ///@param permitPayload encoded permit data matching the Permit2Payload struct
-    ///@notice @param permitPayload may be empty or set to "0x" if @param permit is false
+    ///@notice @param permitPayload may be empty or set to "0x" to use legacy ERC20 approve instead
+    ///@notice @param permitPayload is not referenced if @param increasePosition is false
     function modifyOrder(
         uint96 orderId,
         uint256 takeProfit,
@@ -299,7 +292,6 @@ interface IBracket is IAutomation {
         uint16 takeProfitSlippage,
         uint16 stopSlippage,
         bool increasePosition,
-        bool permit,
         bytes calldata permitPayload
     ) external payable;
 }
@@ -336,7 +328,6 @@ interface IOracleLess {
         uint256 minAmountOut,
         address recipient,
         uint16 feeBips,
-        bool permit,
         bytes calldata permitPayload
     ) external payable returns (uint96 orderId);
 
@@ -349,7 +340,6 @@ interface IOracleLess {
         uint256 _minAmountOut,
         address _recipient,
         bool increasePosition,
-        bool permit,
         bytes calldata permitPayload
     ) external payable;
 

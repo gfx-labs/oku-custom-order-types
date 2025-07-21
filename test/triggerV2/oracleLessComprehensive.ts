@@ -87,7 +87,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("amountIn == 0")
@@ -101,7 +101,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("tokenIn == tokenOut")
@@ -117,7 +117,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 15000, // > 10000 bips
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("BIPS > 10k")
@@ -133,7 +133,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 "0x0000000000000000000000000000000000000000", // Zero address
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("recipient == zero address")
@@ -152,7 +152,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("tokens not whitelisted")
@@ -171,7 +171,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee - 1n } // Insufficient fee
             )).to.be.revertedWith("Insufficient funds for order fee")
@@ -192,7 +192,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -244,7 +244,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -300,7 +300,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -330,7 +330,6 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("order not active")
@@ -343,7 +342,6 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 0,
                 expectedAmountOut,
                 await s.Gary.getAddress(),
-                false,
                 false,
                 "0x",
                 { value: s.fee }
@@ -358,7 +356,6 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 "0x0000000000000000000000000000000000000000", // Zero address
                 false,
-                false,
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("recipient == zero address")
@@ -371,7 +368,6 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 0,
                 expectedAmountOut,
                 await s.Gary.getAddress(),
-                false,
                 false,
                 "0x",
                 { value: s.fee }
@@ -387,7 +383,6 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 0,
                 expectedAmountOut,
                 await s.Gary.getAddress(),
-                false,
                 false,
                 "0x",
                 { value: s.fee }
@@ -406,7 +401,6 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut * 2n, // Increase min amount out proportionally
                 await s.Gary.getAddress(),
                 true, // Increase position
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -429,7 +423,6 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut / 2n, // Decrease min amount out proportionally
                 await s.Gary.getAddress(),
                 false, // Decrease position
-                false,
                 "0x",
                 { value: s.fee }
             )
@@ -451,7 +444,6 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 false, // Decrease position
-                false,
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("invalid delta")
@@ -467,7 +459,6 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 false, // Decrease position
-                false,
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWith("invalid delta")
@@ -486,7 +477,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut / 2n,
                 await s.Gary.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -541,7 +532,6 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 0,
                 ethers.parseUnits("1000000", 6), // Impossibly high expectation (1M USDC)
                 order.recipient,
-                false,
                 false,
                 "0x",
                 { value: s.fee }
@@ -610,7 +600,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -667,7 +657,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -714,7 +704,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )).to.be.revertedWithCustomError(s.OracleLess, "EnforcedPause")
@@ -733,7 +723,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut,
                 await s.Gary.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )
@@ -802,7 +792,7 @@ describe("OracleLess Contract Comprehensive Tests", () => {
                 expectedAmountOut / 2n,
                 await s.Gary.getAddress(),
                 100,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )

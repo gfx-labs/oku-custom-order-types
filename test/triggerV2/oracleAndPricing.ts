@@ -350,7 +350,7 @@ describe("Oracle and Pricing Edge Cases", () => {
                 100,
                 500,
                 500,
-                false,
+                
                 "0x",
                 { value: s.fee }
             )

@@ -55,8 +55,8 @@ describe("Test for failure - STOP LIMIT", () => {
             smallSlippage,
             5n,//fee
             0,
-            false,
-            false,//no permit
+            
+            //no permit removed
             "0x",
             { value: s.fee }
         )).to.be.revertedWith("ERC20: transfer amount exceeds balance")
@@ -80,8 +80,8 @@ describe("Test for failure - STOP LIMIT", () => {
             smallSlippage,
             5n,//fee
             0,
-            false,
-            false,//no permit
+            
+            //no permit removed
             "0x",
             { value: s.fee }
         )).to.be.revertedWith("EnforcedPause()")

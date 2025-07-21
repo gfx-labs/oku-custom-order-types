@@ -50,7 +50,7 @@ describe("Test for failure - Oracleless", () => {
             0,
             await s.Steve.getAddress(),
             25,
-            false,//no permit
+            //no permit removed
             "0x"
         )).to.be.revertedWith("ERC20: transfer amount exceeds balance")
     })
@@ -70,7 +70,7 @@ describe("Test for failure - Oracleless", () => {
             0,
             await s.Steve.getAddress(),
             25,
-            false,//no permit
+            //no permit removed
             "0x"
         )).to.be.revertedWith("EnforcedPause()")
 
