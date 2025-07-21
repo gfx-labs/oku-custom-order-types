@@ -475,16 +475,11 @@ describe("Security and Access Control Tests", () => {
             const result = await s.Master.checkUpkeep("0x")
             expect(result.upkeepNeeded).to.be.true
 
-            // With our fix, even if an attacker tries to execute with empty txData (which results in zero swap),
-            // the minimum amount check should still be based on the full order amount, not zero
-            // This means the zero-amount attack should fail with "Too Little Received"
-
             // Store Steve's initial balances
             const initialWethBalance = await s.WETH.balanceOf(await s.Steve.getAddress())
             const initialUsdcBalance = await s.USDC.balanceOf(await s.Steve.getAddress())
 
             // The upkeep data contains empty txData which would result in a zero-amount swap
-            // But our fix should make this fail because minimum is calculated from order amount
             try {
                 await s.Master.performUpkeep(result.performData)
                 
@@ -508,7 +503,6 @@ describe("Security and Access Control Tests", () => {
                     expect(true).to.be.true
                 } else if (!orderExistsAfter && finalUsdcBalance === initialUsdcBalance && finalWethBalance === initialWethBalance) {
                     // Order was processed but no balances changed - this is the zero-amount attack!
-                    // This should NOT happen with our fix
                     console.log("Zero-amount attack succeeded - FIX FAILED!")
                     expect(false).to.be.true // Fail the test
                 } else {
@@ -519,12 +513,10 @@ describe("Security and Access Control Tests", () => {
             } catch (error: any) {
                 // The call should fail - this means the zero-amount attack was prevented
                 // This could fail for various reasons:
-                // 1. "Too Little Received" due to our fix
+                // 1. "Too Little Received" due to the fix
                 // 2. "Target !Valid" if no valid target is set
                 // 3. Other validation failures
-                const errorMessage = error.message || error.toString()
-                console.log("performUpkeep failed with:", errorMessage)
-                
+               
                 // Any revert means the attack was prevented, which is what we want
                 expect(true).to.be.true
             }
@@ -534,7 +526,7 @@ describe("Security and Access Control Tests", () => {
         })
 
         it("Should still allow legitimate swaps to execute properly", async () => {
-            // This test ensures our fix doesn't break normal functionality
+            // This test ensures the fix doesn't break normal functionality
             // We'll create a proper swap transaction and verify it works
 
             // Set price to trigger the order  

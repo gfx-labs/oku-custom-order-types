@@ -224,39 +224,26 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
         uint96 slippageBips
     ) external view override returns (uint256 minAmountReceived) {
         uint256 exchangeRate = _getExchangeRate(tokenIn, tokenOut);
-
-        // Adjust for decimal differences between tokens
-        uint256 adjustedAmountIn = adjustForDecimals(
-            amountIn,
-            tokenIn,
-            tokenOut
-        );
-
-        // Calculate the fair amount out without slippage
-        uint256 fairAmountOut = (adjustedAmountIn * exchangeRate) / 1e8;
-
-        // Apply slippage - 10000 bips is equivalent to 100% slippage
-        return (fairAmountOut * (10000 - slippageBips)) / 10000;
-    }
-
-    ///@notice account for token scale when computing token amounts based on slippage bips
-    function adjustForDecimals(
-        uint256 amountIn,
-        IERC20 tokenIn,
-        IERC20 tokenOut
-    ) internal view returns (uint256 adjustedAmountIn) {
         uint8 decimalIn = ERC20(address(tokenIn)).decimals();
         uint8 decimalOut = ERC20(address(tokenOut)).decimals();
 
+        uint256 fairAmountOut;
+
         if (decimalIn > decimalOut) {
-            // Reduce amountIn to match the lower decimals of tokenOut
-            return amountIn / (10 ** (decimalIn - decimalOut));
+            fairAmountOut =
+                (amountIn * exchangeRate) /
+                (10**(decimalIn - decimalOut)) /
+                1e8;
         } else if (decimalIn < decimalOut) {
-            // Increase amountIn to match the higher decimals of tokenOut
-            return amountIn * (10 ** (decimalOut - decimalIn));
+            fairAmountOut =
+                (amountIn * exchangeRate * (10**(decimalOut - decimalIn))) /
+                1e8;
+        } else {
+            fairAmountOut = (amountIn * exchangeRate) / 1e8;
         }
-        // If decimals are the same, no adjustment needed
-        return amountIn;
+
+        // Apply slippage - 10000 bips is equivalent to 100% slippage
+        return (fairAmountOut * (10000 - slippageBips)) / 10000;
     }
 
     ///@notice determine if a new order meets the minimum order size requirement
