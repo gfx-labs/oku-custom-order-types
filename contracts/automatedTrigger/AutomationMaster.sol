@@ -42,6 +42,16 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
 
     EnumerableSet.AddressSet private uniqueTokens;
 
+    modifier onlySubKeepers() {
+        require(
+            msg.sender == address(BRACKET_CONTRACT) ||
+                msg.sender == address(STOP_LIMIT_CONTRACT) ||
+                msg.sender == address(ORACLELESS_CONTRACT),
+            "Not authorized"
+        );
+        _;
+    }
+
     constructor(address owner) {
         _transferOwnership(owner);
     }
@@ -149,7 +159,10 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     ///@notice this contract should not hold funds other than collected fees,
     ///which are forwarded here after each transaction
     function sweep(IERC20 token, address recipient) external onlyOwner {
-        require(recipient != address(0), "Recipient cannot be the zero address");
+        require(
+            recipient != address(0),
+            "Recipient cannot be the zero address"
+        );
         token.safeTransfer(recipient, token.balanceOf(address(this)));
     }
 
@@ -204,7 +217,7 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
     ///@notice generate a random and unique order id
     function generateOrderId(
         address sender
-    ) external override returns (uint96) {
+    ) external override onlySubKeepers returns (uint96) {
         uint96 nonce = nonces[sender]++;
         uint256 hashedValue = uint256(
             keccak256(
@@ -232,11 +245,11 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
         if (decimalIn > decimalOut) {
             fairAmountOut =
                 (amountIn * exchangeRate) /
-                (10**(decimalIn - decimalOut)) /
+                (10 ** (decimalIn - decimalOut)) /
                 1e8;
         } else if (decimalIn < decimalOut) {
             fairAmountOut =
-                (amountIn * exchangeRate * (10**(decimalOut - decimalIn))) /
+                (amountIn * exchangeRate * (10 ** (decimalOut - decimalIn))) /
                 1e8;
         } else {
             fairAmountOut = (amountIn * exchangeRate) / 1e8;

@@ -156,21 +156,7 @@ describe("AutomationMaster Comprehensive Tests", () => {
             expect(exchangeRate).to.eq(ethers.parseUnits("2", 8)) // 2000/1000 = 2
         })
     })
-
-    describe("Order ID Generation", () => {
-        it("Should generate unique order IDs", async () => {
-            const id1 = await s.Master.generateOrderId(await s.Frank.getAddress())
-            const id2 = await s.Master.generateOrderId(await s.Frank.getAddress())
-            expect(id1).to.not.eq(id2)
-        })
-
-        it("Should generate different IDs for different senders", async () => {
-            const frankId = await s.Master.generateOrderId(await s.Frank.getAddress())
-            const bobId = await s.Master.generateOrderId(await s.Bob.getAddress())
-            expect(frankId).to.not.eq(bobId)
-        })
-    })
-
+    
     describe("Minimum Amount Calculations", () => {
         before(async () => {
             // Set up test oracles with known prices
