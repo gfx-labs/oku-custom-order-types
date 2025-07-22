@@ -364,8 +364,13 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         require(finalTokenIn >= initialTokenIn - order.amountIn, "over spend");
         uint256 finalTokenOut = order.tokenOut.balanceOf(address(this));
 
+        // Ensure we received enough tokens before fees to guarantee user gets at least minAmountOut after fees
+        uint256 feeAdjustedMinAmount = getMinAmountReceivedAfterFee(
+            order.minAmountOut,
+            order.feeBips
+        );
         require(
-            finalTokenOut - initialTokenOut >= order.minAmountOut,
+            finalTokenOut - initialTokenOut >= feeAdjustedMinAmount,
             "Too Little Received"
         );
 
@@ -448,6 +453,23 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         for (uint256 i = 0; i < length; i++) {
             tokens[i] = IERC20(uniqueTokens.at(i));
         }
+    }
+
+    ///@notice calculate minimum amount needed before fees to ensure user receives at least minAmountOut after fees
+    ///@param minAmountOut the minimum amount the user should receive after fees
+    ///@param feeBips the fee in basis points that will be applied
+    ///@return the minimum amount needed from swap before fee application
+    function getMinAmountReceivedAfterFee(
+        uint256 minAmountOut,
+        uint16 feeBips
+    ) internal pure returns (uint256) {
+        if (feeBips == 0) {
+            return minAmountOut;
+        }
+        // To ensure user gets minAmountOut after fee, we need:
+        // swapAmount * (10000 - feeBips) / 10000 >= minAmountOut
+        // Therefore: swapAmount >= minAmountOut * 10000 / (10000 - feeBips)
+        return (minAmountOut * 10000) / (10000 - feeBips);
     }
 
     ///@notice apply the protocol fee to @param amount

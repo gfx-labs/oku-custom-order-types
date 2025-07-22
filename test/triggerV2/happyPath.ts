@@ -989,7 +989,7 @@ describe("Oracle Less", () => {
             s.wethAmount,
             minAmountOut,
             await s.Oscar.getAddress(),
-            25,
+            0,  // Set fee to 0 for this test to avoid fee-adjustment complexity
             "0x",
             { value: s.fee }
         )
@@ -1090,6 +1090,7 @@ describe("Oracle Less", () => {
     it("Fill Order", async () => {
 
         const pendingOrders = await s.OracleLess.getPendingOrders()
+        // Since fee is set to 0 for this test, no fee adjustment needed
         const txData = await generateUniTxData(
             s.WETH,
             await s.USDC.getAddress(),

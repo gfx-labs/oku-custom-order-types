@@ -171,7 +171,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             order.amountIn,
             order.tokenIn,
             order.tokenOut,
-            bips
+            bips,
+            order.feeBips
         );
         verifyTokenBalances(initBalances, order.tokenIn, order.tokenOut);
 
@@ -491,7 +492,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             swapParams.swapAmountIn,
             swapParams.swapTokenIn,
             tokenIn,
-            swapParams.swapSlippage
+            swapParams.swapSlippage,
+            0  // No protocol fee applied to initial swap during order creation
         );
         verifyTokenBalances(initBalances, swapParams.swapTokenIn, tokenIn);
 
@@ -600,7 +602,8 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         uint256 amountIn,
         IERC20 tokenIn,
         IERC20 tokenOut,
-        uint16 bips
+        uint16 bips,
+        uint16 feeBips
     ) internal returns (uint256 swapAmountOut, uint256 tokenInRefund) {
         //validate target
         MASTER.validateTarget(target);
@@ -627,15 +630,19 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             uint256 finalTokenOut = tokenOut.balanceOf(address(this));
 
             //if success, we expect tokenIn balance to decrease by amountIn
-            //and tokenOut balance to increase by at least minAmountReceived
+            //and tokenOut balance to increase by at least minAmountReceived (adjusted for fees)
+            uint256 baseMinAmount = MASTER.getMinAmountReceived(
+                amountIn,
+                tokenIn,
+                tokenOut,
+                bips
+            );
+            uint256 feeAdjustedMinAmount = getMinAmountReceivedAfterFee(
+                baseMinAmount,
+                feeBips
+            );
             require(
-                finalTokenOut - initialTokenOut >=
-                    MASTER.getMinAmountReceived(
-                        amountIn,
-                        tokenIn,
-                        tokenOut,
-                        bips
-                    ),
+                finalTokenOut - initialTokenOut >= feeAdjustedMinAmount,
                 "Too Little Received"
             );
 
@@ -716,6 +723,23 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
 
             balances[i] = balance;
         }
+    }
+
+    ///@notice calculate minimum amount needed before fees to ensure user receives at least minAmountOut after fees
+    ///@param minAmountOut the minimum amount the user should receive after fees
+    ///@param feeBips the fee in basis points that will be applied
+    ///@return the minimum amount needed from swap before fee application
+    function getMinAmountReceivedAfterFee(
+        uint256 minAmountOut,
+        uint16 feeBips
+    ) internal pure returns (uint256) {
+        if (feeBips == 0) {
+            return minAmountOut;
+        }
+        // To ensure user gets minAmountOut after fee, we need:
+        // swapAmount * (10000 - feeBips) / 10000 >= minAmountOut
+        // Therefore: swapAmount >= minAmountOut * 10000 / (10000 - feeBips)
+        return (minAmountOut * 10000) / (10000 - feeBips);
     }
 
     ///@notice apply the protocol fee to @param amount
