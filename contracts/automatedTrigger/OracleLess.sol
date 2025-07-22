@@ -9,7 +9,6 @@ import "../interfaces/openzeppelin/ReentrancyGuard.sol";
 import "../interfaces/openzeppelin/Pausable.sol";
 import "../interfaces/openzeppelin/EnumerableSet.sol";
 
-
 contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.UintSet;
@@ -392,10 +391,16 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
                 (IAutomation.Permit2Payload)
             );
 
-            IPermit2.SignatureTransferDetails memory transferDetails = IPermit2.SignatureTransferDetails({
-                to: address(this),
-                requestedAmount: amount
-            });
+            require(
+                payload.permitTransferFrom.permitted.token == address(token),
+                "permit token mismatch"
+            );
+
+            IPermit2.SignatureTransferDetails memory transferDetails = IPermit2
+                .SignatureTransferDetails({
+                    to: address(this),
+                    requestedAmount: amount
+                });
 
             permit2.permitTransferFrom(
                 payload.permitTransferFrom,

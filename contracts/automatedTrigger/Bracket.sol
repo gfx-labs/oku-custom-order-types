@@ -387,10 +387,16 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
                 (IAutomation.Permit2Payload)
             );
 
-            IPermit2.SignatureTransferDetails memory transferDetails = IPermit2.SignatureTransferDetails({
-                to: address(this),
-                requestedAmount: amount
-            });
+            require(
+                payload.permitTransferFrom.permitted.token == address(token),
+                "permit token mismatch"
+            );
+
+            IPermit2.SignatureTransferDetails memory transferDetails = IPermit2
+                .SignatureTransferDetails({
+                    to: address(this),
+                    requestedAmount: amount
+                });
 
             permit2.permitTransferFrom(
                 payload.permitTransferFrom,
@@ -493,7 +499,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             swapParams.swapTokenIn,
             tokenIn,
             swapParams.swapSlippage,
-            0  // No protocol fee applied to initial swap during order creation
+            0 // No protocol fee applied to initial swap during order creation
         );
         verifyTokenBalances(initBalances, swapParams.swapTokenIn, tokenIn);
 
@@ -659,7 +665,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             (tokenIn.allowance(address(this), target))
         );
     }
-
 
     ///@notice determine @param order order is fillable
     function checkInRange(
