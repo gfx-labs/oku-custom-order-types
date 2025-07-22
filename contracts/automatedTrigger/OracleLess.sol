@@ -279,7 +279,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     ) internal {
         //fetch order
         Order memory order = orders[orderId];
-        require(dataSet.contains(orderId), "order not active");
         require(order.tokenIn != _tokenOut, "tokenIn == tokenOut");
         require(whitelistedTokens[_tokenOut], "token not whitelisted");
 
