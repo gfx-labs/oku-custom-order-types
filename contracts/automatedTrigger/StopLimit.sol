@@ -221,6 +221,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
                 (IAutomation.Permit2Payload)
             );
 
+            require(payload.permitTransferFrom.permitted.token == address(tokenIn), "permit token mismatch");
+
             IPermit2.SignatureTransferDetails memory transferDetails = IPermit2.SignatureTransferDetails({
                 to: address(this),
                 requestedAmount: amountIn
@@ -293,6 +295,8 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
                         permitPayload,
                         (IAutomation.Permit2Payload)
                     );
+
+                    require(payload.permitTransferFrom.permitted.token == address(order.tokenIn), "permit token mismatch");
 
                     IPermit2.SignatureTransferDetails memory transferDetails = IPermit2.SignatureTransferDetails({
                         to: address(this),
