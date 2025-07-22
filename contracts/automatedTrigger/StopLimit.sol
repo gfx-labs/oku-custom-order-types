@@ -149,12 +149,6 @@ contract StopLimit is Ownable, IStopLimit, ReentrancyGuard, Pausable {
         //remove from pending dataSet
         require(dataSet.remove(order.orderId), "order not active");
 
-        //approve 0
-        order.tokenIn.safeDecreaseAllowance(
-            address(BRACKET_CONTRACT),
-            (order.tokenIn.allowance(address(this), address(BRACKET_CONTRACT)))
-        );
-
         //approve
         order.tokenIn.safeIncreaseAllowance(
             address(BRACKET_CONTRACT),

@@ -337,12 +337,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
             order.tokenOut
         );
 
-        //approve 0
-        order.tokenIn.safeDecreaseAllowance(
-            target,
-            (order.tokenIn.allowance(address(this), target))
-        );
-
         //approve
         order.tokenIn.safeIncreaseAllowance(target, order.amountIn);
 

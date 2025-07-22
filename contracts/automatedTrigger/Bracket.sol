@@ -612,12 +612,6 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         uint256 initialTokenIn = tokenIn.balanceOf(address(this));
         uint256 initialTokenOut = tokenOut.balanceOf(address(this));
 
-        //approve 0
-        tokenIn.safeDecreaseAllowance(
-            target,
-            (tokenIn.allowance(address(this), target))
-        );
-
         //approve
         tokenIn.safeIncreaseAllowance(target, amountIn);
 
