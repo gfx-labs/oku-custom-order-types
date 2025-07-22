@@ -266,7 +266,8 @@ const register = async (signer: Signer) => {
   //register sub keepers
   await Master.registerSubKeepers(
     stopLimitAddr,
-    bracketAddr
+    bracketAddr,
+    "0x0"
   )
 
 
@@ -396,7 +397,8 @@ const updateSubKeeper = async (signer: Signer) => {
 
   await masterKeeper.registerSubKeepers(
     a.stopLimit,
-    await newBracket.getAddress()
+    await newBracket.getAddress(),
+    "0x0"//oracleless placeholder
   )
   console.log("Registered Sub Keepers on Master: ", await masterKeeper.getAddress())
 

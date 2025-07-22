@@ -59,7 +59,7 @@ describe("Test for failure - Oracleless", () => {
 
         
         //check pausable
-        await s.Master.pauseAll(true, await s.OracleLess.getAddress())
+        await s.Master.pauseAll(true)
 
         //create order
         await s.WETH.connect(s.Steve).approve(await s.StopLimit.getAddress(), veryLargeWethAmount)
@@ -75,7 +75,7 @@ describe("Test for failure - Oracleless", () => {
         )).to.be.revertedWith("EnforcedPause()")
 
         //unpause
-        await s.Master.pauseAll(false, await s.OracleLess.getAddress())
+        await s.Master.pauseAll(false)
 
     })
 

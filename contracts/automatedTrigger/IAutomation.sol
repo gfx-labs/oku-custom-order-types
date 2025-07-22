@@ -65,7 +65,7 @@ interface IAutomationMaster is IAutomation {
     function oracles(IERC20 token) external view returns (IPythRelay);
     function maxPendingOrders() external view returns (uint16);
     function orderFee() external view returns (uint256);
-    function pauseAll(bool _pause, IOracleLess _oracleLessContract) external;
+    function pauseAll(bool _pause) external;
     function setOrderFee(uint256 _orderFee) external;
     function validateTarget(address _target) external view;
     function getRegisteredTokens() external view returns (IERC20[] memory);

@@ -590,9 +590,9 @@ describe("Bracket Contract Edge Cases", () => {
             await s.Bracket.connect(s.Frank).pause(false)
 
             // Test master pause (through pauseAll)
-            await s.Master.connect(s.Frank).pauseAll(true, await s.OracleLess.getAddress())
+            await s.Master.connect(s.Frank).pauseAll(true)
             expect(await s.Bracket.paused()).to.be.true
-            await s.Master.connect(s.Frank).pauseAll(false, await s.OracleLess.getAddress())
+            await s.Master.connect(s.Frank).pauseAll(false)
         })
 
         it("Should revert when unauthorized user tries to pause", async () => {

@@ -70,10 +70,7 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
         );
     }
 
-    function pauseAll(
-        bool pause,
-        IOracleLess oracleLessContract
-    ) external override onlyOwner {
+    function pauseAll(bool pause) external override onlyOwner {
         if (pause) {
             _pause();
         } else {
@@ -81,7 +78,7 @@ contract AutomationMaster is IAutomationMaster, Ownable, Pausable {
         }
         STOP_LIMIT_CONTRACT.pause(pause);
         BRACKET_CONTRACT.pause(pause);
-        oracleLessContract.pause(pause);
+        ORACLELESS_CONTRACT.pause(pause);
     }
 
     ///@notice set the fee to create / modify orders

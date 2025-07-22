@@ -47,7 +47,7 @@ describe("Security and Access Control Tests", () => {
                 await expect(s.Master.connect(unauthorizedUser).sweepEther(await unauthorizedUser.getAddress()))
                     .to.be.revertedWith("Ownable: caller is not the owner")
 
-                await expect(s.Master.connect(unauthorizedUser).pauseAll(true, await s.OracleLess.getAddress()))
+                await expect(s.Master.connect(unauthorizedUser).pauseAll(true))
                     .to.be.revertedWith("Ownable: caller is not the owner")
             })
 
@@ -79,9 +79,9 @@ describe("Security and Access Control Tests", () => {
             })
 
             it("Should allow master to pause Bracket", async () => {
-                await s.Master.connect(s.Frank).pauseAll(true, await s.OracleLess.getAddress())
+                await s.Master.connect(s.Frank).pauseAll(true)
                 expect(await s.Bracket.paused()).to.be.true
-                await s.Master.connect(s.Frank).pauseAll(false, await s.OracleLess.getAddress())
+                await s.Master.connect(s.Frank).pauseAll(false)
             })
         })
 
@@ -680,11 +680,11 @@ describe("Security and Access Control Tests", () => {
 
             // Ensure contracts are unpaused first
             if (await s.OracleLess.paused()) {
-                await s.Master.connect(s.Frank).pauseAll(false, await s.OracleLess.getAddress())
+                await s.Master.connect(s.Frank).pauseAll(false)
             }
 
             // Pause all contracts
-            await s.Master.connect(s.Frank).pauseAll(true, await s.OracleLess.getAddress())
+            await s.Master.connect(s.Frank).pauseAll(true)
 
             // All order creation should fail
             await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), testAmount)
@@ -734,13 +734,13 @@ describe("Security and Access Control Tests", () => {
             )).to.be.revertedWithCustomError(s.OracleLess, "EnforcedPause")
 
             // Unpause
-            await s.Master.connect(s.Frank).pauseAll(false, await s.OracleLess.getAddress())
+            await s.Master.connect(s.Frank).pauseAll(false)
         })
 
         it("Should allow emergency operations by admin even when paused", async () => {
             // Ensure contracts are unpaused first
             if (await s.OracleLess.paused()) {
-                await s.Master.connect(s.Frank).pauseAll(false, await s.OracleLess.getAddress())
+                await s.Master.connect(s.Frank).pauseAll(false)
             }
 
             // Create an order first
@@ -768,13 +768,13 @@ describe("Security and Access Control Tests", () => {
             const orderId = events[0].args[0]
 
             // Pause
-            await s.Master.connect(s.Frank).pauseAll(true, await s.OracleLess.getAddress())
+            await s.Master.connect(s.Frank).pauseAll(true)
 
             // Admin should still be able to cancel orders
             await s.Bracket.connect(s.Frank).adminCancelOrder(orderId, true)
 
             // Unpause
-            await s.Master.connect(s.Frank).pauseAll(false, await s.OracleLess.getAddress())
+            await s.Master.connect(s.Frank).pauseAll(false)
         })
     })
 

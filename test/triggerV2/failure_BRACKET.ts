@@ -229,13 +229,13 @@ describe("Test for failure - BRACKET", () => {
     it("check pausable", async () => {
 
         //try to pause when not authorized
-        expect(s.Master.connect(s.Bob).pauseAll(true, await s.OracleLess.getAddress())).to.be.revertedWith("Not Authorized")
+        expect(s.Master.connect(s.Bob).pauseAll(true)).to.be.revertedWith("Not Authorized")
         expect(s.Bracket.connect(s.Bob).pause(true)).to.be.revertedWith("Not Authorized")
         expect(s.StopLimit.connect(s.Bob).pause(true)).to.be.revertedWith("Not Authorized")
         expect(s.OracleLess.connect(s.Bob).pause(true)).to.be.revertedWith("Not Authorized")
 
         //check pausable
-        await s.Master.pauseAll(true, await s.OracleLess.getAddress())
+        await s.Master.pauseAll(true)
 
         //create order
         await s.WETH.connect(s.Steve).approve(await s.Bracket.getAddress(), s.wethAmount)
@@ -256,7 +256,7 @@ describe("Test for failure - BRACKET", () => {
         )).to.be.revertedWith("EnforcedPause()") 
 
         //unpause
-        await s.Master.pauseAll(false, await s.OracleLess.getAddress())
+        await s.Master.pauseAll(false)
 
     })
 

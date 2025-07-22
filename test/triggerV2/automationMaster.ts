@@ -224,15 +224,15 @@ describe("AutomationMaster Comprehensive Tests", () => {
         it("Should pause and unpause correctly", async () => {
             expect(await s.Master.paused()).to.be.false
 
-            await s.Master.connect(s.Frank).pauseAll(true, await s.OracleLess.getAddress())
+            await s.Master.connect(s.Frank).pauseAll(true)
             expect(await s.Master.paused()).to.be.true
 
-            await s.Master.connect(s.Frank).pauseAll(false, await s.OracleLess.getAddress())
+            await s.Master.connect(s.Frank).pauseAll(false)
             expect(await s.Master.paused()).to.be.false
         })
 
         it("Should revert performUpkeep when paused", async () => {
-            await s.Master.connect(s.Frank).pauseAll(true, await s.OracleLess.getAddress())
+            await s.Master.connect(s.Frank).pauseAll(true)
 
             const mockData = ethers.AbiCoder.defaultAbiCoder().encode(
                 ["tuple(uint8,address,bytes,uint96,uint96,address,address,uint16,uint256,uint256)"],
@@ -240,7 +240,7 @@ describe("AutomationMaster Comprehensive Tests", () => {
             )
 
             await expect(s.Master.performUpkeep(mockData)).to.be.revertedWithCustomError(s.Master, "EnforcedPause")
-            await s.Master.connect(s.Frank).pauseAll(false, await s.OracleLess.getAddress())
+            await s.Master.connect(s.Frank).pauseAll(false)
         })
     })
 
