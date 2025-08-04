@@ -677,7 +677,7 @@ describe("StopLimit Contract Edge Cases", () => {
             orderId = events[0].args[0]
         })
 
-        it("Should revert when order ID mismatch", async () => {
+        it("Should revert when order ID doesn't exist", async () => {
             // Set price to trigger
             await s.wethOracle.setPrice(currentPrice - ethers.parseUnits("99", 8))
 
@@ -704,7 +704,7 @@ describe("StopLimit Contract Edge Cases", () => {
                 ]]
             )
 
-            await expect(s.StopLimit.performUpkeep(badData)).to.be.revertedWith("Order Fill Mismatch")
+            await expect(s.StopLimit.performUpkeep(badData)).to.be.revertedWith("order not active")
         })
 
         it("Should revert when order not in range", async () => {

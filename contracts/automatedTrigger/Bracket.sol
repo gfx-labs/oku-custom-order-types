@@ -147,8 +147,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
             performData,
             (MasterUpkeepData)
         );
-        uint96 orderIdFromSet = uint96(dataSet.at(data.pendingOrderIdx));
-        require(orderIdFromSet == data.orderId, "Order Fill Mismatch");
+        require(dataSet.contains(data.orderId), "order not active");
         Order memory order = orders[data.orderId];
 
         //deduce if we are filling stop or take profit

@@ -157,9 +157,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     ///@notice allow administrator to cancel any order
     ///@notice once cancelled, any funds associated with the order are returned to the order recipient
     ///@notice only pending orders can be cancelled
-    function adminCancelOrder(
-        uint96 orderId
-    ) external onlyOwner nonReentrant {
+    function adminCancelOrder(uint96 orderId) external onlyOwner nonReentrant {
         Order memory order = orders[orderId];
         _cancelOrder(order, true);
     }
@@ -200,7 +198,6 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
     }
 
     function fillOrder(
-        uint96 pendingOrderIdx,
         uint96 orderId,
         address target,
         bytes calldata txData
@@ -208,10 +205,7 @@ contract OracleLess is IOracleLess, Ownable, ReentrancyGuard, Pausable {
         //validate target
         MASTER.validateTarget(target);
 
-        require(
-            orderId == uint96(dataSet.at(pendingOrderIdx)),
-            "Order Fill Mismatch"
-        );
+        require(dataSet.contains(orderId), "order not active");
 
         //fetch order
         Order memory order = orders[orderId];
