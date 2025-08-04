@@ -356,14 +356,11 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
     ///@notice allow administrator to cancel any order
     ///@notice once cancelled, any funds assocaiated with the order are returned to the order recipient
     ///@notice only pending orders can be cancelled
-    ///NOTE if @param refund is false, then the order's tokens will not be refunded and will be stuck on this contract possibly forever
-    ///@notice ONLY SET @param refund TO FALSE IN THE CASE OF A BROKEN ORDER CAUSING cancelOrder() TO REVERT
     function adminCancelOrder(
-        uint96 orderId,
-        bool refund
+        uint96 orderId
     ) external onlyOwner nonReentrant {
         Order memory order = orders[orderId];
-        _cancelOrder(order, refund);
+        _cancelOrder(order, true);
     }
 
     ///@notice only the order recipient can cancel their order
@@ -372,6 +369,18 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
         Order memory order = orders[orderId];
         require(msg.sender == order.recipient, "Only Order Owner");
         _cancelOrder(order, true);
+    }
+
+    ///@notice sweep dust accumulated from precision loss in getMinAmountReceived calculations
+    ///@notice can only be called when no pending orders exist to prevent theft of user funds
+    function sweepDust(IERC20 token, address recipient) external onlyOwner {
+        require(recipient != address(0), "Invalid recipient");
+        require(dataSet.length() == 0, "Cannot sweep with pending orders");
+        
+        uint256 balance = token.balanceOf(address(this));
+        require(balance > 0, "No funds to sweep");
+        
+        token.safeTransfer(recipient, balance);
     }
 
     function procureTokens(

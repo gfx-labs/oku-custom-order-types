@@ -67,7 +67,7 @@ describe("Security and Access Control Tests", () => {
             it("Should restrict admin functions to owner", async () => {
                 const unauthorizedUser = s.Bob
 
-                await expect(s.Bracket.connect(unauthorizedUser).adminCancelOrder(1, true))
+                await expect(s.Bracket.connect(unauthorizedUser).adminCancelOrder(1))
                     .to.be.revertedWith("Ownable: caller is not the owner")
             })
 
@@ -89,7 +89,7 @@ describe("Security and Access Control Tests", () => {
             it("Should restrict admin functions to owner", async () => {
                 const unauthorizedUser = s.Bob
 
-                await expect(s.StopLimit.connect(unauthorizedUser).adminCancelOrder(1, true))
+                await expect(s.StopLimit.connect(unauthorizedUser).adminCancelOrder(1))
                     .to.be.revertedWith("Ownable: caller is not the owner")
             })
 
@@ -108,7 +108,7 @@ describe("Security and Access Control Tests", () => {
                 await expect(s.OracleLess.connect(unauthorizedUser).whitelistTokens([], []))
                     .to.be.revertedWith("Ownable: caller is not the owner")
 
-                await expect(s.OracleLess.connect(unauthorizedUser).adminCancelOrder(1, true))
+                await expect(s.OracleLess.connect(unauthorizedUser).adminCancelOrder(1))
                     .to.be.revertedWith("Ownable: caller is not the owner")
             })
 
@@ -771,7 +771,7 @@ describe("Security and Access Control Tests", () => {
             await s.Master.connect(s.Frank).pauseAll(true)
 
             // Admin should still be able to cancel orders
-            await s.Bracket.connect(s.Frank).adminCancelOrder(orderId, true)
+            await s.Bracket.connect(s.Frank).adminCancelOrder(orderId)
 
             // Unpause
             await s.Master.connect(s.Frank).pauseAll(false)

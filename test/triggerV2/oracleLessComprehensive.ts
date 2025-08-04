@@ -671,23 +671,15 @@ describe("OracleLess Contract Comprehensive Tests", () => {
         it("Should allow admin to cancel order with refund", async () => {
             const initialBalance = await s.WETH.balanceOf(await s.Gary.getAddress())
 
-            await s.OracleLess.connect(s.Frank).adminCancelOrder(orderId, true)
+            await s.OracleLess.connect(s.Frank).adminCancelOrder(orderId)
 
             const finalBalance = await s.WETH.balanceOf(await s.Gary.getAddress())
             expect(finalBalance).to.eq(initialBalance + testAmount)
         })
 
-        it("Should allow admin to cancel order without refund", async () => {
-            const initialBalance = await s.WETH.balanceOf(await s.Gary.getAddress())
-
-            await s.OracleLess.connect(s.Frank).adminCancelOrder(orderId, false)
-
-            const finalBalance = await s.WETH.balanceOf(await s.Gary.getAddress())
-            expect(finalBalance).to.eq(initialBalance) // No refund
-        })
 
         it("Should revert when non-admin tries to admin cancel", async () => {
-            await expect(s.OracleLess.connect(s.Bob).adminCancelOrder(orderId, true))
+            await expect(s.OracleLess.connect(s.Bob).adminCancelOrder(orderId))
                 .to.be.revertedWith("Ownable: caller is not the owner")
         })
     })
