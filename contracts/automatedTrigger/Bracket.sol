@@ -34,7 +34,7 @@ contract Bracket is Ownable, IBracket, ReentrancyGuard, Pausable {
 
     modifier paysFee() {
         uint256 orderFee = MASTER.orderFee();
-        require(msg.value >= orderFee, "Insufficient funds for order fee");
+        require(msg.value == orderFee, "Insufficient funds for order fee");
         _;
         // Transfer the fee to the contract owner
         (bool success, ) = payable(address(MASTER)).call{value: orderFee}("");
